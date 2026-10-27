@@ -1,0 +1,14 @@
+﻿{
+    "sha256":  "FD46C09B4797B2CA7C645819A8B9E44220390A89EFB8DF98BEEB9F536F3DD9E1",
+    "signature_status":  "NotSigned",
+    "version":  "2.0.0",
+    "product":  "SpotBye",
+    "company":  "SpotBye",
+    "defender_antivirus_enabled":  true,
+    "defender_realtime_enabled":  true,
+    "defender_signature_updated":  "2026-10-27T07:32:31.0000000-04:00",
+    "custom_scan_completed":  true,
+    "matching_detection_count":  0,
+    "target_executed":  false,
+    "limitation":  "No detections is not proof of safety; isolated dynamic analysis not performed."
+}

@@ -1,0 +1,3715 @@
+{
+  "sha256": "fd46c09b4797b2ca7c645819a8b9e44220390a89efb8df98beeb9f536f3dd9e1",
+  "bytes": 33954816,
+  "machine": "0x8664",
+  "optional_header_magic": "0x20b",
+  "coff_timestamp": 0,
+  "characteristics": "0x22",
+  "sections": [
+    {
+      "name": ".text",
+      "virtual_size": 10447729,
+      "rva": 4096,
+      "raw_size": 10447872,
+      "offset": 1536
+    },
+    {
+      "name": ".rdata",
+      "virtual_size": 21647952,
+      "rva": 10452992,
+      "raw_size": 21648384,
+      "offset": 10449408
+    },
+    {
+      "name": ".data",
+      "virtual_size": 35313016,
+      "rva": 32104448,
+      "raw_size": 1383424,
+      "offset": 32097792
+    },
+    {
+      "name": ".pdata",
+      "virtual_size": 227028,
+      "rva": 67420160,
+      "raw_size": 227328,
+      "offset": 33481216
+    },
+    {
+      "name": ".xdata",
+      "virtual_size": 180,
+      "rva": 67649536,
+      "raw_size": 512,
+      "offset": 33708544
+    },
+    {
+      "name": ".idata",
+      "virtual_size": 1404,
+      "rva": 67653632,
+      "raw_size": 1536,
+      "offset": 33709056
+    },
+    {
+      "name": ".reloc",
+      "virtual_size": 215828,
+      "rva": 67657728,
+      "raw_size": 216064,
+      "offset": 33710592
+    },
+    {
+      "name": ".symtab",
+      "virtual_size": 4,
+      "rva": 67874816,
+      "raw_size": 512,
+      "offset": 33926656
+    },
+    {
+      "name": ".rsrc",
+      "virtual_size": 27504,
+      "rva": 67878912,
+      "raw_size": 27648,
+      "offset": 33927168
+    }
+  ],
+  "import_dlls": [
+    "kernel32.dll"
+  ],
+  "workflow_symbol_candidates": [
+    {
+      "offset": 12812704,
+      "symbol": "main.App.AnalyzeReplayGainAlbum(e)"
+    },
+    {
+      "offset": 12812839,
+      "symbol": "main.App.ApplyPersistentDownloadChanges(e"
+    },
+    {
+      "offset": 12814340,
+      "symbol": "main.App.ClearDownloadHistory()"
+    },
+    {
+      "offset": 12814863,
+      "symbol": "main.App.DeleteDownloadHistoryItem(e)"
+    },
+    {
+      "offset": 12815063,
+      "symbol": "main.App.DownloadAvatar(e)"
+    },
+    {
+      "offset": 12815121,
+      "symbol": "main.App.DownloadCover(e)"
+    },
+    {
+      "offset": 12815177,
+      "symbol": "main.App.DownloadFFmpeg()"
+    },
+    {
+      "offset": 12815234,
+      "symbol": "main.App.DownloadGalleryImage(e)"
+    },
+    {
+      "offset": 12815298,
+      "symbol": "main.App.DownloadHeader(e)"
+    },
+    {
+      "offset": 12815356,
+      "symbol": "main.App.DownloadLyrics(e)"
+    },
+    {
+      "offset": 12815484,
+      "symbol": "main.App.ExtractLyricsToLRC(e"
+    },
+    {
+      "offset": 12816100,
+      "symbol": "main.App.GetDirectLinkMetadata(e)"
+    },
+    {
+      "offset": 12816165,
+      "symbol": "main.App.GetDownloadHistory()"
+    },
+    {
+      "offset": 12816226,
+      "symbol": "main.App.GetDownloadManagerProgress()"
+    },
+    {
+      "offset": 12816295,
+      "symbol": "main.App.GetDownloadProgress()"
+    },
+    {
+      "offset": 12816724,
+      "symbol": "main.App.GetSharedDownloaderRegionInfo(e)"
+    },
+    {
+      "offset": 12816798,
+      "symbol": "main.App.GetSpotifyMetadata(e)"
+    },
+    {
+      "offset": 12817415,
+      "symbol": "main.App.LoadPersistentDownloads()"
+    },
+    {
+      "offset": 12817787,
+      "symbol": "main.App.PauseManagedDownloads(e"
+    },
+    {
+      "offset": 12817922,
+      "symbol": "main.App.ReadEmbeddedLyrics(e)"
+    },
+    {
+      "offset": 12817985,
+      "symbol": "main.App.ReadFileMetadata(e)"
+    },
+    {
+      "offset": 12818298,
+      "symbol": "main.App.RenameFilesByMetadata(e"
+    },
+    {
+      "offset": 12818366,
+      "symbol": "main.App.ReplacePersistentDownloads(e)"
+    },
+    {
+      "offset": 12818842,
+      "symbol": "main.App.SaveLyrics(e"
+    },
+    {
+      "offset": 12819301,
+      "symbol": "main.App.ScanLyricsFolder(e)"
+    },
+    {
+      "offset": 12819362,
+      "symbol": "main.App.SearchDirectLink(e)"
+    },
+    {
+      "offset": 12819423,
+      "symbol": "main.App.SearchDirectLinkByType(e)"
+    },
+    {
+      "offset": 12819490,
+      "symbol": "main.App.SearchSpotify(e)"
+    },
+    {
+      "offset": 12819548,
+      "symbol": "main.App.SearchSpotifyByType(e)"
+    },
+    {
+      "offset": 12819727,
+      "symbol": "main.App.SelectLyricsFiles()"
+    },
+    {
+      "offset": 12819787,
+      "symbol": "main.App.SelectLyricsFolder()"
+    },
+    {
+      "offset": 12819922,
+      "symbol": "main.App.StopManagedDownloads(e"
+    },
+    {
+      "offset": 12819989,
+      "symbol": "main.App.SubmitManagedDownloads(e)"
+    },
+    {
+      "offset": 12820194,
+      "symbol": "main.App.WriteReplayGainTags(e)"
+    },
+    {
+      "offset": 23046616,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonPreferredLyrics"
+    },
+    {
+      "offset": 23046674,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).SetCoverSize"
+    },
+    {
+      "offset": 23046743,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).SetMetadataSeparator"
+    },
+    {
+      "offset": 23046820,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeArtistSeparator"
+    },
+    {
+      "offset": 23046881,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).GetAmazonURLFromSpotify"
+    },
+    {
+      "offset": 23046961,
+      "symbol": "github.com/afkarxyz/spotbye/backend.logDownloaderInfof"
+    },
+    {
+      "offset": 23047016,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonAPINormalizeQuality"
+    },
+    {
+      "offset": 23047137,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonAPIResolvedQuality"
+    },
+    {
+      "offset": 23047198,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).fetchTrackFromEndpoint"
+    },
+    {
+      "offset": 23047277,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).downloadContext"
+    },
+    {
+      "offset": 23047350,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonAPIQualityLabel"
+    },
+    {
+      "offset": 23047408,
+      "symbol": "github.com/afkarxyz/spotbye/backend.doSharedDownloaderRequest"
+    },
+    {
+      "offset": 23047470,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).label"
+    },
+    {
+      "offset": 23047532,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).downloadStream"
+    },
+    {
+      "offset": 23047671,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).DownloadTrackWithFallback"
+    },
+    {
+      "offset": 23047753,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).DownloadByURL"
+    },
+    {
+      "offset": 23047823,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).DownloadFromServiceWithFallback"
+    },
+    {
+      "offset": 23047962,
+      "symbol": "github.com/afkarxyz/spotbye/backend.logDownloaderWarnf"
+    },
+    {
+      "offset": 23048017,
+      "symbol": "github.com/afkarxyz/spotbye/backend.logDownloaderSuccessf"
+    },
+    {
+      "offset": 23048075,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).DownloadByURL.func2"
+    },
+    {
+      "offset": 23048151,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).DownloadBySpotifyID"
+    },
+    {
+      "offset": 23048227,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonNormalizeDownloadMode"
+    },
+    {
+      "offset": 23049115,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).fetchTrackCustom"
+    },
+    {
+      "offset": 23051050,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*amazonCustomClient).getTrackLyrics"
+    },
+    {
+      "offset": 23051700,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).downloadFromEndpoints"
+    },
+    {
+      "offset": 23051846,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).downloadValidatedResponse"
+    },
+    {
+      "offset": 23051928,
+      "symbol": "github.com/afkarxyz/spotbye/backend.mergeAmazonTrackAlbumMetadata"
+    },
+    {
+      "offset": 23052044,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonMetadataImageURL"
+    },
+    {
+      "offset": 23053005,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*amazonDirectClient).enrichPublicAmazonAlbum"
+    },
+    {
+      "offset": 23053087,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonMetadataEntityURL"
+    },
+    {
+      "offset": 23053325,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetTrackMetadata"
+    },
+    {
+      "offset": 23053425,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetMetadataWithFFprobe"
+    },
+    {
+      "offset": 23053865,
+      "symbol": "github.com/afkarxyz/spotbye/backend.splitArtistSegment"
+    },
+    {
+      "offset": 23053920,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SplitArtistCredits"
+    },
+    {
+      "offset": 23053975,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FormatArtistCredits"
+    },
+    {
+      "offset": 23054031,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SplitMetadataValues"
+    },
+    {
+      "offset": 23054087,
+      "symbol": "github.com/afkarxyz/spotbye/backend.MigrateArtistSeparatorSettings"
+    },
+    {
+      "offset": 23054154,
+      "symbol": "github.com/afkarxyz/spotbye/backend.MetadataArtistSeparator"
+    },
+    {
+      "offset": 23054214,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FilenameArtistSeparator"
+    },
+    {
+      "offset": 23054274,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FormatFilenameArtists"
+    },
+    {
+      "offset": 23054494,
+      "symbol": "github.com/afkarxyz/spotbye/backend.spotifyMetadataAPIKey"
+    },
+    {
+      "offset": 23054552,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readCompatibleMetadataCache"
+    },
+    {
+      "offset": 23054845,
+      "symbol": "github.com/afkarxyz/spotbye/backend.migratePartialDownload"
+    },
+    {
+      "offset": 23055009,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetRedownloadWithSuffixSetting"
+    },
+    {
+      "offset": 23057002,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadCoverToPath"
+    },
+    {
+      "offset": 23057083,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadCover"
+    },
+    {
+      "offset": 23057254,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadHeader"
+    },
+    {
+      "offset": 23057320,
+      "symbol": "github.com/afkarxyz/spotbye/backend.sanitizeFilename"
+    },
+    {
+      "offset": 23057373,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SanitizeFilename"
+    },
+    {
+      "offset": 23057426,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadGalleryImage"
+    },
+    {
+      "offset": 23057498,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadAvatar"
+    },
+    {
+      "offset": 23057564,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).SetMetadataSeparator"
+    },
+    {
+      "offset": 23057742,
+      "symbol": "github.com/afkarxyz/spotbye/backend.DecodeDeezerDirectDownloadResponse"
+    },
+    {
+      "offset": 23058099,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).downloadAndDecryptDeezerStream"
+    },
+    {
+      "offset": 23058186,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).downloadDeezerToTempFile"
+    },
+    {
+      "offset": 23058267,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).downloadDeezerStream"
+    },
+    {
+      "offset": 23058344,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).fetchDirectTrackFromEndpoint"
+    },
+    {
+      "offset": 23058429,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadFromAfkarXYZDirect"
+    },
+    {
+      "offset": 23058512,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).Download"
+    },
+    {
+      "offset": 23060275,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadFromCustomARLDirect"
+    },
+    {
+      "offset": 23060359,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadByURLCustom"
+    },
+    {
+      "offset": 23060435,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadCustom"
+    },
+    {
+      "offset": 23061056,
+      "symbol": "github.com/afkarxyz/spotbye/backend.deezerLocalizedAlbumsByID"
+    },
+    {
+      "offset": 23061118,
+      "symbol": "github.com/afkarxyz/spotbye/backend.decodeDeezerLyrics"
+    },
+    {
+      "offset": 23061173,
+      "symbol": "github.com/afkarxyz/spotbye/backend.deezerCustomFetchLyrics"
+    },
+    {
+      "offset": 23061233,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).embedDeezerLyrics"
+    },
+    {
+      "offset": 23061307,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadByURL"
+    },
+    {
+      "offset": 23061791,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalArtistWebProfile"
+    },
+    {
+      "offset": 23061854,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeTidalArtistBiography"
+    },
+    {
+      "offset": 23062029,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPIArtists"
+    },
+    {
+      "offset": 23062144,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPIAlbumContextFromResource"
+    },
+    {
+      "offset": 23062340,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPIAlbumContextForTrack"
+    },
+    {
+      "offset": 23062409,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildTidalAlbumTrackFromOpenAPI"
+    },
+    {
+      "offset": 23062477,
+      "symbol": "github.com/afkarxyz/spotbye/backend.firstAudioQuality"
+    },
+    {
+      "offset": 23062711,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalAlbumContextOpenAPI"
+    },
+    {
+      "offset": 23062777,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalAlbumTracksOpenAPI"
+    },
+    {
+      "offset": 23062902,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalAlbumOpenAPIWithMeta"
+    },
+    {
+      "offset": 23062969,
+      "symbol": "github.com/afkarxyz/spotbye/backend.albumTrackListIsExplicit"
+    },
+    {
+      "offset": 23063030,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalAlbum"
+    },
+    {
+      "offset": 23063082,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalAlbumOpenAPI"
+    },
+    {
+      "offset": 23063249,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalPlaylist"
+    },
+    {
+      "offset": 23063304,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalArtist"
+    },
+    {
+      "offset": 23063471,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzTrackSearchURLForID"
+    },
+    {
+      "offset": 23063803,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*amazonDirectClient).getArtistDiscographyPagesRaw"
+    },
+    {
+      "offset": 23063890,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonArtistOverview"
+    },
+    {
+      "offset": 23063952,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonArtistOverviewAlbumIDs"
+    },
+    {
+      "offset": 23064017,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonArtist"
+    },
+    {
+      "offset": 23064187,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonAlbum"
+    },
+    {
+      "offset": 23064240,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonAlbumWithClient"
+    },
+    {
+      "offset": 23064303,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonAlbumFromCatalogWithClient"
+    },
+    {
+      "offset": 23064377,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonAlbumResponseFromTemplate"
+    },
+    {
+      "offset": 23064445,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonPlaylist"
+    },
+    {
+      "offset": 23064501,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonUserPlaylist"
+    },
+    {
+      "offset": 23064561,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonPlaylistWithClient"
+    },
+    {
+      "offset": 23064804,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchDeezerAlbum"
+    },
+    {
+      "offset": 23064857,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchDeezerPlaylist"
+    },
+    {
+      "offset": 23064913,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchDeezerPlaylist.func2"
+    },
+    {
+      "offset": 23064975,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchDeezerPlaylist.func1"
+    },
+    {
+      "offset": 23065095,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchDeezerArtist"
+    },
+    {
+      "offset": 23065263,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchQobuzMetadataAlbumByID"
+    },
+    {
+      "offset": 23065438,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchDeezerPlaylistPageHTML"
+    },
+    {
+      "offset": 23065502,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractDeezerFallbackAlbumMD5FromHTML"
+    },
+    {
+      "offset": 23065694,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonExtractPlaylistItems"
+    },
+    {
+      "offset": 23065757,
+      "symbol": "github.com/afkarxyz/spotbye/backend.applyArtistFormat"
+    },
+    {
+      "offset": 23066285,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonFindMusicAlbumLDByAlbumID"
+    },
+    {
+      "offset": 23066409,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonIsInvalidAlbumResponse"
+    },
+    {
+      "offset": 23066474,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonIndexAlbumTracksByID"
+    },
+    {
+      "offset": 23067654,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SearchDirectLink"
+    },
+    {
+      "offset": 23067707,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SearchDirectLinkByType"
+    },
+    {
+      "offset": 23067766,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPISearchResultID"
+    },
+    {
+      "offset": 23067829,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPISearchIdentifiers"
+    },
+    {
+      "offset": 23067895,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPIFetchSearchResults"
+    },
+    {
+      "offset": 23067962,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildTidalTrackSearchResult"
+    },
+    {
+      "offset": 23068026,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildTidalAlbumSearchResult"
+    },
+    {
+      "offset": 23068090,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildTidalArtistSearchResult"
+    },
+    {
+      "offset": 23068155,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildTidalPlaylistSearchResult"
+    },
+    {
+      "offset": 23068222,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLink"
+    },
+    {
+      "offset": 23068280,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchQobuzDirectLink"
+    },
+    {
+      "offset": 23068338,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchDeezerDirectLink"
+    },
+    {
+      "offset": 23068397,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchAmazonDirectLink"
+    },
+    {
+      "offset": 23068456,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchAmazonDirectLinkWithClient"
+    },
+    {
+      "offset": 23068525,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonSliceSearchResults"
+    },
+    {
+      "offset": 23068586,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLinkByType"
+    },
+    {
+      "offset": 23068650,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchQobuzDirectLinkByType"
+    },
+    {
+      "offset": 23068714,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchDeezerDirectLinkByType"
+    },
+    {
+      "offset": 23068779,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchAmazonDirectLinkByType"
+    },
+    {
+      "offset": 23068844,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchAmazonDirectLinkByTypeWithClient"
+    },
+    {
+      "offset": 23068969,
+      "symbol": "github.com/afkarxyz/spotbye/backend.appendSearchVersion"
+    },
+    {
+      "offset": 23069025,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeSearchURL"
+    },
+    {
+      "offset": 23069080,
+      "symbol": "github.com/afkarxyz/spotbye/backend.joinQobuzSearchArtistNames"
+    },
+    {
+      "offset": 23069143,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalSearchImageURL"
+    },
+    {
+      "offset": 23069199,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeTidalSearchImageSize"
+    },
+    {
+      "offset": 23069316,
+      "symbol": "github.com/afkarxyz/spotbye/backend.deezerPlaylistImageURL"
+    },
+    {
+      "offset": 23069375,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchDeezerAlbumReleaseDates"
+    },
+    {
+      "offset": 23069440,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzTrackSearchResultURL"
+    },
+    {
+      "offset": 23069502,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzTrackSearchURL"
+    },
+    {
+      "offset": 23069558,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzAlbumSearchURL"
+    },
+    {
+      "offset": 23069732,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzAlbumSlugURL"
+    },
+    {
+      "offset": 23069786,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzArtistSearchURL"
+    },
+    {
+      "offset": 23069843,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzPlaylistSearchURL"
+    },
+    {
+      "offset": 23069902,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*amazonDirectClient).buildAmazonSearchHeaders"
+    },
+    {
+      "offset": 23069985,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*amazonDirectClient).postSearchRaw"
+    },
+    {
+      "offset": 23070175,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseAmazonTrackSearchResults"
+    },
+    {
+      "offset": 23070308,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonTrackSearchURL"
+    },
+    {
+      "offset": 23070365,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseAmazonAlbumSearchResults"
+    },
+    {
+      "offset": 23070431,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseAmazonCatalogAlbumResults"
+    },
+    {
+      "offset": 23070498,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseAmazonArtistSearchResults"
+    },
+    {
+      "offset": 23070565,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseAmazonPlaylistSearchResults"
+    },
+    {
+      "offset": 23070634,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseAmazonCatalogArtistResults"
+    },
+    {
+      "offset": 23070702,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonExtractTrackIDFromSearchLink"
+    },
+    {
+      "offset": 23070842,
+      "symbol": "github.com/afkarxyz/spotbye/backend.splitAmazonSearchStorageKey"
+    },
+    {
+      "offset": 23070906,
+      "symbol": "github.com/afkarxyz/spotbye/backend.BeginDownloadCancellationScope"
+    },
+    {
+      "offset": 23070973,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ActiveDownloadContext"
+    },
+    {
+      "offset": 23071031,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ForceStopActiveDownloads"
+    },
+    {
+      "offset": 23071092,
+      "symbol": "github.com/afkarxyz/spotbye/backend.IsDownloadForceStopRequested"
+    },
+    {
+      "offset": 23071157,
+      "symbol": "github.com/afkarxyz/spotbye/backend.CheckDownloadCancelled"
+    },
+    {
+      "offset": 23071216,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SleepWithDownloadContext"
+    },
+    {
+      "offset": 23071277,
+      "symbol": "github.com/afkarxyz/spotbye/backend.IsDownloadCancelledError"
+    },
+    {
+      "offset": 23071338,
+      "symbol": "github.com/afkarxyz/spotbye/backend.WrapDownloadCancelled"
+    },
+    {
+      "offset": 23071458,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).validateCandidate"
+    },
+    {
+      "offset": 23071533,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).downloadValidatedCandidate"
+    },
+    {
+      "offset": 23071617,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).checkCancelled"
+    },
+    {
+      "offset": 23071689,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).sleep"
+    },
+    {
+      "offset": 23071752,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).progressWriter"
+    },
+    {
+      "offset": 23071824,
+      "symbol": "github.com/afkarxyz/spotbye/backend.BuildDownloadIdentityKey"
+    },
+    {
+      "offset": 23071947,
+      "symbol": "github.com/afkarxyz/spotbye/backend.AcquireDownloadIdentityContext"
+    },
+    {
+      "offset": 23072014,
+      "symbol": "github.com/afkarxyz/spotbye/backend.releaseDownloadIdentity"
+    },
+    {
+      "offset": 23072074,
+      "symbol": "github.com/afkarxyz/spotbye/backend.openPersistentDownloadManagerStore"
+    },
+    {
+      "offset": 23072145,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parsePersistentDownloadManagerItems"
+    },
+    {
+      "offset": 23072217,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parsePersistentDownloadManagerOrder"
+    },
+    {
+      "offset": 23072289,
+      "symbol": "github.com/afkarxyz/spotbye/backend.marshalPersistentDownloadManagerOrder"
+    },
+    {
+      "offset": 23072363,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*persistentDownloadManagerStore).load"
+    },
+    {
+      "offset": 23072438,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*persistentDownloadManagerStore).replace"
+    },
+    {
+      "offset": 23072516,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*persistentDownloadManagerStore).apply"
+    },
+    {
+      "offset": 23072592,
+      "symbol": "github.com/afkarxyz/spotbye/backend.InitDownloadManagerDB"
+    },
+    {
+      "offset": 23072650,
+      "symbol": "github.com/afkarxyz/spotbye/backend.getPersistentDownloadManagerDBPath"
+    },
+    {
+      "offset": 23072721,
+      "symbol": "github.com/afkarxyz/spotbye/backend.getPersistentDownloadManagerStore"
+    },
+    {
+      "offset": 23072791,
+      "symbol": "github.com/afkarxyz/spotbye/backend.CloseDownloadManagerDB"
+    },
+    {
+      "offset": 23072850,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*persistentDownloadManagerStore).close"
+    },
+    {
+      "offset": 23072926,
+      "symbol": "github.com/afkarxyz/spotbye/backend.LoadPersistentDownloads"
+    },
+    {
+      "offset": 23072986,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ReplacePersistentDownloads"
+    },
+    {
+      "offset": 23073049,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyPersistentDownloadChanges"
+    },
+    {
+      "offset": 23073116,
+      "symbol": "github.com/afkarxyz/spotbye/backend.migrateLegacyDownloadManager"
+    },
+    {
+      "offset": 23073181,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SaveManagedDownload"
+    },
+    {
+      "offset": 23073237,
+      "symbol": "github.com/afkarxyz/spotbye/backend.LoadManagedDownloads"
+    },
+    {
+      "offset": 23073294,
+      "symbol": "github.com/afkarxyz/spotbye/backend.mergeManagedDownloadManagerItem"
+    },
+    {
+      "offset": 23073362,
+      "symbol": "github.com/afkarxyz/spotbye/backend.deleteManagedDownloadManagerItem"
+    },
+    {
+      "offset": 23073431,
+      "symbol": "github.com/afkarxyz/spotbye/backend.replaceDownloadFile"
+    },
+    {
+      "offset": 23073487,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).transferHTTP"
+    },
+    {
+      "offset": 23073557,
+      "symbol": "github.com/afkarxyz/spotbye/backend.strongETag"
+    },
+    {
+      "offset": 23073668,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ValidateDownloadedTrackDuration"
+    },
+    {
+      "offset": 23074006,
+      "symbol": "github.com/afkarxyz/spotbye/backend.trackMetadataToMetadata"
+    },
+    {
+      "offset": 23074066,
+      "symbol": "github.com/afkarxyz/spotbye/backend.mergeMissingMetadata"
+    },
+    {
+      "offset": 23074185,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FetchEnrichMetadataFromURL"
+    },
+    {
+      "offset": 23074295,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tagMetadataFromMetadataPreserveRaw"
+    },
+    {
+      "offset": 23074366,
+      "symbol": "github.com/afkarxyz/spotbye/backend.mergeNativeMetadata"
+    },
+    {
+      "offset": 23075237,
+      "symbol": "github.com/afkarxyz/spotbye/backend.getLatestFFmpegReleaseTag"
+    },
+    {
+      "offset": 23075357,
+      "symbol": "github.com/afkarxyz/spotbye/backend.getFFmpegDownloadURLs"
+    },
+    {
+      "offset": 23075415,
+      "symbol": "github.com/afkarxyz/spotbye/backend.DownloadFFmpeg"
+    },
+    {
+      "offset": 23075466,
+      "symbol": "github.com/afkarxyz/spotbye/backend.downloadWithFallback"
+    },
+    {
+      "offset": 23075523,
+      "symbol": "github.com/afkarxyz/spotbye/backend.downloadAndExtract"
+    },
+    {
+      "offset": 23076088,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ConvertDownloadedFile"
+    },
+    {
+      "offset": 23076367,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ReadAudioMetadata"
+    },
+    {
+      "offset": 23076421,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readM4aMetadata"
+    },
+    {
+      "offset": 23076473,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readFlacMetadata"
+    },
+    {
+      "offset": 23076526,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readMp3Metadata"
+    },
+    {
+      "offset": 23076578,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readMetadataWithFFprobe"
+    },
+    {
+      "offset": 23076757,
+      "symbol": "github.com/afkarxyz/spotbye/backend.sanitizeFilenameForRename"
+    },
+    {
+      "offset": 23077133,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyResolvedArtistFilenameTokens"
+    },
+    {
+      "offset": 23077859,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ResolveOutputPathForDownload"
+    },
+    {
+      "offset": 23077975,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ReserveOutputPathForDownload"
+    },
+    {
+      "offset": 23078204,
+      "symbol": "github.com/afkarxyz/spotbye/backend.sanitizeFilenameForOS"
+    },
+    {
+      "offset": 23078280,
+      "symbol": "github.com/afkarxyz/spotbye/backend.firstArtistCredit"
+    },
+    {
+      "offset": 23078334,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetFirstArtist"
+    },
+    {
+      "offset": 23078385,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SanitizeOptionalFilename"
+    },
+    {
+      "offset": 23080534,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonHomeFeedSearchResults"
+    },
+    {
+      "offset": 23080802,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchResultsToHomeFeedItems"
+    },
+    {
+      "offset": 23081108,
+      "symbol": "github.com/afkarxyz/spotbye/backend.deezerAlbumItemsToHomeFeedItems"
+    },
+    {
+      "offset": 23081176,
+      "symbol": "github.com/afkarxyz/spotbye/backend.deezerArtistItemsToHomeFeedItems"
+    },
+    {
+      "offset": 23081245,
+      "symbol": "github.com/afkarxyz/spotbye/backend.deezerPlaylistItemsToHomeFeedItems"
+    },
+    {
+      "offset": 23081316,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzAlbumItemsToHomeFeedItems"
+    },
+    {
+      "offset": 23081383,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzPlaylistItemsToHomeFeedItems"
+    },
+    {
+      "offset": 23081623,
+      "symbol": "github.com/afkarxyz/spotbye/backend.spotifyHomePlaylistImageURL"
+    },
+    {
+      "offset": 23081687,
+      "symbol": "github.com/afkarxyz/spotbye/backend.spotifyHomeArtistNames"
+    },
+    {
+      "offset": 23081746,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalHomeArtistNames"
+    },
+    {
+      "offset": 23083176,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchSpotifyRawMetadataByGID"
+    },
+    {
+      "offset": 23083368,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractSpotifyAlbumUPC"
+    },
+    {
+      "offset": 23083478,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchSpotifyRawMetadataWithContext"
+    },
+    {
+      "offset": 23083549,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchSpotifyRawMetadataWithContext.func1"
+    },
+    {
+      "offset": 23087583,
+      "symbol": "github.com/afkarxyz/spotbye/backend.sanitizeSensitiveURL"
+    },
+    {
+      "offset": 23087640,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SanitizeSensitiveText"
+    },
+    {
+      "offset": 23087698,
+      "symbol": "github.com/afkarxyz/spotbye/backend.logDownloaderf"
+    },
+    {
+      "offset": 23087749,
+      "symbol": "github.com/afkarxyz/spotbye/backend.printDownloadProgress"
+    },
+    {
+      "offset": 23087807,
+      "symbol": "github.com/afkarxyz/spotbye/backend.printDownloadComplete"
+    },
+    {
+      "offset": 23087922,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).FetchLyricsWithMetadata"
+    },
+    {
+      "offset": 23087998,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).convertLRCLibToLyricsResponse"
+    },
+    {
+      "offset": 23088133,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).FetchLyricsFromLRCLibSearch"
+    },
+    {
+      "offset": 23088213,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).FetchLyricsFromSpotifyAPI"
+    },
+    {
+      "offset": 23088491,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).FetchLyricsFromMusixmatch"
+    },
+    {
+      "offset": 23088623,
+      "symbol": "github.com/afkarxyz/spotbye/backend.printLyricsDebug"
+    },
+    {
+      "offset": 23088676,
+      "symbol": "github.com/afkarxyz/spotbye/backend.syncedLyricsStats"
+    },
+    {
+      "offset": 23088730,
+      "symbol": "github.com/afkarxyz/spotbye/backend.isLikelyCompleteSyncedLyrics"
+    },
+    {
+      "offset": 23088795,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).finalizeLyricsTranslation"
+    },
+    {
+      "offset": 23088873,
+      "symbol": "github.com/afkarxyz/spotbye/backend.LyricsTranslationOptions.modeForSource"
+    },
+    {
+      "offset": 23088948,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyLyricsTranslations"
+    },
+    {
+      "offset": 23089008,
+      "symbol": "github.com/afkarxyz/spotbye/backend.hasAnyLyricsTranslation"
+    },
+    {
+      "offset": 23089068,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).FetchLyricsAllSources"
+    },
+    {
+      "offset": 23089142,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).ConvertToLRC"
+    },
+    {
+      "offset": 23089260,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildLyricsFilename"
+    },
+    {
+      "offset": 23089316,
+      "symbol": "github.com/afkarxyz/spotbye/backend.findAudioFileForLyrics"
+    },
+    {
+      "offset": 23089375,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).DownloadLyrics"
+    },
+    {
+      "offset": 23089442,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ReadEmbeddedLyrics"
+    },
+    {
+      "offset": 23089497,
+      "symbol": "github.com/afkarxyz/spotbye/backend.isSyncedLyrics"
+    },
+    {
+      "offset": 23089548,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readFlacLyrics"
+    },
+    {
+      "offset": 23089599,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readMp3Lyrics"
+    },
+    {
+      "offset": 23089649,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readLyricsWithFFprobe"
+    },
+    {
+      "offset": 23089707,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ExtractLyricsToLRC"
+    },
+    {
+      "offset": 23089762,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SaveLyrics"
+    },
+    {
+      "offset": 23089809,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ScanLyricsFolder"
+    },
+    {
+      "offset": 23089862,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SelectLyricsFiles"
+    },
+    {
+      "offset": 23089916,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeLyricsProviderMode"
+    },
+    {
+      "offset": 23089980,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeLyricsTranslationOptions"
+    },
+    {
+      "offset": 23090050,
+      "symbol": "github.com/afkarxyz/spotbye/backend.lyricsLanguageName"
+    },
+    {
+      "offset": 23090105,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildLyricsTranslationPrompt"
+    },
+    {
+      "offset": 23090170,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseChatGPTLyricsTranslation"
+    },
+    {
+      "offset": 23090236,
+      "symbol": "github.com/afkarxyz/spotbye/backend.splitLyricsTranslationLines"
+    },
+    {
+      "offset": 23090489,
+      "symbol": "github.com/afkarxyz/spotbye/backend.translateChatGPTLyricsBatch"
+    },
+    {
+      "offset": 23090553,
+      "symbol": "github.com/afkarxyz/spotbye/backend.newLyricsTranslationClient"
+    },
+    {
+      "offset": 23090677,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildGeminiLyricsPrompt"
+    },
+    {
+      "offset": 23090737,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseGeminiLyrics"
+    },
+    {
+      "offset": 23090912,
+      "symbol": "github.com/afkarxyz/spotbye/backend.applyLyricsTranslationWithFallback"
+    },
+    {
+      "offset": 23090983,
+      "symbol": "github.com/afkarxyz/spotbye/backend.applyLyricsTranslations"
+    },
+    {
+      "offset": 23091043,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readLyricsResponseBounded"
+    },
+    {
+      "offset": 23091661,
+      "symbol": "github.com/afkarxyz/spotbye/backend.callChatGPTLyrics"
+    },
+    {
+      "offset": 23091777,
+      "symbol": "github.com/afkarxyz/spotbye/backend.createGeminiLyricsRequest"
+    },
+    {
+      "offset": 23091947,
+      "symbol": "github.com/afkarxyz/spotbye/backend.callGeminiLyrics"
+    },
+    {
+      "offset": 23092000,
+      "symbol": "github.com/afkarxyz/spotbye/backend.EmbedMetadata"
+    },
+    {
+      "offset": 23092050,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tagMetadataFromMetadata"
+    },
+    {
+      "offset": 23092110,
+      "symbol": "github.com/afkarxyz/spotbye/backend.EmbedLyricsOnly"
+    },
+    {
+      "offset": 23092489,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ExtractLyrics"
+    },
+    {
+      "offset": 23092539,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractLyricsWithFFprobe"
+    },
+    {
+      "offset": 23092600,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractLyricsFromMp3"
+    },
+    {
+      "offset": 23092657,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractLyricsFromFlac"
+    },
+    {
+      "offset": 23092715,
+      "symbol": "github.com/afkarxyz/spotbye/backend.EmbedLyricsOnlyMP3"
+    },
+    {
+      "offset": 23092770,
+      "symbol": "github.com/afkarxyz/spotbye/backend.embedLyricsToM4A"
+    },
+    {
+      "offset": 23092823,
+      "symbol": "github.com/afkarxyz/spotbye/backend.EmbedLyricsOnlyUniversal"
+    },
+    {
+      "offset": 23092884,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyComposerMetadata"
+    },
+    {
+      "offset": 23092942,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyLyricistMetadata"
+    },
+    {
+      "offset": 23093164,
+      "symbol": "github.com/afkarxyz/spotbye/backend.validateLyricsDuration"
+    },
+    {
+      "offset": 23093277,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ExtractFullMetadataFromFile"
+    },
+    {
+      "offset": 23093341,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractFullMetadataWithFFprobe"
+    },
+    {
+      "offset": 23093408,
+      "symbol": "github.com/afkarxyz/spotbye/backend.mergeExtractedMetadata"
+    },
+    {
+      "offset": 23093467,
+      "symbol": "github.com/afkarxyz/spotbye/backend.EmbedMetadataToConvertedFile"
+    },
+    {
+      "offset": 23094294,
+      "symbol": "github.com/afkarxyz/spotbye/backend.PrefetchMusicBrainzMetadata"
+    },
+    {
+      "offset": 23094358,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildMusicBrainzGenreMetadata"
+    },
+    {
+      "offset": 23094424,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildMusicBrainzGenreMetadata.func1"
+    },
+    {
+      "offset": 23094873,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildMusicBrainzMetadataFromRecordings"
+    },
+    {
+      "offset": 23094985,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchMusicBrainzOfficialMetadata"
+    },
+    {
+      "offset": 23095119,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchMusicBrainzMetadataNetwork"
+    },
+    {
+      "offset": 23095187,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ProbeMusicBrainzMetadata"
+    },
+    {
+      "offset": 23095248,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FetchMusicBrainzMetadata"
+    },
+    {
+      "offset": 23095818,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*MusixMatchAPI).SearchTracks"
+    },
+    {
+      "offset": 23095949,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*MusixMatchAPI).GetTrackLyrics"
+    },
+    {
+      "offset": 23096151,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FetchMusixmatchLyrics"
+    },
+    {
+      "offset": 23096273,
+      "symbol": "github.com/afkarxyz/spotbye/backend.deezerNativeArtists"
+    },
+    {
+      "offset": 23096555,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyNativeLabelMetadata"
+    },
+    {
+      "offset": 23097664,
+      "symbol": "github.com/afkarxyz/spotbye/backend.WatchDownloadProgress"
+    },
+    {
+      "offset": 23097722,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetDownloadProgress"
+    },
+    {
+      "offset": 23097778,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SetDownloadSpeed"
+    },
+    {
+      "offset": 23097889,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SetDownloadProgress"
+    },
+    {
+      "offset": 23097945,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SetDownloading"
+    },
+    {
+      "offset": 23098424,
+      "symbol": "github.com/afkarxyz/spotbye/backend.RegisterDownloadItem"
+    },
+    {
+      "offset": 23098481,
+      "symbol": "github.com/afkarxyz/spotbye/backend.StartDownloadItem"
+    },
+    {
+      "offset": 23098643,
+      "symbol": "github.com/afkarxyz/spotbye/backend.CompleteDownloadItem"
+    },
+    {
+      "offset": 23098700,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FailDownloadItem"
+    },
+    {
+      "offset": 23098753,
+      "symbol": "github.com/afkarxyz/spotbye/backend.RetryDownloadItem"
+    },
+    {
+      "offset": 23098807,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SkipDownloadItem"
+    },
+    {
+      "offset": 23098860,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetDownloadManagerProgress"
+    },
+    {
+      "offset": 23098923,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ClearFinishedDownloadProgress"
+    },
+    {
+      "offset": 23098989,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ClearAllDownloads"
+    },
+    {
+      "offset": 23099043,
+      "symbol": "github.com/afkarxyz/spotbye/backend.CancelPendingDownloadItems"
+    },
+    {
+      "offset": 23099106,
+      "symbol": "github.com/afkarxyz/spotbye/backend.CancelPendingAndActiveDownloads"
+    },
+    {
+      "offset": 23099233,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SetDownloadItemTransfer"
+    },
+    {
+      "offset": 23099293,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzAPINormalizeQuality"
+    },
+    {
+      "offset": 23099354,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).SetMetadataSeparator"
+    },
+    {
+      "offset": 23099430,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeQobuzSearchValue"
+    },
+    {
+      "offset": 23099492,
+      "symbol": "github.com/afkarxyz/spotbye/backend.scoreQobuzSearchCandidate"
+    },
+    {
+      "offset": 23099554,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzTrackDisplayArtist"
+    },
+    {
+      "offset": 23099674,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).searchByISRC"
+    },
+    {
+      "offset": 23099742,
+      "symbol": "github.com/afkarxyz/spotbye/backend.resolveQobuzMetadataISRC"
+    },
+    {
+      "offset": 23099867,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).GetDownloadURL"
+    },
+    {
+      "offset": 23099937,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).fetchDownloadURL"
+    },
+    {
+      "offset": 23100009,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).fetchDownloadURLFromEndpoint"
+    },
+    {
+      "offset": 23100093,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).fetchDownloadURLFromEndpointForService"
+    },
+    {
+      "offset": 23100187,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzAPIQualityLabel"
+    },
+    {
+      "offset": 23100244,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).DownloadFile"
+    },
+    {
+      "offset": 23100367,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).DownloadTrackWithISRC"
+    },
+    {
+      "offset": 23100444,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).downloadTrackWithISRC"
+    },
+    {
+      "offset": 23100521,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).downloadValidatedURL"
+    },
+    {
+      "offset": 23101281,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCredentialsSupportSignedMetadata"
+    },
+    {
+      "offset": 23103505,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCustomDownloadURLWithSession"
+    },
+    {
+      "offset": 23103575,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCustomTryDownloadURL"
+    },
+    {
+      "offset": 23103637,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCustomResolveDownloadURL"
+    },
+    {
+      "offset": 23103703,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCustomResolveDownloadURL.func1"
+    },
+    {
+      "offset": 23103775,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCustomSearchValidationTrackIDs"
+    },
+    {
+      "offset": 23103909,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCustomResolveValidationDownloadURL"
+    },
+    {
+      "offset": 23104052,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCustomQualityLabel"
+    },
+    {
+      "offset": 23104312,
+      "symbol": "github.com/afkarxyz/spotbye/backend.getQobuzCustomDownloadURL"
+    },
+    {
+      "offset": 23104506,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).GetQobuzCustomDownloadURL"
+    },
+    {
+      "offset": 23104587,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).DownloadTrackWithQobuzCustom"
+    },
+    {
+      "offset": 23104671,
+      "symbol": "github.com/afkarxyz/spotbye/backend.logDownloaderDebugf"
+    },
+    {
+      "offset": 23104727,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).downloadTrackFromEndpoints"
+    },
+    {
+      "offset": 23104863,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ValidateQobuzDownloadURL"
+    },
+    {
+      "offset": 23104924,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeQobuzDownloadURLQuality"
+    },
+    {
+      "offset": 23104993,
+      "symbol": "github.com/afkarxyz/spotbye/backend.decodeQobuzDownloadURLQuality"
+    },
+    {
+      "offset": 23105115,
+      "symbol": "github.com/afkarxyz/spotbye/backend.DecodeQobuzDownloadURLResponseWithQuality"
+    },
+    {
+      "offset": 23105193,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzAudioQuality"
+    },
+    {
+      "offset": 23105303,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzMetadataCoverURL"
+    },
+    {
+      "offset": 23105361,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzMetadataArtistNames"
+    },
+    {
+      "offset": 23105422,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzMetadataAlbumURL"
+    },
+    {
+      "offset": 23105480,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzMetadataTrackURL"
+    },
+    {
+      "offset": 23105538,
+      "symbol": "github.com/afkarxyz/spotbye/backend.inferQobuzDiscographyAlbumType"
+    },
+    {
+      "offset": 23105605,
+      "symbol": "github.com/afkarxyz/spotbye/backend.mapQobuzMetadataTrack"
+    },
+    {
+      "offset": 23105663,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzMetadataArtistURL"
+    },
+    {
+      "offset": 23105722,
+      "symbol": "github.com/afkarxyz/spotbye/backend.mapQobuzMetadataAlbumTrack"
+    },
+    {
+      "offset": 23105785,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchQobuzMetadataAlbumInRegion"
+    },
+    {
+      "offset": 23105853,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchQobuzMetadataTrack"
+    },
+    {
+      "offset": 23105913,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchQobuzMetadataPlaylist"
+    },
+    {
+      "offset": 23105976,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzPlaylistImageURL"
+    },
+    {
+      "offset": 23106034,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchQobuzMetadataArtist"
+    },
+    {
+      "offset": 23106142,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchQobuzMetadataSearch"
+    },
+    {
+      "offset": 23106203,
+      "symbol": "github.com/afkarxyz/spotbye/backend.mapQobuzMetadataSearchResponse"
+    },
+    {
+      "offset": 23106270,
+      "symbol": "github.com/afkarxyz/spotbye/backend.decodeQobuzMetadataAccounts"
+    },
+    {
+      "offset": 23107689,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildReplayGainAlbumFilter"
+    },
+    {
+      "offset": 23107812,
+      "symbol": "github.com/afkarxyz/spotbye/backend.AnalyzeReplayGainAlbumContext"
+    },
+    {
+      "offset": 23107878,
+      "symbol": "github.com/afkarxyz/spotbye/backend.removeReplayGainTag"
+    },
+    {
+      "offset": 23107992,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildITunNORMTag"
+    },
+    {
+      "offset": 23108045,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildITunNORMTag.func1"
+    },
+    {
+      "offset": 23108220,
+      "symbol": "github.com/afkarxyz/spotbye/backend.validateReplayGainTagWrite"
+    },
+    {
+      "offset": 23108283,
+      "symbol": "github.com/afkarxyz/spotbye/backend.applyReplayGainTags"
+    },
+    {
+      "offset": 23108394,
+      "symbol": "github.com/afkarxyz/spotbye/backend.replaceReplayGainTag"
+    },
+    {
+      "offset": 23108451,
+      "symbol": "github.com/afkarxyz/spotbye/backend.WriteReplayGainTags"
+    },
+    {
+      "offset": 23108613,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ResampleDownloadedFile"
+    },
+    {
+      "offset": 23110000,
+      "symbol": "github.com/afkarxyz/spotbye/backend.sharedDownloaderEndpointGateFor"
+    },
+    {
+      "offset": 23110068,
+      "symbol": "github.com/afkarxyz/spotbye/backend.newSharedDownloaderEndpointGate"
+    },
+    {
+      "offset": 23110136,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*sharedDownloaderEndpointGate).request"
+    },
+    {
+      "offset": 23110212,
+      "symbol": "github.com/afkarxyz/spotbye/backend.sharedDownloaderRetryAfter"
+    },
+    {
+      "offset": 23110275,
+      "symbol": "github.com/afkarxyz/spotbye/backend.doSharedDownloaderRequestWithInterval"
+    },
+    {
+      "offset": 23110349,
+      "symbol": "github.com/afkarxyz/spotbye/backend.sharedDownloaderEndpoints"
+    },
+    {
+      "offset": 23110411,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeSharedDownloaderRegions"
+    },
+    {
+      "offset": 23110480,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchSharedDownloaderEndpointRegion"
+    },
+    {
+      "offset": 23110552,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetSharedDownloaderRegionInfo"
+    },
+    {
+      "offset": 23110750,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchSoundchartsSongUUID"
+    },
+    {
+      "offset": 23113271,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractArtists"
+    },
+    {
+      "offset": 23113521,
+      "symbol": "github.com/afkarxyz/spotbye/backend.firstArtistName"
+    },
+    {
+      "offset": 23113573,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FilterAlbum"
+    },
+    {
+      "offset": 23113621,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FilterPlaylist"
+    },
+    {
+      "offset": 23113783,
+      "symbol": "github.com/afkarxyz/spotbye/backend.stripHTMLTags"
+    },
+    {
+      "offset": 23113833,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FilterArtist"
+    },
+    {
+      "offset": 23113926,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FilterSearch"
+    },
+    {
+      "offset": 23114031,
+      "symbol": "github.com/afkarxyz/spotbye/backend.newSpotifyMetadataSourceClient"
+    },
+    {
+      "offset": 23114157,
+      "symbol": "github.com/afkarxyz/spotbye/backend.NewSpotifyMetadataClient"
+    },
+    {
+      "offset": 23114218,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).GetFilteredData"
+    },
+    {
+      "offset": 23114295,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).getRawSpotifyData"
+    },
+    {
+      "offset": 23114374,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).processSpotifyData"
+    },
+    {
+      "offset": 23114454,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).fetchTrack"
+    },
+    {
+      "offset": 23114592,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).fetchTrackCreditsWithClient"
+    },
+    {
+      "offset": 23114741,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).fetchAlbum"
+    },
+    {
+      "offset": 23114813,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).fetchAlbumWithClient"
+    },
+    {
+      "offset": 23114895,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).fetchPlaylist"
+    },
+    {
+      "offset": 23114970,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).fetchArtistDiscography"
+    },
+    {
+      "offset": 23115054,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).formatTrackData"
+    },
+    {
+      "offset": 23115131,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).formatAlbumData"
+    },
+    {
+      "offset": 23115208,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).formatPlaylistData"
+    },
+    {
+      "offset": 23115288,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).formatArtistDiscographyData"
+    },
+    {
+      "offset": 23115581,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).Search"
+    },
+    {
+      "offset": 23115649,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SearchSpotify"
+    },
+    {
+      "offset": 23115699,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).SearchByType"
+    },
+    {
+      "offset": 23115773,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SearchSpotifyByType"
+    },
+    {
+      "offset": 23116014,
+      "symbol": "github.com/afkarxyz/spotbye/backend.spotifyMetadataNativeBlocked"
+    },
+    {
+      "offset": 23116079,
+      "symbol": "github.com/afkarxyz/spotbye/backend.noteSpotifyMetadataFallbackSuccess"
+    },
+    {
+      "offset": 23116150,
+      "symbol": "github.com/afkarxyz/spotbye/backend.shouldUseSpotifyMetadataFallback"
+    },
+    {
+      "offset": 23116219,
+      "symbol": "github.com/afkarxyz/spotbye/backend.shouldUseSpotifyMetadataFallback.func1"
+    },
+    {
+      "offset": 23116416,
+      "symbol": "github.com/afkarxyz/spotbye/backend.requestSpotifyMetadataService"
+    },
+    {
+      "offset": 23116482,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchSpotifyNativeMetadata"
+    },
+    {
+      "offset": 23116614,
+      "symbol": "github.com/afkarxyz/spotbye/backend.getSpotifyNativeAlbumUPC"
+    },
+    {
+      "offset": 23116818,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildTagMetadata"
+    },
+    {
+      "offset": 23116871,
+      "symbol": "github.com/afkarxyz/spotbye/backend.BuildDownloadMetadata"
+    },
+    {
+      "offset": 23116929,
+      "symbol": "github.com/afkarxyz/spotbye/backend.resolveMetadataSourceURL"
+    },
+    {
+      "offset": 23116990,
+      "symbol": "github.com/afkarxyz/spotbye/backend.RetagOutputFromSource"
+    },
+    {
+      "offset": 23117048,
+      "symbol": "github.com/afkarxyz/spotbye/backend.TagFile"
+    },
+    {
+      "offset": 23117092,
+      "symbol": "github.com/afkarxyz/spotbye/backend.writeLyricistTag"
+    },
+    {
+      "offset": 23117145,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tagFileWithFallback"
+    },
+    {
+      "offset": 23117201,
+      "symbol": "github.com/afkarxyz/spotbye/backend.discardOutputAfterTaggingFailure"
+    },
+    {
+      "offset": 23117270,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tagFileDirect"
+    },
+    {
+      "offset": 23117320,
+      "symbol": "github.com/afkarxyz/spotbye/backend.removeAdditionalMetadataTags"
+    },
+    {
+      "offset": 23117385,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tagFileViaLocalStaging"
+    },
+    {
+      "offset": 23117675,
+      "symbol": "github.com/afkarxyz/spotbye/backend.verifyTagFile"
+    },
+    {
+      "offset": 23117725,
+      "symbol": "github.com/afkarxyz/spotbye/backend.verifyTagFile.func2"
+    },
+    {
+      "offset": 23117781,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeTagComparisonText"
+    },
+    {
+      "offset": 23117844,
+      "symbol": "github.com/afkarxyz/spotbye/backend.artistTagValues"
+    },
+    {
+      "offset": 23117896,
+      "symbol": "github.com/afkarxyz/spotbye/backend.checkMetadataValues"
+    },
+    {
+      "offset": 23117952,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyMetadataTagSelection"
+    },
+    {
+      "offset": 23118014,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyMetadataTagSelection.func1"
+    },
+    {
+      "offset": 23118082,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildTagMap"
+    },
+    {
+      "offset": 23118130,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildTagMap.func1"
+    },
+    {
+      "offset": 23118184,
+      "symbol": "github.com/afkarxyz/spotbye/backend.buildTagMap.func2"
+    },
+    {
+      "offset": 23118238,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeMetadataDate"
+    },
+    {
+      "offset": 23118296,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyMetadataDateFormat"
+    },
+    {
+      "offset": 23118356,
+      "symbol": "github.com/afkarxyz/spotbye/backend.applyContainerSpecificTags"
+    },
+    {
+      "offset": 23118604,
+      "symbol": "github.com/afkarxyz/spotbye/backend.writeTagImage"
+    },
+    {
+      "offset": 23118654,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractCoverArtWithTagLib"
+    },
+    {
+      "offset": 23118746,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractLyricsWithTagLib"
+    },
+    {
+      "offset": 23118806,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractFullMetadataWithTagLib"
+    },
+    {
+      "offset": 23118872,
+      "symbol": "github.com/afkarxyz/spotbye/backend.firstNonEmptyTagValue"
+    },
+    {
+      "offset": 23118930,
+      "symbol": "github.com/afkarxyz/spotbye/backend.normalizeTagMap"
+    },
+    {
+      "offset": 23118982,
+      "symbol": "github.com/afkarxyz/spotbye/backend.nonEmptyTagValues"
+    },
+    {
+      "offset": 23119036,
+      "symbol": "github.com/afkarxyz/spotbye/backend.firstTagValue"
+    },
+    {
+      "offset": 23119142,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseTagNumberPair"
+    },
+    {
+      "offset": 23119197,
+      "symbol": "github.com/afkarxyz/spotbye/backend.parseTagInt"
+    },
+    {
+      "offset": 23119245,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractTagYear"
+    },
+    {
+      "offset": 23119356,
+      "symbol": "github.com/afkarxyz/spotbye/backend.hasMeaningfulMetadata"
+    },
+    {
+      "offset": 23119702,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalAPINormalizeQuality"
+    },
+    {
+      "offset": 23119822,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalDownloadURLFromAPIContext"
+    },
+    {
+      "offset": 23119956,
+      "symbol": "github.com/afkarxyz/spotbye/backend.NewTidalDownloader"
+    },
+    {
+      "offset": 23120064,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).SetMetadataSeparator"
+    },
+    {
+      "offset": 23120140,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).GetAvailableAPIs"
+    },
+    {
+      "offset": 23120212,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).GetTidalURLFromSpotify"
+    },
+    {
+      "offset": 23120290,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).GetTrackIDFromURL"
+    },
+    {
+      "offset": 23120363,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadFileForService"
+    },
+    {
+      "offset": 23120441,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadFromManifestForService"
+    },
+    {
+      "offset": 23120527,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).DownloadByURLWithFallback"
+    },
+    {
+      "offset": 23120608,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).DownloadByURLWithFallback.func2"
+    },
+    {
+      "offset": 23120695,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).embedTidalLyrics"
+    },
+    {
+      "offset": 23120767,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).Download"
+    },
+    {
+      "offset": 23120881,
+      "symbol": "github.com/afkarxyz/spotbye/backend.isTidalAtmosQuality"
+    },
+    {
+      "offset": 23121069,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalMediaTagsSupportAtmos"
+    },
+    {
+      "offset": 23121132,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalFilenameForQuality"
+    },
+    {
+      "offset": 23122867,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalCustomCanonicalQuality"
+    },
+    {
+      "offset": 23122931,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalCustomQualityCandidates"
+    },
+    {
+      "offset": 23123213,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalCustomQualityNeedsLosslessManifest"
+    },
+    {
+      "offset": 23123419,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*tidalCustomClient).getTrackManifestForQuality"
+    },
+    {
+      "offset": 23123503,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*tidalCustomClient).getTrackPlaybackForQuality"
+    },
+    {
+      "offset": 23123661,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalCustomQualityLabel"
+    },
+    {
+      "offset": 23124230,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*tidalCustomClient).GetTrackLyrics"
+    },
+    {
+      "offset": 23124302,
+      "symbol": "github.com/afkarxyz/spotbye/backend.getTidalCustomTrackLyrics"
+    },
+    {
+      "offset": 23124497,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalCustomPrettySoundQuality"
+    },
+    {
+      "offset": 23124625,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalCustomNormalizeSearchText"
+    },
+    {
+      "offset": 23124841,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalCustomTranscodeToCDQuality"
+    },
+    {
+      "offset": 23124909,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalCustomMaybeNormalizeToCDQuality"
+    },
+    {
+      "offset": 23124982,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).DownloadWithTidalCustom"
+    },
+    {
+      "offset": 23125061,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).DownloadByURLWithTidalCustom"
+    },
+    {
+      "offset": 23125145,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadByTrackIDWithTidalCustom"
+    },
+    {
+      "offset": 23125233,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadValidatedFileForService"
+    },
+    {
+      "offset": 23125320,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadByTrackIDWithTidalCustom.func2"
+    },
+    {
+      "offset": 23125414,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadTrackWithFallback"
+    },
+    {
+      "offset": 23125495,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadValidatedCandidate"
+    },
+    {
+      "offset": 23125760,
+      "symbol": "github.com/afkarxyz/spotbye/backend.isDirectLinkMetadataURL"
+    },
+    {
+      "offset": 23125885,
+      "symbol": "github.com/afkarxyz/spotbye/backend.resolveMetadataIdentifiersFromURL"
+    },
+    {
+      "offset": 23125955,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).fetchTrackFromEndpoint.deferwrap1"
+    },
+    {
+      "offset": 23126119,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).DownloadByURL.deferwrap1"
+    },
+    {
+      "offset": 23126200,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).DownloadByURL.func1"
+    },
+    {
+      "offset": 23126904,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).downloadFromEndpoints.func2"
+    },
+    {
+      "offset": 23126988,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).downloadValidatedResponse.func1"
+    },
+    {
+      "offset": 23127076,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).downloadValidatedResponse.func1.deferwrap2"
+    },
+    {
+      "offset": 23127175,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).downloadValidatedResponse.func1.deferwrap1"
+    },
+    {
+      "offset": 23127578,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*amazonDirectClient).enrichPublicAmazonAlbum.func1"
+    },
+    {
+      "offset": 23128529,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadCoverToPath.deferwrap2"
+    },
+    {
+      "offset": 23128611,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadCoverToPath.deferwrap1"
+    },
+    {
+      "offset": 23128693,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadCover.deferwrap2"
+    },
+    {
+      "offset": 23128769,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadCover.deferwrap1"
+    },
+    {
+      "offset": 23128845,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadHeader.deferwrap2"
+    },
+    {
+      "offset": 23128922,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadHeader.deferwrap1"
+    },
+    {
+      "offset": 23128999,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadGalleryImage.deferwrap2"
+    },
+    {
+      "offset": 23129082,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadGalleryImage.deferwrap1"
+    },
+    {
+      "offset": 23129165,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadAvatar.deferwrap2"
+    },
+    {
+      "offset": 23129242,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*CoverClient).DownloadAvatar.deferwrap1"
+    },
+    {
+      "offset": 23129319,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).downloadAndDecryptDeezerStream.deferwrap4"
+    },
+    {
+      "offset": 23129417,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).downloadAndDecryptDeezerStream.deferwrap3"
+    },
+    {
+      "offset": 23129515,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).downloadAndDecryptDeezerStream.deferwrap2"
+    },
+    {
+      "offset": 23129613,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).downloadAndDecryptDeezerStream.deferwrap1"
+    },
+    {
+      "offset": 23129711,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).fetchDirectTrackFromEndpoint.deferwrap1"
+    },
+    {
+      "offset": 23129807,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadFromAfkarXYZDirect.func2"
+    },
+    {
+      "offset": 23129896,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).Download.deferwrap1"
+    },
+    {
+      "offset": 23129972,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).Download.func1"
+    },
+    {
+      "offset": 23130422,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadFromCustomARLDirect.func1"
+    },
+    {
+      "offset": 23130512,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadByURLCustom.deferwrap1"
+    },
+    {
+      "offset": 23130599,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadCustom.deferwrap1"
+    },
+    {
+      "offset": 23130681,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadCustom.func1"
+    },
+    {
+      "offset": 23130902,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadByURL.deferwrap1"
+    },
+    {
+      "offset": 23131128,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalArtistWebProfile.deferwrap1"
+    },
+    {
+      "offset": 23131575,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalArtist.func2"
+    },
+    {
+      "offset": 23131634,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalArtist.gowrap1"
+    },
+    {
+      "offset": 23131695,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalArtist.func1"
+    },
+    {
+      "offset": 23131754,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalArtist.func1.1"
+    },
+    {
+      "offset": 23131815,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalArtist.func1.deferwrap1"
+    },
+    {
+      "offset": 23132043,
+      "symbol": "github.com/afkarxyz/spotbye/backend.amazonArtistOverviewAlbumIDs.func1"
+    },
+    {
+      "offset": 23132114,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonArtist.func2"
+    },
+    {
+      "offset": 23132174,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchAmazonArtist.func1"
+    },
+    {
+      "offset": 23132303,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchDeezerArtist.func1"
+    },
+    {
+      "offset": 23132363,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchDeezerPlaylistPageHTML.deferwrap1"
+    },
+    {
+      "offset": 23132438,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPIFetchSearchResults.gowrap1"
+    },
+    {
+      "offset": 23132513,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPIFetchSearchResults.func1"
+    },
+    {
+      "offset": 23132586,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPIFetchSearchResults.func1.1"
+    },
+    {
+      "offset": 23132661,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tidalOpenAPIFetchSearchResults.func1.deferwrap1"
+    },
+    {
+      "offset": 23132745,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLink.func4"
+    },
+    {
+      "offset": 23132809,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLink.func3"
+    },
+    {
+      "offset": 23132873,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLink.func2"
+    },
+    {
+      "offset": 23132937,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLink.func1"
+    },
+    {
+      "offset": 23133001,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLinkByType.func4"
+    },
+    {
+      "offset": 23133071,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLinkByType.func3"
+    },
+    {
+      "offset": 23133141,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLinkByType.func2"
+    },
+    {
+      "offset": 23133211,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchTidalDirectLinkByType.func1"
+    },
+    {
+      "offset": 23133342,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*amazonDirectClient).postSearchRaw.deferwrap1"
+    },
+    {
+      "offset": 23133425,
+      "symbol": "github.com/afkarxyz/spotbye/backend.BeginDownloadCancellationScope.func1"
+    },
+    {
+      "offset": 23133498,
+      "symbol": "github.com/afkarxyz/spotbye/backend.BeginDownloadCancellationScope.deferwrap1"
+    },
+    {
+      "offset": 23133576,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ActiveDownloadContext.deferwrap1"
+    },
+    {
+      "offset": 23133645,
+      "symbol": "github.com/afkarxyz/spotbye/backend.IsDownloadForceStopRequested.deferwrap1"
+    },
+    {
+      "offset": 23133721,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SleepWithDownloadContext.deferwrap1"
+    },
+    {
+      "offset": 23133793,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).downloadValidatedCandidate.deferwrap2"
+    },
+    {
+      "offset": 23133888,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).downloadValidatedCandidate.deferwrap1"
+    },
+    {
+      "offset": 23133983,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).sleep.deferwrap1"
+    },
+    {
+      "offset": 23134057,
+      "symbol": "github.com/afkarxyz/spotbye/backend.releaseDownloadIdentity.func1"
+    },
+    {
+      "offset": 23134123,
+      "symbol": "github.com/afkarxyz/spotbye/backend.releaseDownloadIdentity.func1.1"
+    },
+    {
+      "offset": 23134191,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*persistentDownloadManagerStore).load.func1"
+    },
+    {
+      "offset": 23134272,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*persistentDownloadManagerStore).replace.func1"
+    },
+    {
+      "offset": 23134356,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*persistentDownloadManagerStore).replace.func1.1"
+    },
+    {
+      "offset": 23134442,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*persistentDownloadManagerStore).apply.func1"
+    },
+    {
+      "offset": 23134524,
+      "symbol": "github.com/afkarxyz/spotbye/backend.InitDownloadManagerDB.deferwrap1"
+    },
+    {
+      "offset": 23134593,
+      "symbol": "github.com/afkarxyz/spotbye/backend.getPersistentDownloadManagerStore.deferwrap1"
+    },
+    {
+      "offset": 23134674,
+      "symbol": "github.com/afkarxyz/spotbye/backend.CloseDownloadManagerDB.deferwrap1"
+    },
+    {
+      "offset": 23134744,
+      "symbol": "github.com/afkarxyz/spotbye/backend.migrateLegacyDownloadManager.func3"
+    },
+    {
+      "offset": 23134815,
+      "symbol": "github.com/afkarxyz/spotbye/backend.migrateLegacyDownloadManager.func2"
+    },
+    {
+      "offset": 23134886,
+      "symbol": "github.com/afkarxyz/spotbye/backend.migrateLegacyDownloadManager.func1"
+    },
+    {
+      "offset": 23134957,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SaveManagedDownload.func1"
+    },
+    {
+      "offset": 23135019,
+      "symbol": "github.com/afkarxyz/spotbye/backend.LoadManagedDownloads.func1"
+    },
+    {
+      "offset": 23135082,
+      "symbol": "github.com/afkarxyz/spotbye/backend.LoadManagedDownloads.func1.1"
+    },
+    {
+      "offset": 23135340,
+      "symbol": "github.com/afkarxyz/spotbye/backend.downloadAndExtract.deferwrap3"
+    },
+    {
+      "offset": 23135406,
+      "symbol": "github.com/afkarxyz/spotbye/backend.downloadAndExtract.deferwrap2"
+    },
+    {
+      "offset": 23135472,
+      "symbol": "github.com/afkarxyz/spotbye/backend.downloadAndExtract.deferwrap1"
+    },
+    {
+      "offset": 23135948,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readFlacMetadata.deferwrap1"
+    },
+    {
+      "offset": 23136012,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readMp3Metadata.deferwrap1"
+    },
+    {
+      "offset": 23139186,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).FetchLyricsWithMetadata.deferwrap1"
+    },
+    {
+      "offset": 23139273,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).FetchLyricsFromLRCLibSearch.deferwrap1"
+    },
+    {
+      "offset": 23139364,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).FetchLyricsFromSpotifyAPI.deferwrap1"
+    },
+    {
+      "offset": 23139453,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*LyricsClient).FetchLyricsAllSources.func1"
+    },
+    {
+      "offset": 23139533,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readMp3Lyrics.deferwrap1"
+    },
+    {
+      "offset": 23139594,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ScanLyricsFolder.func1"
+    },
+    {
+      "offset": 23139726,
+      "symbol": "github.com/afkarxyz/spotbye/backend.callChatGPTLyrics.deferwrap1"
+    },
+    {
+      "offset": 23139791,
+      "symbol": "github.com/afkarxyz/spotbye/backend.callGeminiLyrics.deferwrap1"
+    },
+    {
+      "offset": 23140062,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractLyricsFromMp3.deferwrap1"
+    },
+    {
+      "offset": 23140130,
+      "symbol": "github.com/afkarxyz/spotbye/backend.EmbedLyricsOnlyMP3.deferwrap1"
+    },
+    {
+      "offset": 23140196,
+      "symbol": "github.com/afkarxyz/spotbye/backend.embedLyricsToM4A.func1"
+    },
+    {
+      "offset": 23140255,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ApplyComposerMetadata.deferwrap1"
+    },
+    {
+      "offset": 23140461,
+      "symbol": "github.com/afkarxyz/spotbye/backend.PrefetchMusicBrainzMetadata.func1"
+    },
+    {
+      "offset": 23141472,
+      "symbol": "github.com/afkarxyz/spotbye/backend.RegisterDownloadItem.deferwrap1"
+    },
+    {
+      "offset": 23141540,
+      "symbol": "github.com/afkarxyz/spotbye/backend.StartDownloadItem.deferwrap1"
+    },
+    {
+      "offset": 23141735,
+      "symbol": "github.com/afkarxyz/spotbye/backend.CompleteDownloadItem.deferwrap1"
+    },
+    {
+      "offset": 23141803,
+      "symbol": "github.com/afkarxyz/spotbye/backend.FailDownloadItem.deferwrap1"
+    },
+    {
+      "offset": 23141867,
+      "symbol": "github.com/afkarxyz/spotbye/backend.RetryDownloadItem.deferwrap1"
+    },
+    {
+      "offset": 23141932,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SkipDownloadItem.deferwrap1"
+    },
+    {
+      "offset": 23141996,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetDownloadManagerProgress.deferwrap1"
+    },
+    {
+      "offset": 23142070,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ClearFinishedDownloadProgress.deferwrap1"
+    },
+    {
+      "offset": 23142147,
+      "symbol": "github.com/afkarxyz/spotbye/backend.CancelPendingDownloadItems.deferwrap1"
+    },
+    {
+      "offset": 23142221,
+      "symbol": "github.com/afkarxyz/spotbye/backend.CancelPendingAndActiveDownloads.deferwrap1"
+    },
+    {
+      "offset": 23142300,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).searchByISRC.deferwrap1"
+    },
+    {
+      "offset": 23142379,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).fetchDownloadURLFromEndpointForService.deferwrap1"
+    },
+    {
+      "offset": 23142484,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).downloadTrackWithISRC.deferwrap1"
+    },
+    {
+      "offset": 23142572,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).downloadValidatedURL.func1"
+    },
+    {
+      "offset": 23142654,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).downloadTrackWithISRC.func1"
+    },
+    {
+      "offset": 23142885,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCredentialsSupportSignedMetadata.deferwrap1"
+    },
+    {
+      "offset": 23143331,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCustomDownloadURLWithSession.deferwrap1"
+    },
+    {
+      "offset": 23143412,
+      "symbol": "github.com/afkarxyz/spotbye/backend.qobuzCustomSearchValidationTrackIDs.deferwrap1"
+    },
+    {
+      "offset": 23143649,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).DownloadTrackWithQobuzCustom.deferwrap1"
+    },
+    {
+      "offset": 23143744,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).DownloadTrackWithQobuzCustom.func1"
+    },
+    {
+      "offset": 23143834,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).downloadTrackFromEndpoints.func2"
+    },
+    {
+      "offset": 23143922,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).downloadValidatedURL.1"
+    },
+    {
+      "offset": 23145061,
+      "symbol": "github.com/afkarxyz/spotbye/backend.sharedDownloaderEndpointGateFor.deferwrap1"
+    },
+    {
+      "offset": 23145140,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*sharedDownloaderEndpointGate).request.func1"
+    },
+    {
+      "offset": 23145222,
+      "symbol": "github.com/afkarxyz/spotbye/backend.doSharedDownloaderRequestWithInterval.func1"
+    },
+    {
+      "offset": 23145302,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchSharedDownloaderEndpointRegion.deferwrap1"
+    },
+    {
+      "offset": 23145385,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetSharedDownloaderRegionInfo.func1"
+    },
+    {
+      "offset": 23145457,
+      "symbol": "github.com/afkarxyz/spotbye/backend.GetSharedDownloaderRegionInfo.func1.deferwrap1"
+    },
+    {
+      "offset": 23145540,
+      "symbol": "github.com/afkarxyz/spotbye/backend.searchSoundchartsSongUUID.deferwrap1"
+    },
+    {
+      "offset": 23146727,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).formatArtistDiscographyData.gowrap1"
+    },
+    {
+      "offset": 23146824,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).formatArtistDiscographyData.func1"
+    },
+    {
+      "offset": 23146919,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*SpotifyMetadataClient).formatArtistDiscographyData.func1.1"
+    },
+    {
+      "offset": 23147077,
+      "symbol": "github.com/afkarxyz/spotbye/backend.spotifyMetadataNativeBlocked.deferwrap1"
+    },
+    {
+      "offset": 23147220,
+      "symbol": "github.com/afkarxyz/spotbye/backend.requestSpotifyMetadataService.deferwrap1"
+    },
+    {
+      "offset": 23147297,
+      "symbol": "github.com/afkarxyz/spotbye/backend.RetagOutputFromSource.deferwrap1"
+    },
+    {
+      "offset": 23147366,
+      "symbol": "github.com/afkarxyz/spotbye/backend.tagFileViaLocalStaging.deferwrap1"
+    },
+    {
+      "offset": 23147643,
+      "symbol": "github.com/afkarxyz/spotbye/backend.verifyTagFile.func1"
+    },
+    {
+      "offset": 23147769,
+      "symbol": "github.com/afkarxyz/spotbye/backend.extractCoverArtWithTagLib.deferwrap1"
+    },
+    {
+      "offset": 23147842,
+      "symbol": "github.com/afkarxyz/spotbye/backend.fetchTidalDownloadURLFromAPIContext.deferwrap1"
+    },
+    {
+      "offset": 23147925,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadFromManifestForService.deferwrap1"
+    },
+    {
+      "offset": 23148022,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadFromManifestForService.func1"
+    },
+    {
+      "offset": 23148114,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).DownloadByURLWithFallback.deferwrap1"
+    },
+    {
+      "offset": 23148206,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).DownloadByURLWithFallback.func1"
+    },
+    {
+      "offset": 23148718,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*tidalCustomClient).getTrackManifestForQuality.deferwrap1"
+    },
+    {
+      "offset": 23148892,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadByTrackIDWithTidalCustom.deferwrap1"
+    },
+    {
+      "offset": 23148991,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadValidatedFileForService.func1"
+    },
+    {
+      "offset": 23149084,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadByTrackIDWithTidalCustom.func1"
+    },
+    {
+      "offset": 23149178,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).downloadTrackWithFallback.func1"
+    },
+    {
+      "offset": 23149265,
+      "symbol": "github.com/afkarxyz/spotbye/backend.requestSpotifyMetadataService.func1"
+    },
+    {
+      "offset": 23149337,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).downloadTrackFromEndpoints.func1"
+    },
+    {
+      "offset": 23149425,
+      "symbol": "github.com/afkarxyz/spotbye/backend.newLyricsTranslationClient.func1"
+    },
+    {
+      "offset": 23149494,
+      "symbol": "github.com/afkarxyz/spotbye/backend.readLyricsWithFFprobe.func1"
+    },
+    {
+      "offset": 23149558,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SanitizeSensitiveText.func1"
+    },
+    {
+      "offset": 23149915,
+      "symbol": "github.com/afkarxyz/spotbye/backend.ReserveOutputPathForDownload.func1"
+    },
+    {
+      "offset": 23149986,
+      "symbol": "github.com/afkarxyz/spotbye/backend.DownloadFFmpeg.deferwrap1"
+    },
+    {
+      "offset": 23150048,
+      "symbol": "github.com/afkarxyz/spotbye/backend.openPersistentDownloadManagerStore.func1"
+    },
+    {
+      "offset": 23150125,
+      "symbol": "github.com/afkarxyz/spotbye/backend.AcquireDownloadIdentityContext.func1"
+    },
+    {
+      "offset": 23150198,
+      "symbol": "github.com/afkarxyz/spotbye/backend.BeginDownloadCancellationScope.func1.1"
+    },
+    {
+      "offset": 23150273,
+      "symbol": "github.com/afkarxyz/spotbye/backend.BeginDownloadCancellationScope.func1.1.deferwrap1"
+    },
+    {
+      "offset": 23150359,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).DownloadFromAfkarXYZDirect.func1"
+    },
+    {
+      "offset": 23150448,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*AmazonDownloader).downloadFromEndpoints.func1"
+    },
+    {
+      "offset": 23151262,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*QobuzDownloader).GetDownloadURL-fm"
+    },
+    {
+      "offset": 23338178,
+      "symbol": "main.sanitizeAppText"
+    },
+    {
+      "offset": 23338199,
+      "symbol": "main.sanitizeAppError"
+    },
+    {
+      "offset": 23338326,
+      "symbol": "main.metadataTagSelectionFromSettings"
+    },
+    {
+      "offset": 23338364,
+      "symbol": "main.metadataTagSelectionFromSettings.func1"
+    },
+    {
+      "offset": 23338408,
+      "symbol": "main.cleanupInvalidDownloadArtifacts"
+    },
+    {
+      "offset": 23338609,
+      "symbol": "main.fetchDownloaderStatusPayloadFromSource"
+    },
+    {
+      "offset": 23338653,
+      "symbol": "main.fetchDownloaderStatusPayload"
+    },
+    {
+      "offset": 23338687,
+      "symbol": "main.cloneDownloaderStatusPayload"
+    },
+    {
+      "offset": 23338721,
+      "symbol": "main.downloaderStatusValue"
+    },
+    {
+      "offset": 23338748,
+      "symbol": "main.downloaderVariantGroupStatus"
+    },
+    {
+      "offset": 23338782,
+      "symbol": "main.downloaderVariantStatusKeys"
+    },
+    {
+      "offset": 23338815,
+      "symbol": "main.(*App).checkDownloaderVariantGroupStatus"
+    },
+    {
+      "offset": 23338949,
+      "symbol": "main.normalizeSpotifyMetadataSeparator"
+    },
+    {
+      "offset": 23338988,
+      "symbol": "main.(*App).GetSpotifyMetadata"
+    },
+    {
+      "offset": 23339019,
+      "symbol": "main.(*App).GetDirectLinkMetadata"
+    },
+    {
+      "offset": 23339231,
+      "symbol": "main.(*App).SearchSpotify"
+    },
+    {
+      "offset": 23339257,
+      "symbol": "main.(*App).SearchDirectLink"
+    },
+    {
+      "offset": 23339286,
+      "symbol": "main.(*App).SearchDirectLinkByType"
+    },
+    {
+      "offset": 23339321,
+      "symbol": "main.(*App).SearchSpotifyByType"
+    },
+    {
+      "offset": 23339353,
+      "symbol": "main.requestedDownloadOutputDir"
+    },
+    {
+      "offset": 23339385,
+      "symbol": "main.(*App).resolveDownloadLibraryRoot"
+    },
+    {
+      "offset": 23339424,
+      "symbol": "main.applySpotifyMetadataPreferences"
+    },
+    {
+      "offset": 23339461,
+      "symbol": "main.(*App).DownloadTrack"
+    },
+    {
+      "offset": 23339487,
+      "symbol": "main.(*App).downloadTrackContext"
+    },
+    {
+      "offset": 23339520,
+      "symbol": "main.optsFromDownloadRequest"
+    },
+    {
+      "offset": 23339610,
+      "symbol": "github.com/afkarxyz/spotbye/backend.NewQobuzDownloader"
+    },
+    {
+      "offset": 23339665,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).SetDownloadContext"
+    },
+    {
+      "offset": 23339741,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*downloadExecution).SetExpectedDuration"
+    },
+    {
+      "offset": 23339818,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).SetEmbedLyrics"
+    },
+    {
+      "offset": 23339888,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*TidalDownloader).ActiveAPI"
+    },
+    {
+      "offset": 23339953,
+      "symbol": "github.com/afkarxyz/spotbye/backend.NewAmazonDownloader"
+    },
+    {
+      "offset": 23340009,
+      "symbol": "github.com/afkarxyz/spotbye/backend.NewDeezerDownloader"
+    },
+    {
+      "offset": 23340065,
+      "symbol": "github.com/afkarxyz/spotbye/backend.(*DeezerDownloader).SetEmbedLyrics"
+    },
+    {
+      "offset": 23340136,
+      "symbol": "github.com/afkarxyz/spotbye/backend.NewAmazonCustomDownloader"
+    },
+    {
+      "offset": 23340198,
+      "symbol": "main.metadataDateFormatFromSettings"
+    },
+    {
+      "offset": 23340234,
+      "symbol": "main.(*App).downloadTrackContext.func3"
+    },
+    {
+      "offset": 23340368,
+      "symbol": "main.(*App).GetDownloadProgress"
+    },
+    {
+      "offset": 23340400,
+      "symbol": "main.(*App).GetDownloadManagerProgress"
+    },
+    {
+      "offset": 23340439,
+      "symbol": "main.(*App).LoadPersistentDownloads"
+    },
+    {
+      "offset": 23340475,
+      "symbol": "main.(*App).ReplacePersistentDownloads"
+    },
+    {
+      "offset": 23340514,
+      "symbol": "main.(*App).ApplyPersistentDownloadChanges"
+    },
+    {
+      "offset": 23340557,
+      "symbol": "main.(*App).ClearCompletedDownloads"
+    },
+    {
+      "offset": 23340593,
+      "symbol": "main.(*App).ClearAllDownloads"
+    },
+    {
+      "offset": 23340623,
+      "symbol": "main.(*App).AddDownloadItem"
+    },
+    {
+      "offset": 23340651,
+      "symbol": "main.(*App).MarkDownloadItemFailed"
+    },
+    {
+      "offset": 23340686,
+      "symbol": "main.(*App).RetryDownloadItem"
+    },
+    {
+      "offset": 23340716,
+      "symbol": "main.(*App).CancelPendingDownloadItems"
+    },
+    {
+      "offset": 23340755,
+      "symbol": "main.(*App).ForceStopDownloads"
+    },
+    {
+      "offset": 23340786,
+      "symbol": "main.(*App).ExportFailedDownloads"
+    },
+    {
+      "offset": 23340865,
+      "symbol": "main.(*App).GetDownloadHistory"
+    },
+    {
+      "offset": 23340896,
+      "symbol": "main.(*App).ClearDownloadHistory"
+    },
+    {
+      "offset": 23340929,
+      "symbol": "main.(*App).DeleteDownloadHistoryItem"
+    },
+    {
+      "offset": 23341251,
+      "symbol": "main.(*App).DownloadLyrics"
+    },
+    {
+      "offset": 23341278,
+      "symbol": "github.com/afkarxyz/spotbye/backend.NewLyricsClient"
+    },
+    {
+      "offset": 23342153,
+      "symbol": "main.hasMusixmatchSearchResults"
+    },
+    {
+      "offset": 23342302,
+      "symbol": "main.(*App).GetSharedDownloaderRegionInfo"
+    },
+    {
+      "offset": 23342715,
+      "symbol": "main.(*App).DownloadCover"
+    },
+    {
+      "offset": 23342741,
+      "symbol": "main.(*App).DownloadHeader"
+    },
+    {
+      "offset": 23342768,
+      "symbol": "main.(*App).DownloadGalleryImage"
+    },
+    {
+      "offset": 23342801,
+      "symbol": "main.(*App).DownloadAvatar"
+    },
+    {
+      "offset": 23342950,
+      "symbol": "main.(*App).DownloadFFmpeg"
+    },
+    {
+      "offset": 23343235,
+      "symbol": "main.(*App).AnalyzeReplayGainAlbum"
+    },
+    {
+      "offset": 23343307,
+      "symbol": "main.(*App).WriteReplayGainTags"
+    },
+    {
+      "offset": 23343402,
+      "symbol": "main.(*App).ReadFileMetadata"
+    },
+    {
+      "offset": 23343431,
+      "symbol": "main.(*App).ReadEmbeddedLyrics"
+    },
+    {
+      "offset": 23343462,
+      "symbol": "main.(*App).ExtractLyricsToLRC"
+    },
+    {
+      "offset": 23343493,
+      "symbol": "main.(*App).SelectLyricsFiles"
+    },
+    {
+      "offset": 23343523,
+      "symbol": "main.(*App).SelectLyricsFolder"
+    },
+    {
+      "offset": 23343554,
+      "symbol": "github.com/afkarxyz/spotbye/backend.SelectLyricsFolder"
+    },
+    {
+      "offset": 23343609,
+      "symbol": "main.(*App).ScanLyricsFolder"
+    },
+    {
+      "offset": 23343638,
+      "symbol": "main.(*App).SaveLyrics"
+    },
+    {
+      "offset": 23343692,
+      "symbol": "main.(*App).RenameFilesByMetadata"
+    },
+    {
+      "offset": 23344083,
+      "symbol": "main.(*App).SkipDownloadItem"
+    },
+    {
+      "offset": 23345067,
+      "symbol": "main.appendSupporterRetryMetadata"
+    },
+    {
+      "offset": 23345964,
+      "symbol": "main.(*App).finalizeDownloadGroupWithReplayGain"
+    },
+    {
+      "offset": 23346033,
+      "symbol": "main.applyDownloadReplayGain"
+    },
+    {
+      "offset": 23346062,
+      "symbol": "main.newDownloadManager"
+    },
+    {
+      "offset": 23346086,
+      "symbol": "main.(*downloadManager).signal"
+    },
+    {
+      "offset": 23346117,
+      "symbol": "main.(*downloadManager).submit"
+    },
+    {
+      "offset": 23346315,
+      "symbol": "main.(*downloadManager).control"
+    },
+    {
+      "offset": 23346347,
+      "symbol": "main.(*downloadManager).loop"
+    },
+    {
+      "offset": 23346376,
+      "symbol": "main.(*downloadManager).run"
+    },
+    {
+      "offset": 23346404,
+      "symbol": "main.(*downloadManager).close"
+    },
+    {
+      "offset": 23346434,
+      "symbol": "main.waitDownload"
+    },
+    {
+      "offset": 23346452,
+      "symbol": "main.(*downloadManager).pace"
+    },
+    {
+      "offset": 23346481,
+      "symbol": "main.(*downloadManager).executePlan"
+    },
+    {
+      "offset": 23346565,
+      "symbol": "main.retryableDownloadError"
+    },
+    {
+      "offset": 23346593,
+      "symbol": "main.(*App).SubmitManagedDownloads"
+    },
+    {
+      "offset": 23346628,
+      "symbol": "main.(*App).PauseManagedDownloads"
+    },
+    {
+      "offset": 23346662,
+      "symbol": "main.(*App).StopManagedDownloads"
+    },
+    {
+      "offset": 23346695,
+      "symbol": "main.(*downloadManager).save"
+    },
+    {
+      "offset": 23346724,
+      "symbol": "main.(*downloadManager).downloadSnapshot"
+    },
+    {
+      "offset": 23346765,
+      "symbol": "main.(*downloadManager).forget"
+    },
+    {
+      "offset": 23346796,
+      "symbol": "main.(*downloadManager).executeSafely"
+    },
+    {
+      "offset": 23347392,
+      "symbol": "main.fetchDownloaderStatusPayload.deferwrap1"
+    },
+    {
+      "offset": 23347437,
+      "symbol": "main.(*App).GetSpotifyMetadata.func1"
+    },
+    {
+      "offset": 23347474,
+      "symbol": "main.(*App).GetDirectLinkMetadata.func1"
+    },
+    {
+      "offset": 23347514,
+      "symbol": "main.(*App).downloadTrackContext.func2"
+    },
+    {
+      "offset": 23347553,
+      "symbol": "main.(*App).downloadTrackContext.func1"
+    },
+    {
+      "offset": 23347592,
+      "symbol": "main.(*App).downloadTrackContext.deferwrap1"
+    },
+    {
+      "offset": 23347718,
+      "symbol": "main.(*App).DownloadFFmpeg.func1"
+    },
+    {
+      "offset": 23348621,
+      "symbol": "main.newDownloadManager.gowrap1"
+    },
+    {
+      "offset": 23348653,
+      "symbol": "main.newDownloadManager.func2"
+    },
+    {
+      "offset": 23348683,
+      "symbol": "main.(*downloadManager).submit.deferwrap2"
+    },
+    {
+      "offset": 23348725,
+      "symbol": "main.(*downloadManager).submit.deferwrap1"
+    },
+    {
+      "offset": 23348767,
+      "symbol": "main.(*downloadManager).control.deferwrap1"
+    },
+    {
+      "offset": 23348810,
+      "symbol": "main.(*downloadManager).loop.deferwrap1"
+    },
+    {
+      "offset": 23348850,
+      "symbol": "main.(*downloadManager).run.func1"
+    },
+    {
+      "offset": 23348902,
+      "symbol": "main.(*downloadManager).run.func1.deferwrap1"
+    },
+    {
+      "offset": 23348947,
+      "symbol": "main.waitDownload.deferwrap1"
+    },
+    {
+      "offset": 23348976,
+      "symbol": "main.(*downloadManager).downloadSnapshot.deferwrap1"
+    },
+    {
+      "offset": 23349028,
+      "symbol": "main.(*downloadManager).forget.deferwrap1"
+    },
+    {
+      "offset": 23349070,
+      "symbol": "main.(*downloadManager).executeSafely.func1"
+    },
+    {
+      "offset": 23349339,
+      "symbol": "main.newDownloadManager.func1"
+    },
+    {
+      "offset": 23349429,
+      "symbol": "main.(*App).finalizeDownloadGroup.func1"
+    },
+    {
+      "offset": 23349469,
+      "symbol": "main.(*App).downloadTrackContext.deferwrap2"
+    },
+    {
+      "offset": 23349560,
+      "symbol": "main.(*downloadManager).executePlan-fm"
+    },
+    {
+      "offset": 23349599,
+      "symbol": "main.(*App).downloadTrackContext-fm"
+    },
+    {
+      "offset": 23349635,
+      "symbol": "main.(*App).finalizeDownloadGroup-fm"
+    },
+    {
+      "offset": 23349672,
+      "symbol": "main.(*App).finalizeDownloadGroup"
+    },
+    {
+      "offset": 23501403,
+      "symbol": "github.com/afkarxyz/spotbye/backend/amazon_public_metadata.go"
+    },
+    {
+      "offset": 23501617,
+      "symbol": "github.com/afkarxyz/spotbye/backend/deezer_lyrics.go"
+    },
+    {
+      "offset": 23501720,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_identity.go"
+    },
+    {
+      "offset": 23502022,
+      "symbol": "github.com/afkarxyz/spotbye/backend/lyrics_reader.go"
+    },
+    {
+      "offset": 23502075,
+      "symbol": "github.com/afkarxyz/spotbye/backend/lyrics_translate_providers.go"
+    },
+    {
+      "offset": 23502446,
+      "symbol": "github.com/afkarxyz/spotbye/backend/shared_downloader_rate_limit.go"
+    },
+    {
+      "offset": 23502707,
+      "symbol": "github.com/afkarxyz/spotbye/backend/artist_format.go"
+    },
+    {
+      "offset": 23502760,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_execution.go"
+    },
+    {
+      "offset": 23502967,
+      "symbol": "github.com/afkarxyz/spotbye/backend/directlink_search.go"
+    },
+    {
+      "offset": 23503144,
+      "symbol": "github.com/afkarxyz/spotbye/backend/amazon_download_fallback.go"
+    },
+    {
+      "offset": 23503208,
+      "symbol": "github.com/afkarxyz/spotbye/backend/amazon_metadata.go"
+    },
+    {
+      "offset": 23503313,
+      "symbol": "github.com/afkarxyz/spotbye/backend/metadata.go"
+    },
+    {
+      "offset": 23503512,
+      "symbol": "github.com/afkarxyz/spotbye/backend/artist_separator_settings.go"
+    },
+    {
+      "offset": 23504062,
+      "symbol": "github.com/afkarxyz/spotbye/backend/qobuz_metadata_api.go"
+    },
+    {
+      "offset": 23504179,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_cancel.go"
+    },
+    {
+      "offset": 23504234,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_endpoint_fallback.go"
+    },
+    {
+      "offset": 23504353,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_manager_db.go"
+    },
+    {
+      "offset": 23504412,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_manager_migration.go"
+    },
+    {
+      "offset": 23504478,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_manager_store.go"
+    },
+    {
+      "offset": 23504540,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_replace_windows.go"
+    },
+    {
+      "offset": 23504604,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_transfer.go"
+    },
+    {
+      "offset": 23504661,
+      "symbol": "github.com/afkarxyz/spotbye/backend/download_validation.go"
+    },
+    {
+      "offset": 23504778,
+      "symbol": "github.com/afkarxyz/spotbye/backend/tagging.go"
+    },
+    {
+      "offset": 23504927,
+      "symbol": "github.com/afkarxyz/spotbye/backend/upc_tags.go"
+    },
+    {
+      "offset": 23505268,
+      "symbol": "github.com/afkarxyz/spotbye/backend/lyrics.go"
+    },
+    {
+      "offset": 23505314,
+      "symbol": "github.com/afkarxyz/spotbye/backend/lyrics_translate.go"
+    },
+    {
+      "offset": 23505681,
+      "symbol": "github.com/afkarxyz/spotbye/backend/qobuz_download_fallback.go"
+    },
+    {
+      "offset": 23505856,
+      "symbol": "github.com/afkarxyz/spotbye/backend/qobuz_custom_downloader.go"
+    },
+    {
+      "offset": 23505919,
+      "symbol": "github.com/afkarxyz/spotbye/backend/qobuz_download_url.go"
+    },
+    {
+      "offset": 23505977,
+      "symbol": "github.com/afkarxyz/spotbye/backend/qobuz_metadata_credentials.go"
+    },
+    {
+      "offset": 23506317,
+      "symbol": "github.com/afkarxyz/spotbye/backend/shared_downloader_regions.go"
+    },
+    {
+      "offset": 23506483,
+      "symbol": "github.com/afkarxyz/spotbye/backend/spotify_metadata_fallback.go"
+    },
+    {
+      "offset": 23506548,
+      "symbol": "github.com/afkarxyz/spotbye/backend/spotify_metadata.go"
+    },
+    {
+      "offset": 23506710,
+      "symbol": "github.com/afkarxyz/spotbye/backend/additional_tag_cleanup.go"
+    },
+    {
+      "offset": 23506884,
+      "symbol": "github.com/afkarxyz/spotbye/backend/tidal_custom_download.go"
+    },
+    {
+      "offset": 23506945,
+      "symbol": "github.com/afkarxyz/spotbye/backend/tidal_download_fallback.go"
+    },
+    {
+      "offset": 23525002,
+      "symbol": "github.com/afkarxyz/spotbye/download_finalize.go"
+    },
+    {
+      "offset": 23525051,
+      "symbol": "github.com/afkarxyz/spotbye/download_manager.go"
+    },
+    {
+      "offset": 30818728,
+      "symbol": "main.DownloadPlan"
+    },
+    {
+      "offset": 30853847,
+      "symbol": "main.DownloadRequest"
+    },
+    {
+      "offset": 30853916,
+      "symbol": "main.downloadManager"
+    },
+    {
+      "offset": 30863831,
+      "symbol": "main.DownloadResponse"
+    },
+    {
+      "offset": 30874801,
+      "symbol": "main.DownloadRequest"
+    },
+    {
+      "offset": 30900749,
+      "symbol": "main.ManagedDownloadGroup"
+    },
+    {
+      "offset": 30900777,
+      "symbol": "main.DownloadTrackDetails"
+    },
+    {
+      "offset": 30900833,
+      "symbol": "main.DownloadFinalization"
+    },
+    {
+      "offset": 30901029,
+      "symbol": "main.CoverDownloadRequest"
+    },
+    {
+      "offset": 30901085,
+      "symbol": "main.SpotifySearchRequest"
+    },
+    {
+      "offset": 30909404,
+      "symbol": "main.AvatarDownloadRequest"
+    },
+    {
+      "offset": 30909520,
+      "symbol": "main.HeaderDownloadRequest"
+    },
+    {
+      "offset": 30909578,
+      "symbol": "main.LyricsDownloadRequest"
+    },
+    {
+      "offset": 30917852,
+      "symbol": "main.ManagedDownloadGroup"
+    },
+    {
+      "offset": 30917970,
+      "symbol": "main.DownloadFFmpegResponse"
+    },
+    {
+      "offset": 30918000,
+      "symbol": "main.SpotifyMetadataRequest"
+    },
+    {
+      "offset": 30926141,
+      "symbol": "main.DirectLinkSearchRequest"
+    },
+    {
+      "offset": 30946704,
+      "symbol": "main.SpotifySearchByTypeRequest"
+    },
+    {
+      "offset": 30953473,
+      "symbol": "main.GalleryImageDownloadRequest"
+    },
+    {
+      "offset": 30953589,
+      "symbol": "main.DownloadResponse"
+    },
+    {
+      "offset": 30965524,
+      "symbol": "main.DirectLinkSearchByTypeRequest"
+    },
+    {
+      "offset": 30965568,
+      "symbol": "main.DownloadFFmpegResponse"
+    },
+    {
+      "offset": 30976929,
+      "symbol": "main.DownloadTrackDetails"
+    },
+    {
+      "offset": 30982040,
+      "symbol": "main.ManagedDownloadGroup"
+    },
+    {
+      "offset": 30988201,
+      "symbol": "main.ManagedDownloadGroup)"
+    },
+    {
+      "offset": 30988376,
+      "symbol": "main.DownloadResponse"
+    },
+    {
+      "offset": 31008772,
+      "symbol": "main.DownloadTrackDetails"
+    },
+    {
+      "offset": 31013815,
+      "symbol": "main.ManagedDownloadGroup"
+    },
+    {
+      "offset": 31023413,
+      "symbol": "main.downloadManager"
+    },
+    {
+      "offset": 31028606,
+      "symbol": "main.downloadManager"
+    },
+    {
+      "offset": 31041532,
+      "symbol": "main.SpotifyMetadataRequest)"
+    },
+    {
+      "offset": 31045142,
+      "symbol": "main.DownloadResponse"
+    },
+    {
+      "offset": 31052743,
+      "symbol": "main.DownloadResponse"
+    },
+    {
+      "offset": 31056605,
+      "symbol": "main.DownloadResponse"
+    },
+    {
+      "offset": 31056657,
+      "symbol": "main.DownloadTrackDetails"
+    },
+    {
+      "offset": 31060467,
+      "symbol": "main.ManagedDownloadGroup"
+    },
+    {
+      "offset": 31064003,
+      "symbol": "main.ManagedDownloadGroup)"
+    },
+    {
+      "offset": 31064124,
+      "symbol": "main.DownloadTrackDetails"
+    },
+    {
+      "offset": 31067375,
+      "symbol": "main.ManagedDownloadGroup"
+    },
+    {
+      "offset": 31067552,
+      "symbol": "main.DownloadTrackDetails"
+    },
+    {
+      "offset": 31070034,
+      "symbol": "main.ManagedDownloadGroup"
+    },
+    {
+      "offset": 31070069,
+      "symbol": "main.DownloadRequest)"
+    },
+    {
+      "offset": 31070092,
+      "symbol": "main.DownloadResponse"
+    },
+    {
+      "offset": 31094661,
+      "symbol": "main.DownloadRequest"
+    },
+    {
+      "offset": 31098899,
+      "symbol": "main.SpotifySearchRequest)"
+    },
+    {
+      "offset": 31105279,
+      "symbol": "main.DirectLinkSearchRequest)"
+    },
+    {
+      "offset": 31111104,
+      "symbol": "main.SpotifySearchByTypeRequest)"
+    },
+    {
+      "offset": 31132866,
+      "symbol": "main.DownloadPlan"
+    },
+    {
+      "offset": 31132893,
+      "symbol": "main.DownloadResponse"
+    },
+    {
+      "offset": 31132922,
+      "symbol": "main.CoverDownloadRequest)"
+    },
+    {
+      "offset": 31135499,
+      "symbol": "main.AvatarDownloadRequest)"
+    },
+    {
+      "offset": 31135574,
+      "symbol": "main.HeaderDownloadRequest)"
+    },
+    {
+      "offset": 31135649,
+      "symbol": "main.LyricsDownloadRequest)"
+    },
+    {
+      "offset": 31135724,
+      "symbol": "main.DirectLinkSearchByTypeRequest)"
+    },
+    {
+      "offset": 31138311,
+      "symbol": "main.DownloadRequest)"
+    },
+    {
+      "offset": 31138334,
+      "symbol": "main.DownloadResponse"
+    },
+    {
+      "offset": 31160756,
+      "symbol": "main.GalleryImageDownloadRequest)"
+    },
+    {
+      "offset": 31364319,
+      "symbol": "main.downloadManager"
+    },
+    {
+      "offset": 31364374,
+      "symbol": "main.ManagedDownloadGroup"
+    }
+  ],
+  "candidate_count": 908,
+  "limitations": [
+    "Symbol presence is not behavioral proof.",
+    "Version resources and embedded module paths are claims, not authenticated provenance."
+  ]
+}

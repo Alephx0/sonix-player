@@ -1,0 +1,353 @@
+{
+  "result": {
+    "_meta": {
+      "provenance": {
+        "untrusted_content": true,
+        "source": "analysis_target"
+      }
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"evidence_id\":\"ev_3552e5bd3421f6829271ff7e5835c8e73fd51b4ba344918841694041d7473da5\",\"subject\":{\"name\":\"SpotBye.exe\",\"digest\":{\"sha256\":\"fd46c09b4797b2ca7c645819a8b9e44220390a89efb8df98beeb9f536f3dd9e1\"},\"local_path\":\"C:\\\\Users\\\\justi\\\\AppData\\\\Local\\\\Temp\\\\d3758997-8e43-4b66-bb40-fe681af95918_SpotBye-Windows.zip.SpotBye-Windows.zip\\\\SpotBye.exe\",\"format\":\"pe\",\"architecture\":\"x86_64\"},\"provider\":{\"id\":\"go-build-info\",\"name\":\"REA Go build-information reader\",\"version\":\"1\"},\"analysis_profile\":null,\"predicate_type\":\"rea.analysis\",\"operation\":\"inspect_go_binary\",\"parameters\":{\"path\":\"C:\\\\Users\\\\justi\\\\AppData\\\\Local\\\\Temp\\\\d3758997-8e43-4b66-bb40-fe681af95918_SpotBye-Windows.zip.SpotBye-Windows.zip\\\\SpotBye.exe\"},\"raw_result\":null,\"normalized_result\":{\"artifact\":{\"path\":\"C:\\\\Users\\\\justi\\\\AppData\\\\Local\\\\Temp\\\\d3758997-8e43-4b66-bb40-fe681af95918_SpotBye-Windows.zip.SpotBye-Windows.zip\\\\SpotBye.exe\",\"sha256\":\"fd46c09b4797b2ca7c645819a8b9e44220390a89efb8df98beeb9f536f3dd9e1\",\"bytes\":33954816},\"format\":\"pe\",\"architecture\":\"amd64\",\"bits\":64,\"byte_order\":\"little\",\"build_info\":{\"header_offset\":32097792,\"encoding\":\"inline\",\"go_version\":\"go1.27.1\",\"go_version_bytes_base64\":\"Z28xLjI3LjE=\",\"module_text\":\"path\\tgithub.com/afkarxyz/spotbye\\nmod\\tgithub.com/afkarxyz/spotbye\\t(devel)\\t\\ndep\\tgit.sr.ht/~jackmordaunt/go-toast/v2\\tv2.0.3\\th1:N3IGoHHp9pb6mj1cbXbuaSXV/UMKwmbKLf53nQmtqMA=\\ndep\\tgithub.com/Eyevinn/mp4ff\\tv0.56.0\\th1:K81hqadHOLqQP+Rr610dwy7Cn3tLLEejCljzIfcNo+k=\\ndep\\tgithub.com/adrg/xdg\\tv0.5.3\\th1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=\\ndep\\tgithub.com/bep/debounce\\tv1.2.1\\th1:v67fRdBA9UQu2NhLFXrSg0Brw7CexQekrBwDMM8bzeY=\\ndep\\tgithub.com/bogem/id3v2/v2\\tv2.1.4\\th1:CEwe+lS2p6dd9UZRlPc1zbFNIha2mb2qzT1cCEoNWoI=\\ndep\\tgithub.com/boombuler/barcode\\tv1.1.0\\th1:ChaYjBR63fr4LFyGn8E8nt7dBSt3MiU3zMOZqFvVkHo=\\ndep\\tgithub.com/chmike/cmac-go\\tv1.1.0\\th1:aF73ZAEx9N2WdQc93DOJ2fMsBDAGqUtuenjMJMb3kEI=\\ndep\\tgithub.com/go-flac/flacpicture\\tv0.3.0\\th1:LkmTxzFLIynwfhHiZsX0s8xcr3/u33MzvV89u+zOT8I=\\ndep\\tgithub.com/go-flac/flacvorbis\\tv0.2.0\\th1:KH0xjpkNTXFER4cszH4zeJxYcrHbUobz/RticWGOESs=\\ndep\\tgithub.com/go-flac/go-flac\\tv1.0.0\\th1:6qI9XOVLcO50xpzm3nXvO31BgDgHhnr/p/rER/K/doY=\\ndep\\tgithub.com/go-ole/go-ole\\tv1.3.0\\th1:Dt6ye7+vXGIKZ7Xtk4s6/xVdGDQynvom7xCFEdWr6uE=\\ndep\\tgithub.com/google/uuid\\tv1.6.0\\th1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=\\ndep\\tgithub.com/iyear/gowidevine\\tv0.1.3\\th1:a0D85vBGHdpeUGaolWboQiT12bRcRXg8LOezHXkaM+o=\\ndep\\tgithub.com/leaanthony/go-ansi-parser\\tv1.6.1\\th1:xd8bzARK3dErqkPFtoF9F3/HgN8UQk0ed1YDKpEz01A=\\ndep\\tgithub.com/leaanthony/slicer\\tv1.6.0\\th1:1RFP5uiPJvT93TAHi+ipd3NACobkW53yUiBqZheE/Js=\\ndep\\tgithub.com/leaanthony/u\\tv1.1.1\\th1:TUFjwDGlNX+WuwVEzDqQwC2lOv0P4uhTQw7CMFdiK7M=\\ndep\\tgithub.com/pkg/browser\\tv0.0.0-20240102092130-5ac0b6a4141c\\th1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=\\ndep\\tgithub.com/pkg/errors\\tv0.9.1\\th1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=\\ndep\\tgithub.com/pquerna/otp\\tv1.5.0\\th1:NMMR+WrmaqXU4EzdGJEE1aUUI0AMRzsp96fFFWNPwxs=\\ndep\\tgithub.com/rivo/uniseg\\tv0.4.7\\th1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=\\ndep\\tgithub.com/samber/lo\\tv1.53.0\\th1:t975lj2py4kJPQ6haz1QMgtId2gtmfktACxIXArw3HM=\\ndep\\tgithub.com/tetratelabs/wazero\\tv1.12.0\\th1:DuWcpNu/FzgEXgGBDp8J1Spc+CWOvvtvVyjKlaZopYU=\\ndep\\tgithub.com/tkrajina/go-reflector\\tv0.5.8\\th1:yPADHrwmUbMq4RGEyaOUpz2H90sRsETNVpjzo3DLVQQ=\\ndep\\tgithub.com/ulikunitz/xz\\tv0.5.16\\th1:ld6NyySjx5lowVKwJvMRLnW5nxKX/xnpSiFYZ/Lxur0=\\ndep\\tgithub.com/wailsapp/go-webview2\\tv1.0.23\\th1:jmv8qhz1lHibCc79bMM/a/FqOnnzOGEisLav+a0b9P0=\\ndep\\tgithub.com/wailsapp/mimetype\\tv1.4.1\\th1:pQN9ycO7uo4vsUUuPeHEYoUkLVkaRntMnHJxVwYhwHs=\\ndep\\tgithub.com/wailsapp/wails/v2\\tv2.15.0\\th1:u7cHK+UesZOlYxyJxfYLteaCPhws6UsZoDdqUejuX6Q=\\ndep\\tgo.etcd.io/bbolt\\tv1.5.0\\th1:S7GAl7Fxv12yohbwFfIbQCGDWbQbtDGPET4P/bD4lxU=\\ndep\\tgo.senan.xyz/taglib\\tv0.14.0\\th1:cFgq+w7Z++4VzccYBmBt+RwkOvx5ddexy1M7kIty8+Y=\\ndep\\tgolang.org/x/crypto\\tv0.56.0\\th1:GUh5Ii4J5jtcseSMiRqr1jXCNHoxjeV9Fmekc2oLy6Y=\\ndep\\tgolang.org/x/image\\tv0.45.0\\th1:FMb1nTbH5H9vF55SriQHgFw5GnNL9Jg6L25BwXKzhB0=\\ndep\\tgolang.org/x/net\\tv0.58.0\\th1:ynWG7rqYi4ccpTEuPZ2QGWHktVEM9DMCj9yzDE0Q7To=\\ndep\\tgolang.org/x/sys\\tv0.47.0\\th1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=\\ndep\\tgolang.org/x/text\\tv0.41.0\\th1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=\\ndep\\tgoogle.golang.org/protobuf\\tv1.36.12\\th1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=\\nbuild\\t-buildmode=exe\\nbuild\\t-compiler=gc\\nbuild\\t-tags=desktop,wv2runtime.download,production\\nbuild\\t-trimpath=true\\nbuild\\tCGO_ENABLED=1\\nbuild\\tGOARCH=amd64\\nbuild\\tGOOS=windows\\nbuild\\tGOAMD64=v1\\n\",\"module_bytes_base64\":\"MHevDJJ0CAJB4cEH5tYY5nBhdGgJZ2l0aHViLmNvbS9hZmthcnh5ei9zcG90YnllCm1vZAlnaXRodWIuY29tL2Fma2FyeHl6L3Nwb3RieWUJKGRldmVsKQkKZGVwCWdpdC5zci5odC9+amFja21vcmRhdW50L2dvLXRvYXN0L3YyCXYyLjAuMwloMTpOM0lHb0hIcDlwYjZtajFjYlhidWFTWFYvVU1Ld21iS0xmNTNuUW10cU1BPQpkZXAJZ2l0aHViLmNvbS9FeWV2aW5uL21wNGZmCXYwLjU2LjAJaDE6SzgxaHFhZEhPTHFRUCtScjYxMGR3eTdDbjN0TExFZWpDbGp6SWZjTm8raz0KZGVwCWdpdGh1Yi5jb20vYWRyZy94ZGcJdjAuNS4zCWgxOnhSbnhKWG5lNytvV0RhdFJoUjFKTG52dWNjdUllQ29CdTJydHVMcVFCNzg9CmRlcAlnaXRodWIuY29tL2JlcC9kZWJvdW5jZQl2MS4yLjEJaDE6djY3ZlJkQkE5VVF1Mk5oTEZYclNnMEJydzdDZXhRZWtyQndETU04YnplWT0KZGVwCWdpdGh1Yi5jb20vYm9nZW0vaWQzdjIvdjIJdjIuMS40CWgxOkNFd2UrbFMycDZkZDlVWlJsUGMxemJGTkloYTJtYjJxelQxY0NFb05Xb0k9CmRlcAlnaXRodWIuY29tL2Jvb21idWxlci9iYXJjb2RlCXYxLjEuMAloMTpDaGFZakJSNjNmcjRMRnlHbjhFOG50N2RCU3QzTWlVM3pNT1pxRnZWa0hvPQpkZXAJZ2l0aHViLmNvbS9jaG1pa2UvY21hYy1nbwl2MS4xLjAJaDE6YUY3M1pBRXg5TjJXZFFjOTNET0oyZk1zQkRBR3FVdHVlbmpNSk1iM2tFST0KZGVwCWdpdGh1Yi5jb20vZ28tZmxhYy9mbGFjcGljdHVyZQl2MC4zLjAJaDE6TGttVHh6RkxJeW53ZmhIaVpzWDBzOHhjcjMvdTMzTXp2Vjg5dSt6T1Q4ST0KZGVwCWdpdGh1Yi5jb20vZ28tZmxhYy9mbGFjdm9yYmlzCXYwLjIuMAloMTpLSDB4anBrTlRYRkVSNGNzekg0emVKeFljckhiVW9iei9SdGljV0dPRVNzPQpkZXAJZ2l0aHViLmNvbS9nby1mbGFjL2dvLWZsYWMJdjEuMC4wCWgxOjZxSTlYT1ZMY081MHhwem0zblh2TzMxQmdEZ0hobnIvcC9yRVIvSy9kb1k9CmRlcAlnaXRodWIuY29tL2dvLW9sZS9nby1vbGUJdjEuMy4wCWgxOkR0NnllNyt2WEdJS1o3WHRrNHM2L3hWZEdEUXludm9tN3hDRkVkV3I2dUU9CmRlcAlnaXRodWIuY29tL2dvb2dsZS91dWlkCXYxLjYuMAloMTpOSXZhSkRNT3NqSEE4bjFqQWhMU2d6ckF6eTFIZ3IraE5yYjU3ZSs5NEYwPQpkZXAJZ2l0aHViLmNvbS9peWVhci9nb3dpZGV2aW5lCXYwLjEuMwloMTphMEQ4NXZCR0hkcGVVR2FvbFdib1FpVDEyYlJjUlhnOExPZXpIWGthTStvPQpkZXAJZ2l0aHViLmNvbS9sZWFhbnRob255L2dvLWFuc2ktcGFyc2VyCXYxLjYuMQloMTp4ZDhiekFSSzNkRXJxa1BGdG9GOUYzL0hnTjhVUWswZWQxWURLcEV6MDFBPQpkZXAJZ2l0aHViLmNvbS9sZWFhbnRob255L3NsaWNlcgl2MS42LjAJaDE6MVJGUDV1aVBKdlQ5M1RBSGkraXBkM05BQ29ia1c1M3lVaUJxWmhlRS9Kcz0KZGVwCWdpdGh1Yi5jb20vbGVhYW50aG9ueS91CXYxLjEuMQloMTpUVUZqd0RHbE5YK1d1d1ZFekRxUXdDMmxPdjBQNHVoVFF3N0NNRmRpSzdNPQpkZXAJZ2l0aHViLmNvbS9wa2cvYnJvd3Nlcgl2MC4wLjAtMjAyNDAxMDIwOTIxMzAtNWFjMGI2YTQxNDFjCWgxOittZGprR0tkSFFHMzMwNUFZbWR2MVUyZVJORGlVMkVyTUJqMWd3cnE4ZVE9CmRlcAlnaXRodWIuY29tL3BrZy9lcnJvcnMJdjAuOS4xCWgxOkZFQkx4MXpTMjE0b3dwank3cXNCZWl4YlVSa3VoUUF3cks1VXdMR1R3dDQ9CmRlcAlnaXRodWIuY29tL3BxdWVybmEvb3RwCXYxLjUuMAloMTpOTU1SK1dybWFxWFU0RXpkR0pFRTFhVVVJMEFNUnpzcDk2ZkZGV05Qd3hzPQpkZXAJZ2l0aHViLmNvbS9yaXZvL3VuaXNlZwl2MC40LjcJaDE6V1VkdmtXOHVFaHJZZkxDNFp6ZHBJMnp0eFAxSTU4Mis0OU9jNU1xNjRWUT0KZGVwCWdpdGh1Yi5jb20vc2FtYmVyL2xvCXYxLjUzLjAJaDE6dDk3NWxqMnB5NGtKUFE2aGF6MVFNZ3RJZDJndG1ma3RBQ3hJWEFydzNITT0KZGVwCWdpdGh1Yi5jb20vdGV0cmF0ZWxhYnMvd2F6ZXJvCXYxLjEyLjAJaDE6RHVXY3BOdS9GemdFWGdHQkRwOEoxU3BjK0NXT3Z2dHZWeWpLbGFab3BZVT0KZGVwCWdpdGh1Yi5jb20vdGtyYWppbmEvZ28tcmVmbGVjdG9yCXYwLjUuOAloMTp5UEFESHJ3bVViTXE0UkdFeWFPVXB6Mkg5MHNSc0VUTlZwanpvM0RMVlFRPQpkZXAJZ2l0aHViLmNvbS91bGlrdW5pdHoveHoJdjAuNS4xNgloMTpsZDZOeXlTang1bG93Vkt3SnZNUkxuVzVueEtYL3hucFNpRllaL0x4dXIwPQpkZXAJZ2l0aHViLmNvbS93YWlsc2FwcC9nby13ZWJ2aWV3Mgl2MS4wLjIzCWgxOmptdjhxaHoxbEhpYkNjNzliTU0vYS9GcU9ubnpPR0Vpc0xhdithMGI5UDA9CmRlcAlnaXRodWIuY29tL3dhaWxzYXBwL21pbWV0eXBlCXYxLjQuMQloMTpwUU45eWNPN3VvNHZzVVV1UGVIRVlvVWtMVmthUm50TW5ISnhWd1lod0hzPQpkZXAJZ2l0aHViLmNvbS93YWlsc2FwcC93YWlscy92Mgl2Mi4xNS4wCWgxOnU3Y0hLK1Vlc1pPbFl4eUp4ZllMdGVhQ1Bod3M2VXNab0RkcVVlanVYNlE9CmRlcAlnby5ldGNkLmlvL2Jib2x0CXYxLjUuMAloMTpTN0dBbDdGeHYxMnlvaGJ3RmZJYlFDR0RXYlFidERHUEVUNFAvYkQ0bHhVPQpkZXAJZ28uc2VuYW4ueHl6L3RhZ2xpYgl2MC4xNC4wCWgxOmNGZ3ErdzdaKys0VnpjY1lCbUJ0K1J3a092eDVkZGV4eTFNN2tJdHk4K1k9CmRlcAlnb2xhbmcub3JnL3gvY3J5cHRvCXYwLjU2LjAJaDE6R1VoNUlpNEo1anRjc2VTTWlScXIxalhDTkhveGplVjlGbWVrYzJvTHk2WT0KZGVwCWdvbGFuZy5vcmcveC9pbWFnZQl2MC40NS4wCWgxOkZNYjFuVGJINUg5dkY1NVNyaVFIZ0Z3NUduTkw5Smc2TDI1QndYS3poQjA9CmRlcAlnb2xhbmcub3JnL3gvbmV0CXYwLjU4LjAJaDE6eW5XRzdycVlpNGNjcFRFdVBaMlFHV0hrdFZFTTlETUNqOXl6REUwUTdUbz0KZGVwCWdvbGFuZy5vcmcveC9zeXMJdjAuNDcuMAloMTpvN1hHT3ZaUUNBREJRUTRZN1ZOcTJkUldRUjdKbU9VVzhLeHg0WnNOZ1dzPQpkZXAJZ29sYW5nLm9yZy94L3RleHQJdjAuNDEuMAloMTp2ei9zZUEwbG5YODdPdGh1MmYvMEwyNFJjZ3JYRDkvWUZUU3VHamozckg4PQpkZXAJZ29vZ2xlLmdvbGFuZy5vcmcvcHJvdG9idWYJdjEuMzYuMTIJaDE6cEpPS0RET3llWEVyVXJvQ2loRkFkNUxRdXdYQlNwVm5LR3JqNW8vZnd4Yz0KYnVpbGQJLWJ1aWxkbW9kZT1leGUKYnVpbGQJLWNvbXBpbGVyPWdjCmJ1aWxkCS10YWdzPWRlc2t0b3Asd3YycnVudGltZS5kb3dubG9hZCxwcm9kdWN0aW9uCmJ1aWxkCS10cmltcGF0aD10cnVlCmJ1aWxkCUNHT19FTkFCTEVEPTEKYnVpbGQJR09BUkNIPWFtZDY0CmJ1aWxkCUdPT1M9d2luZG93cwpidWlsZAlHT0FNRDY0PXYxCvkyQzGGGCByAIJCEEEW2PI=\",\"version_location\":{\"offset\":32097825,\"bytes\":8},\"module_location\":{\"offset\":32097835,\"bytes\":3284},\"module\":{\"path\":\"github.com/afkarxyz/spotbye\",\"main\":{\"path\":\"github.com/afkarxyz/spotbye\",\"version\":\"(devel)\",\"sum\":\"\",\"replacement\":null},\"dependencies\":[{\"path\":\"git.sr.ht/~jackmordaunt/go-toast/v2\",\"version\":\"v2.0.3\",\"sum\":\"h1:N3IGoHHp9pb6mj1cbXbuaSXV/UMKwmbKLf53nQmtqMA=\",\"replacement\":null},{\"path\":\"github.com/Eyevinn/mp4ff\",\"version\":\"v0.56.0\",\"sum\":\"h1:K81hqadHOLqQP+Rr610dwy7Cn3tLLEejCljzIfcNo+k=\",\"replacement\":null},{\"path\":\"github.com/adrg/xdg\",\"version\":\"v0.5.3\",\"sum\":\"h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=\",\"replacement\":null},{\"path\":\"github.com/bep/debounce\",\"version\":\"v1.2.1\",\"sum\":\"h1:v67fRdBA9UQu2NhLFXrSg0Brw7CexQekrBwDMM8bzeY=\",\"replacement\":null},{\"path\":\"github.com/bogem/id3v2/v2\",\"version\":\"v2.1.4\",\"sum\":\"h1:CEwe+lS2p6dd9UZRlPc1zbFNIha2mb2qzT1cCEoNWoI=\",\"replacement\":null},{\"path\":\"github.com/boombuler/barcode\",\"version\":\"v1.1.0\",\"sum\":\"h1:ChaYjBR63fr4LFyGn8E8nt7dBSt3MiU3zMOZqFvVkHo=\",\"replacement\":null},{\"path\":\"github.com/chmike/cmac-go\",\"version\":\"v1.1.0\",\"sum\":\"h1:aF73ZAEx9N2WdQc93DOJ2fMsBDAGqUtuenjMJMb3kEI=\",\"replacement\":null},{\"path\":\"github.com/go-flac/flacpicture\",\"version\":\"v0.3.0\",\"sum\":\"h1:LkmTxzFLIynwfhHiZsX0s8xcr3/u33MzvV89u+zOT8I=\",\"replacement\":null},{\"path\":\"github.com/go-flac/flacvorbis\",\"version\":\"v0.2.0\",\"sum\":\"h1:KH0xjpkNTXFER4cszH4zeJxYcrHbUobz/RticWGOESs=\",\"replacement\":null},{\"path\":\"github.com/go-flac/go-flac\",\"version\":\"v1.0.0\",\"sum\":\"h1:6qI9XOVLcO50xpzm3nXvO31BgDgHhnr/p/rER/K/doY=\",\"replacement\":null},{\"path\":\"github.com/go-ole/go-ole\",\"version\":\"v1.3.0\",\"sum\":\"h1:Dt6ye7+vXGIKZ7Xtk4s6/xVdGDQynvom7xCFEdWr6uE=\",\"replacement\":null},{\"path\":\"github.com/google/uuid\",\"version\":\"v1.6.0\",\"sum\":\"h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=\",\"replacement\":null},{\"path\":\"github.com/iyear/gowidevine\",\"version\":\"v0.1.3\",\"sum\":\"h1:a0D85vBGHdpeUGaolWboQiT12bRcRXg8LOezHXkaM+o=\",\"replacement\":null},{\"path\":\"github.com/leaanthony/go-ansi-parser\",\"version\":\"v1.6.1\",\"sum\":\"h1:xd8bzARK3dErqkPFtoF9F3/HgN8UQk0ed1YDKpEz01A=\",\"replacement\":null},{\"path\":\"github.com/leaanthony/slicer\",\"version\":\"v1.6.0\",\"sum\":\"h1:1RFP5uiPJvT93TAHi+ipd3NACobkW53yUiBqZheE/Js=\",\"replacement\":null},{\"path\":\"github.com/leaanthony/u\",\"version\":\"v1.1.1\",\"sum\":\"h1:TUFjwDGlNX+WuwVEzDqQwC2lOv0P4uhTQw7CMFdiK7M=\",\"replacement\":null},{\"path\":\"github.com/pkg/browser\",\"version\":\"v0.0.0-20240102092130-5ac0b6a4141c\",\"sum\":\"h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=\",\"replacement\":null},{\"path\":\"github.com/pkg/errors\",\"version\":\"v0.9.1\",\"sum\":\"h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=\",\"replacement\":null},{\"path\":\"github.com/pquerna/otp\",\"version\":\"v1.5.0\",\"sum\":\"h1:NMMR+WrmaqXU4EzdGJEE1aUUI0AMRzsp96fFFWNPwxs=\",\"replacement\":null},{\"path\":\"github.com/rivo/uniseg\",\"version\":\"v0.4.7\",\"sum\":\"h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=\",\"replacement\":null},{\"path\":\"github.com/samber/lo\",\"version\":\"v1.53.0\",\"sum\":\"h1:t975lj2py4kJPQ6haz1QMgtId2gtmfktACxIXArw3HM=\",\"replacement\":null},{\"path\":\"github.com/tetratelabs/wazero\",\"version\":\"v1.12.0\",\"sum\":\"h1:DuWcpNu/FzgEXgGBDp8J1Spc+CWOvvtvVyjKlaZopYU=\",\"replacement\":null},{\"path\":\"github.com/tkrajina/go-reflector\",\"version\":\"v0.5.8\",\"sum\":\"h1:yPADHrwmUbMq4RGEyaOUpz2H90sRsETNVpjzo3DLVQQ=\",\"replacement\":null},{\"path\":\"github.com/ulikunitz/xz\",\"version\":\"v0.5.16\",\"sum\":\"h1:ld6NyySjx5lowVKwJvMRLnW5nxKX/xnpSiFYZ/Lxur0=\",\"replacement\":null},{\"path\":\"github.com/wailsapp/go-webview2\",\"version\":\"v1.0.23\",\"sum\":\"h1:jmv8qhz1lHibCc79bMM/a/FqOnnzOGEisLav+a0b9P0=\",\"replacement\":null},{\"path\":\"github.com/wailsapp/mimetype\",\"version\":\"v1.4.1\",\"sum\":\"h1:pQN9ycO7uo4vsUUuPeHEYoUkLVkaRntMnHJxVwYhwHs=\",\"replacement\":null},{\"path\":\"github.com/wailsapp/wails/v2\",\"version\":\"v2.15.0\",\"sum\":\"h1:u7cHK+UesZOlYxyJxfYLteaCPhws6UsZoDdqUejuX6Q=\",\"replacement\":null},{\"path\":\"go.etcd.io/bbolt\",\"version\":\"v1.5.0\",\"sum\":\"h1:S7GAl7Fxv12yohbwFfIbQCGDWbQbtDGPET4P/bD4lxU=\",\"replacement\":null},{\"path\":\"go.senan.xyz/taglib\",\"version\":\"v0.14.0\",\"sum\":\"h1:cFgq+w7Z++4VzccYBmBt+RwkOvx5ddexy1M7kIty8+Y=\",\"replacement\":null},{\"path\":\"golang.org/x/crypto\",\"version\":\"v0.56.0\",\"sum\":\"h1:GUh5Ii4J5jtcseSMiRqr1jXCNHoxjeV9Fmekc2oLy6Y=\",\"replacement\":null},{\"path\":\"golang.org/x/image\",\"version\":\"v0.45.0\",\"sum\":\"h1:FMb1nTbH5H9vF55SriQHgFw5GnNL9Jg6L25BwXKzhB0=\",\"replacement\":null},{\"path\":\"golang.org/x/net\",\"version\":\"v0.58.0\",\"sum\":\"h1:ynWG7rqYi4ccpTEuPZ2QGWHktVEM9DMCj9yzDE0Q7To=\",\"replacement\":null},{\"path\":\"golang.org/x/sys\",\"version\":\"v0.47.0\",\"sum\":\"h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=\",\"replacement\":null},{\"path\":\"golang.org/x/text\",\"version\":\"v0.41.0\",\"sum\":\"h1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=\",\"replacement\":null},{\"path\":\"google.golang.org/protobuf\",\"version\":\"v1.36.12\",\"sum\":\"h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=\",\"replacement\":null}],\"settings\":[{\"key\":\"-buildmode\",\"value\":\"exe\"},{\"key\":\"-compiler\",\"value\":\"gc\"},{\"key\":\"-tags\",\"value\":\"desktop,wv2runtime.download,production\"},{\"key\":\"-trimpath\",\"value\":\"true\"},{\"key\":\"CGO_ENABLED\",\"value\":\"1\"},{\"key\":\"GOARCH\",\"value\":\"amd64\"},{\"key\":\"GOOS\",\"value\":\"windows\"},{\"key\":\"GOAMD64\",\"value\":\"v1\"}],\"unparsed_lines\":[],\"unparsed_line_bytes_base64\":[],\"complete\":true}},\"limitations\":[\"Embedded build metadata is observed file content, not proof of compiler identity, dependency authenticity or runtime behavior.\",\"Only Go build information is inspected; function names, source mappings, type metadata and decompiled code are not recovered.\",\"Resource guards bound stable artifact reads and cumulative header searches to 256 MiB each, aggregate embedded strings to 1 MiB, structural table decoding to 16 MiB and complete metadata payloads to 8 MiB; these are not operating-system memory or CPU limits.\"]},\"confidence\":\"observed\",\"authority\":\"shipped-artifact\",\"environment\":null,\"limitations\":[\"Embedded build metadata is observed file content, not proof of compiler identity, dependency authenticity or runtime behavior.\",\"Only Go build information is inspected; function names, source mappings, type metadata and decompiled code are not recovered.\",\"Resource guards bound stable artifact reads and cumulative header searches to 256 MiB each, aggregate embedded strings to 1 MiB, structural table decoding to 16 MiB and complete metadata payloads to 8 MiB; these are not operating-system memory or CPU limits.\"],\"relationship_coverage\":null,\"locations\":[{\"kind\":\"artifact-path\",\"path\":\"C:\\\\Users\\\\justi\\\\AppData\\\\Local\\\\Temp\\\\d3758997-8e43-4b66-bb40-fe681af95918_SpotBye-Windows.zip.SpotBye-Windows.zip\\\\SpotBye.exe\"},{\"kind\":\"file-offset-range\",\"start\":32097792,\"end\":32097824}],\"evidence_links\":[]}"
+      }
+    ],
+    "structuredContent": {
+      "evidence_id": "ev_3552e5bd3421f6829271ff7e5835c8e73fd51b4ba344918841694041d7473da5",
+      "subject": {
+        "name": "SpotBye.exe",
+        "digest": {
+          "sha256": "fd46c09b4797b2ca7c645819a8b9e44220390a89efb8df98beeb9f536f3dd9e1"
+        },
+        "local_path": "C:\\Users\\justi\\AppData\\Local\\Temp\\d3758997-8e43-4b66-bb40-fe681af95918_SpotBye-Windows.zip.SpotBye-Windows.zip\\SpotBye.exe",
+        "format": "pe",
+        "architecture": "x86_64"
+      },
+      "provider": {
+        "id": "go-build-info",
+        "name": "REA Go build-information reader",
+        "version": "1"
+      },
+      "analysis_profile": null,
+      "predicate_type": "rea.analysis",
+      "operation": "inspect_go_binary",
+      "parameters": {
+        "path": "C:\\Users\\justi\\AppData\\Local\\Temp\\d3758997-8e43-4b66-bb40-fe681af95918_SpotBye-Windows.zip.SpotBye-Windows.zip\\SpotBye.exe"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "artifact": {
+          "path": "C:\\Users\\justi\\AppData\\Local\\Temp\\d3758997-8e43-4b66-bb40-fe681af95918_SpotBye-Windows.zip.SpotBye-Windows.zip\\SpotBye.exe",
+          "sha256": "fd46c09b4797b2ca7c645819a8b9e44220390a89efb8df98beeb9f536f3dd9e1",
+          "bytes": 33954816
+        },
+        "format": "pe",
+        "architecture": "amd64",
+        "bits": 64,
+        "byte_order": "little",
+        "build_info": {
+          "header_offset": 32097792,
+          "encoding": "inline",
+          "go_version": "go1.27.1",
+          "go_version_bytes_base64": "Z28xLjI3LjE=",
+          "module_text": "path\tgithub.com/afkarxyz/spotbye\nmod\tgithub.com/afkarxyz/spotbye\t(devel)\t\ndep\tgit.sr.ht/~jackmordaunt/go-toast/v2\tv2.0.3\th1:N3IGoHHp9pb6mj1cbXbuaSXV/UMKwmbKLf53nQmtqMA=\ndep\tgithub.com/Eyevinn/mp4ff\tv0.56.0\th1:K81hqadHOLqQP+Rr610dwy7Cn3tLLEejCljzIfcNo+k=\ndep\tgithub.com/adrg/xdg\tv0.5.3\th1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=\ndep\tgithub.com/bep/debounce\tv1.2.1\th1:v67fRdBA9UQu2NhLFXrSg0Brw7CexQekrBwDMM8bzeY=\ndep\tgithub.com/bogem/id3v2/v2\tv2.1.4\th1:CEwe+lS2p6dd9UZRlPc1zbFNIha2mb2qzT1cCEoNWoI=\ndep\tgithub.com/boombuler/barcode\tv1.1.0\th1:ChaYjBR63fr4LFyGn8E8nt7dBSt3MiU3zMOZqFvVkHo=\ndep\tgithub.com/chmike/cmac-go\tv1.1.0\th1:aF73ZAEx9N2WdQc93DOJ2fMsBDAGqUtuenjMJMb3kEI=\ndep\tgithub.com/go-flac/flacpicture\tv0.3.0\th1:LkmTxzFLIynwfhHiZsX0s8xcr3/u33MzvV89u+zOT8I=\ndep\tgithub.com/go-flac/flacvorbis\tv0.2.0\th1:KH0xjpkNTXFER4cszH4zeJxYcrHbUobz/RticWGOESs=\ndep\tgithub.com/go-flac/go-flac\tv1.0.0\th1:6qI9XOVLcO50xpzm3nXvO31BgDgHhnr/p/rER/K/doY=\ndep\tgithub.com/go-ole/go-ole\tv1.3.0\th1:Dt6ye7+vXGIKZ7Xtk4s6/xVdGDQynvom7xCFEdWr6uE=\ndep\tgithub.com/google/uuid\tv1.6.0\th1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=\ndep\tgithub.com/iyear/gowidevine\tv0.1.3\th1:a0D85vBGHdpeUGaolWboQiT12bRcRXg8LOezHXkaM+o=\ndep\tgithub.com/leaanthony/go-ansi-parser\tv1.6.1\th1:xd8bzARK3dErqkPFtoF9F3/HgN8UQk0ed1YDKpEz01A=\ndep\tgithub.com/leaanthony/slicer\tv1.6.0\th1:1RFP5uiPJvT93TAHi+ipd3NACobkW53yUiBqZheE/Js=\ndep\tgithub.com/leaanthony/u\tv1.1.1\th1:TUFjwDGlNX+WuwVEzDqQwC2lOv0P4uhTQw7CMFdiK7M=\ndep\tgithub.com/pkg/browser\tv0.0.0-20240102092130-5ac0b6a4141c\th1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=\ndep\tgithub.com/pkg/errors\tv0.9.1\th1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=\ndep\tgithub.com/pquerna/otp\tv1.5.0\th1:NMMR+WrmaqXU4EzdGJEE1aUUI0AMRzsp96fFFWNPwxs=\ndep\tgithub.com/rivo/uniseg\tv0.4.7\th1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=\ndep\tgithub.com/samber/lo\tv1.53.0\th1:t975lj2py4kJPQ6haz1QMgtId2gtmfktACxIXArw3HM=\ndep\tgithub.com/tetratelabs/wazero\tv1.12.0\th1:DuWcpNu/FzgEXgGBDp8J1Spc+CWOvvtvVyjKlaZopYU=\ndep\tgithub.com/tkrajina/go-reflector\tv0.5.8\th1:yPADHrwmUbMq4RGEyaOUpz2H90sRsETNVpjzo3DLVQQ=\ndep\tgithub.com/ulikunitz/xz\tv0.5.16\th1:ld6NyySjx5lowVKwJvMRLnW5nxKX/xnpSiFYZ/Lxur0=\ndep\tgithub.com/wailsapp/go-webview2\tv1.0.23\th1:jmv8qhz1lHibCc79bMM/a/FqOnnzOGEisLav+a0b9P0=\ndep\tgithub.com/wailsapp/mimetype\tv1.4.1\th1:pQN9ycO7uo4vsUUuPeHEYoUkLVkaRntMnHJxVwYhwHs=\ndep\tgithub.com/wailsapp/wails/v2\tv2.15.0\th1:u7cHK+UesZOlYxyJxfYLteaCPhws6UsZoDdqUejuX6Q=\ndep\tgo.etcd.io/bbolt\tv1.5.0\th1:S7GAl7Fxv12yohbwFfIbQCGDWbQbtDGPET4P/bD4lxU=\ndep\tgo.senan.xyz/taglib\tv0.14.0\th1:cFgq+w7Z++4VzccYBmBt+RwkOvx5ddexy1M7kIty8+Y=\ndep\tgolang.org/x/crypto\tv0.56.0\th1:GUh5Ii4J5jtcseSMiRqr1jXCNHoxjeV9Fmekc2oLy6Y=\ndep\tgolang.org/x/image\tv0.45.0\th1:FMb1nTbH5H9vF55SriQHgFw5GnNL9Jg6L25BwXKzhB0=\ndep\tgolang.org/x/net\tv0.58.0\th1:ynWG7rqYi4ccpTEuPZ2QGWHktVEM9DMCj9yzDE0Q7To=\ndep\tgolang.org/x/sys\tv0.47.0\th1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=\ndep\tgolang.org/x/text\tv0.41.0\th1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=\ndep\tgoogle.golang.org/protobuf\tv1.36.12\th1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=\nbuild\t-buildmode=exe\nbuild\t-compiler=gc\nbuild\t-tags=desktop,wv2runtime.download,production\nbuild\t-trimpath=true\nbuild\tCGO_ENABLED=1\nbuild\tGOARCH=amd64\nbuild\tGOOS=windows\nbuild\tGOAMD64=v1\n",
+          "module_bytes_base64": "MHevDJJ0CAJB4cEH5tYY5nBhdGgJZ2l0aHViLmNvbS9hZmthcnh5ei9zcG90YnllCm1vZAlnaXRodWIuY29tL2Fma2FyeHl6L3Nwb3RieWUJKGRldmVsKQkKZGVwCWdpdC5zci5odC9+amFja21vcmRhdW50L2dvLXRvYXN0L3YyCXYyLjAuMwloMTpOM0lHb0hIcDlwYjZtajFjYlhidWFTWFYvVU1Ld21iS0xmNTNuUW10cU1BPQpkZXAJZ2l0aHViLmNvbS9FeWV2aW5uL21wNGZmCXYwLjU2LjAJaDE6SzgxaHFhZEhPTHFRUCtScjYxMGR3eTdDbjN0TExFZWpDbGp6SWZjTm8raz0KZGVwCWdpdGh1Yi5jb20vYWRyZy94ZGcJdjAuNS4zCWgxOnhSbnhKWG5lNytvV0RhdFJoUjFKTG52dWNjdUllQ29CdTJydHVMcVFCNzg9CmRlcAlnaXRodWIuY29tL2JlcC9kZWJvdW5jZQl2MS4yLjEJaDE6djY3ZlJkQkE5VVF1Mk5oTEZYclNnMEJydzdDZXhRZWtyQndETU04YnplWT0KZGVwCWdpdGh1Yi5jb20vYm9nZW0vaWQzdjIvdjIJdjIuMS40CWgxOkNFd2UrbFMycDZkZDlVWlJsUGMxemJGTkloYTJtYjJxelQxY0NFb05Xb0k9CmRlcAlnaXRodWIuY29tL2Jvb21idWxlci9iYXJjb2RlCXYxLjEuMAloMTpDaGFZakJSNjNmcjRMRnlHbjhFOG50N2RCU3QzTWlVM3pNT1pxRnZWa0hvPQpkZXAJZ2l0aHViLmNvbS9jaG1pa2UvY21hYy1nbwl2MS4xLjAJaDE6YUY3M1pBRXg5TjJXZFFjOTNET0oyZk1zQkRBR3FVdHVlbmpNSk1iM2tFST0KZGVwCWdpdGh1Yi5jb20vZ28tZmxhYy9mbGFjcGljdHVyZQl2MC4zLjAJaDE6TGttVHh6RkxJeW53ZmhIaVpzWDBzOHhjcjMvdTMzTXp2Vjg5dSt6T1Q4ST0KZGVwCWdpdGh1Yi5jb20vZ28tZmxhYy9mbGFjdm9yYmlzCXYwLjIuMAloMTpLSDB4anBrTlRYRkVSNGNzekg0emVKeFljckhiVW9iei9SdGljV0dPRVNzPQpkZXAJZ2l0aHViLmNvbS9nby1mbGFjL2dvLWZsYWMJdjEuMC4wCWgxOjZxSTlYT1ZMY081MHhwem0zblh2TzMxQmdEZ0hobnIvcC9yRVIvSy9kb1k9CmRlcAlnaXRodWIuY29tL2dvLW9sZS9nby1vbGUJdjEuMy4wCWgxOkR0NnllNyt2WEdJS1o3WHRrNHM2L3hWZEdEUXludm9tN3hDRkVkV3I2dUU9CmRlcAlnaXRodWIuY29tL2dvb2dsZS91dWlkCXYxLjYuMAloMTpOSXZhSkRNT3NqSEE4bjFqQWhMU2d6ckF6eTFIZ3IraE5yYjU3ZSs5NEYwPQpkZXAJZ2l0aHViLmNvbS9peWVhci9nb3dpZGV2aW5lCXYwLjEuMwloMTphMEQ4NXZCR0hkcGVVR2FvbFdib1FpVDEyYlJjUlhnOExPZXpIWGthTStvPQpkZXAJZ2l0aHViLmNvbS9sZWFhbnRob255L2dvLWFuc2ktcGFyc2VyCXYxLjYuMQloMTp4ZDhiekFSSzNkRXJxa1BGdG9GOUYzL0hnTjhVUWswZWQxWURLcEV6MDFBPQpkZXAJZ2l0aHViLmNvbS9sZWFhbnRob255L3NsaWNlcgl2MS42LjAJaDE6MVJGUDV1aVBKdlQ5M1RBSGkraXBkM05BQ29ia1c1M3lVaUJxWmhlRS9Kcz0KZGVwCWdpdGh1Yi5jb20vbGVhYW50aG9ueS91CXYxLjEuMQloMTpUVUZqd0RHbE5YK1d1d1ZFekRxUXdDMmxPdjBQNHVoVFF3N0NNRmRpSzdNPQpkZXAJZ2l0aHViLmNvbS9wa2cvYnJvd3Nlcgl2MC4wLjAtMjAyNDAxMDIwOTIxMzAtNWFjMGI2YTQxNDFjCWgxOittZGprR0tkSFFHMzMwNUFZbWR2MVUyZVJORGlVMkVyTUJqMWd3cnE4ZVE9CmRlcAlnaXRodWIuY29tL3BrZy9lcnJvcnMJdjAuOS4xCWgxOkZFQkx4MXpTMjE0b3dwank3cXNCZWl4YlVSa3VoUUF3cks1VXdMR1R3dDQ9CmRlcAlnaXRodWIuY29tL3BxdWVybmEvb3RwCXYxLjUuMAloMTpOTU1SK1dybWFxWFU0RXpkR0pFRTFhVVVJMEFNUnpzcDk2ZkZGV05Qd3hzPQpkZXAJZ2l0aHViLmNvbS9yaXZvL3VuaXNlZwl2MC40LjcJaDE6V1VkdmtXOHVFaHJZZkxDNFp6ZHBJMnp0eFAxSTU4Mis0OU9jNU1xNjRWUT0KZGVwCWdpdGh1Yi5jb20vc2FtYmVyL2xvCXYxLjUzLjAJaDE6dDk3NWxqMnB5NGtKUFE2aGF6MVFNZ3RJZDJndG1ma3RBQ3hJWEFydzNITT0KZGVwCWdpdGh1Yi5jb20vdGV0cmF0ZWxhYnMvd2F6ZXJvCXYxLjEyLjAJaDE6RHVXY3BOdS9GemdFWGdHQkRwOEoxU3BjK0NXT3Z2dHZWeWpLbGFab3BZVT0KZGVwCWdpdGh1Yi5jb20vdGtyYWppbmEvZ28tcmVmbGVjdG9yCXYwLjUuOAloMTp5UEFESHJ3bVViTXE0UkdFeWFPVXB6Mkg5MHNSc0VUTlZwanpvM0RMVlFRPQpkZXAJZ2l0aHViLmNvbS91bGlrdW5pdHoveHoJdjAuNS4xNgloMTpsZDZOeXlTang1bG93Vkt3SnZNUkxuVzVueEtYL3hucFNpRllaL0x4dXIwPQpkZXAJZ2l0aHViLmNvbS93YWlsc2FwcC9nby13ZWJ2aWV3Mgl2MS4wLjIzCWgxOmptdjhxaHoxbEhpYkNjNzliTU0vYS9GcU9ubnpPR0Vpc0xhdithMGI5UDA9CmRlcAlnaXRodWIuY29tL3dhaWxzYXBwL21pbWV0eXBlCXYxLjQuMQloMTpwUU45eWNPN3VvNHZzVVV1UGVIRVlvVWtMVmthUm50TW5ISnhWd1lod0hzPQpkZXAJZ2l0aHViLmNvbS93YWlsc2FwcC93YWlscy92Mgl2Mi4xNS4wCWgxOnU3Y0hLK1Vlc1pPbFl4eUp4ZllMdGVhQ1Bod3M2VXNab0RkcVVlanVYNlE9CmRlcAlnby5ldGNkLmlvL2Jib2x0CXYxLjUuMAloMTpTN0dBbDdGeHYxMnlvaGJ3RmZJYlFDR0RXYlFidERHUEVUNFAvYkQ0bHhVPQpkZXAJZ28uc2VuYW4ueHl6L3RhZ2xpYgl2MC4xNC4wCWgxOmNGZ3ErdzdaKys0VnpjY1lCbUJ0K1J3a092eDVkZGV4eTFNN2tJdHk4K1k9CmRlcAlnb2xhbmcub3JnL3gvY3J5cHRvCXYwLjU2LjAJaDE6R1VoNUlpNEo1anRjc2VTTWlScXIxalhDTkhveGplVjlGbWVrYzJvTHk2WT0KZGVwCWdvbGFuZy5vcmcveC9pbWFnZQl2MC40NS4wCWgxOkZNYjFuVGJINUg5dkY1NVNyaVFIZ0Z3NUduTkw5Smc2TDI1QndYS3poQjA9CmRlcAlnb2xhbmcub3JnL3gvbmV0CXYwLjU4LjAJaDE6eW5XRzdycVlpNGNjcFRFdVBaMlFHV0hrdFZFTTlETUNqOXl6REUwUTdUbz0KZGVwCWdvbGFuZy5vcmcveC9zeXMJdjAuNDcuMAloMTpvN1hHT3ZaUUNBREJRUTRZN1ZOcTJkUldRUjdKbU9VVzhLeHg0WnNOZ1dzPQpkZXAJZ29sYW5nLm9yZy94L3RleHQJdjAuNDEuMAloMTp2ei9zZUEwbG5YODdPdGh1MmYvMEwyNFJjZ3JYRDkvWUZUU3VHamozckg4PQpkZXAJZ29vZ2xlLmdvbGFuZy5vcmcvcHJvdG9idWYJdjEuMzYuMTIJaDE6cEpPS0RET3llWEVyVXJvQ2loRkFkNUxRdXdYQlNwVm5LR3JqNW8vZnd4Yz0KYnVpbGQJLWJ1aWxkbW9kZT1leGUKYnVpbGQJLWNvbXBpbGVyPWdjCmJ1aWxkCS10YWdzPWRlc2t0b3Asd3YycnVudGltZS5kb3dubG9hZCxwcm9kdWN0aW9uCmJ1aWxkCS10cmltcGF0aD10cnVlCmJ1aWxkCUNHT19FTkFCTEVEPTEKYnVpbGQJR09BUkNIPWFtZDY0CmJ1aWxkCUdPT1M9d2luZG93cwpidWlsZAlHT0FNRDY0PXYxCvkyQzGGGCByAIJCEEEW2PI=",
+          "version_location": {
+            "offset": 32097825,
+            "bytes": 8
+          },
+          "module_location": {
+            "offset": 32097835,
+            "bytes": 3284
+          },
+          "module": {
+            "path": "github.com/afkarxyz/spotbye",
+            "main": {
+              "path": "github.com/afkarxyz/spotbye",
+              "version": "(devel)",
+              "sum": "",
+              "replacement": null
+            },
+            "dependencies": [
+              {
+                "path": "git.sr.ht/~jackmordaunt/go-toast/v2",
+                "version": "v2.0.3",
+                "sum": "h1:N3IGoHHp9pb6mj1cbXbuaSXV/UMKwmbKLf53nQmtqMA=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/Eyevinn/mp4ff",
+                "version": "v0.56.0",
+                "sum": "h1:K81hqadHOLqQP+Rr610dwy7Cn3tLLEejCljzIfcNo+k=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/adrg/xdg",
+                "version": "v0.5.3",
+                "sum": "h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/bep/debounce",
+                "version": "v1.2.1",
+                "sum": "h1:v67fRdBA9UQu2NhLFXrSg0Brw7CexQekrBwDMM8bzeY=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/bogem/id3v2/v2",
+                "version": "v2.1.4",
+                "sum": "h1:CEwe+lS2p6dd9UZRlPc1zbFNIha2mb2qzT1cCEoNWoI=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/boombuler/barcode",
+                "version": "v1.1.0",
+                "sum": "h1:ChaYjBR63fr4LFyGn8E8nt7dBSt3MiU3zMOZqFvVkHo=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/chmike/cmac-go",
+                "version": "v1.1.0",
+                "sum": "h1:aF73ZAEx9N2WdQc93DOJ2fMsBDAGqUtuenjMJMb3kEI=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/go-flac/flacpicture",
+                "version": "v0.3.0",
+                "sum": "h1:LkmTxzFLIynwfhHiZsX0s8xcr3/u33MzvV89u+zOT8I=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/go-flac/flacvorbis",
+                "version": "v0.2.0",
+                "sum": "h1:KH0xjpkNTXFER4cszH4zeJxYcrHbUobz/RticWGOESs=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/go-flac/go-flac",
+                "version": "v1.0.0",
+                "sum": "h1:6qI9XOVLcO50xpzm3nXvO31BgDgHhnr/p/rER/K/doY=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/go-ole/go-ole",
+                "version": "v1.3.0",
+                "sum": "h1:Dt6ye7+vXGIKZ7Xtk4s6/xVdGDQynvom7xCFEdWr6uE=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/google/uuid",
+                "version": "v1.6.0",
+                "sum": "h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/iyear/gowidevine",
+                "version": "v0.1.3",
+                "sum": "h1:a0D85vBGHdpeUGaolWboQiT12bRcRXg8LOezHXkaM+o=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/leaanthony/go-ansi-parser",
+                "version": "v1.6.1",
+                "sum": "h1:xd8bzARK3dErqkPFtoF9F3/HgN8UQk0ed1YDKpEz01A=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/leaanthony/slicer",
+                "version": "v1.6.0",
+                "sum": "h1:1RFP5uiPJvT93TAHi+ipd3NACobkW53yUiBqZheE/Js=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/leaanthony/u",
+                "version": "v1.1.1",
+                "sum": "h1:TUFjwDGlNX+WuwVEzDqQwC2lOv0P4uhTQw7CMFdiK7M=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/pkg/browser",
+                "version": "v0.0.0-20240102092130-5ac0b6a4141c",
+                "sum": "h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/pkg/errors",
+                "version": "v0.9.1",
+                "sum": "h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/pquerna/otp",
+                "version": "v1.5.0",
+                "sum": "h1:NMMR+WrmaqXU4EzdGJEE1aUUI0AMRzsp96fFFWNPwxs=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/rivo/uniseg",
+                "version": "v0.4.7",
+                "sum": "h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/samber/lo",
+                "version": "v1.53.0",
+                "sum": "h1:t975lj2py4kJPQ6haz1QMgtId2gtmfktACxIXArw3HM=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/tetratelabs/wazero",
+                "version": "v1.12.0",
+                "sum": "h1:DuWcpNu/FzgEXgGBDp8J1Spc+CWOvvtvVyjKlaZopYU=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/tkrajina/go-reflector",
+                "version": "v0.5.8",
+                "sum": "h1:yPADHrwmUbMq4RGEyaOUpz2H90sRsETNVpjzo3DLVQQ=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/ulikunitz/xz",
+                "version": "v0.5.16",
+                "sum": "h1:ld6NyySjx5lowVKwJvMRLnW5nxKX/xnpSiFYZ/Lxur0=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/wailsapp/go-webview2",
+                "version": "v1.0.23",
+                "sum": "h1:jmv8qhz1lHibCc79bMM/a/FqOnnzOGEisLav+a0b9P0=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/wailsapp/mimetype",
+                "version": "v1.4.1",
+                "sum": "h1:pQN9ycO7uo4vsUUuPeHEYoUkLVkaRntMnHJxVwYhwHs=",
+                "replacement": null
+              },
+              {
+                "path": "github.com/wailsapp/wails/v2",
+                "version": "v2.15.0",
+                "sum": "h1:u7cHK+UesZOlYxyJxfYLteaCPhws6UsZoDdqUejuX6Q=",
+                "replacement": null
+              },
+              {
+                "path": "go.etcd.io/bbolt",
+                "version": "v1.5.0",
+                "sum": "h1:S7GAl7Fxv12yohbwFfIbQCGDWbQbtDGPET4P/bD4lxU=",
+                "replacement": null
+              },
+              {
+                "path": "go.senan.xyz/taglib",
+                "version": "v0.14.0",
+                "sum": "h1:cFgq+w7Z++4VzccYBmBt+RwkOvx5ddexy1M7kIty8+Y=",
+                "replacement": null
+              },
+              {
+                "path": "golang.org/x/crypto",
+                "version": "v0.56.0",
+                "sum": "h1:GUh5Ii4J5jtcseSMiRqr1jXCNHoxjeV9Fmekc2oLy6Y=",
+                "replacement": null
+              },
+              {
+                "path": "golang.org/x/image",
+                "version": "v0.45.0",
+                "sum": "h1:FMb1nTbH5H9vF55SriQHgFw5GnNL9Jg6L25BwXKzhB0=",
+                "replacement": null
+              },
+              {
+                "path": "golang.org/x/net",
+                "version": "v0.58.0",
+                "sum": "h1:ynWG7rqYi4ccpTEuPZ2QGWHktVEM9DMCj9yzDE0Q7To=",
+                "replacement": null
+              },
+              {
+                "path": "golang.org/x/sys",
+                "version": "v0.47.0",
+                "sum": "h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=",
+                "replacement": null
+              },
+              {
+                "path": "golang.org/x/text",
+                "version": "v0.41.0",
+                "sum": "h1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=",
+                "replacement": null
+              },
+              {
+                "path": "google.golang.org/protobuf",
+                "version": "v1.36.12",
+                "sum": "h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=",
+                "replacement": null
+              }
+            ],
+            "settings": [
+              {
+                "key": "-buildmode",
+                "value": "exe"
+              },
+              {
+                "key": "-compiler",
+                "value": "gc"
+              },
+              {
+                "key": "-tags",
+                "value": "desktop,wv2runtime.download,production"
+              },
+              {
+                "key": "-trimpath",
+                "value": "true"
+              },
+              {
+                "key": "CGO_ENABLED",
+                "value": "1"
+              },
+              {
+                "key": "GOARCH",
+                "value": "amd64"
+              },
+              {
+                "key": "GOOS",
+                "value": "windows"
+              },
+              {
+                "key": "GOAMD64",
+                "value": "v1"
+              }
+            ],
+            "unparsed_lines": [],
+            "unparsed_line_bytes_base64": [],
+            "complete": true
+          }
+        },
+        "limitations": [
+          "Embedded build metadata is observed file content, not proof of compiler identity, dependency authenticity or runtime behavior.",
+          "Only Go build information is inspected; function names, source mappings, type metadata and decompiled code are not recovered.",
+          "Resource guards bound stable artifact reads and cumulative header searches to 256 MiB each, aggregate embedded strings to 1 MiB, structural table decoding to 16 MiB and complete metadata payloads to 8 MiB; these are not operating-system memory or CPU limits."
+        ]
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "Embedded build metadata is observed file content, not proof of compiler identity, dependency authenticity or runtime behavior.",
+        "Only Go build information is inspected; function names, source mappings, type metadata and decompiled code are not recovered.",
+        "Resource guards bound stable artifact reads and cumulative header searches to 256 MiB each, aggregate embedded strings to 1 MiB, structural table decoding to 16 MiB and complete metadata payloads to 8 MiB; these are not operating-system memory or CPU limits."
+      ],
+      "relationship_coverage": null,
+      "locations": [
+        {
+          "kind": "artifact-path",
+          "path": "C:\\Users\\justi\\AppData\\Local\\Temp\\d3758997-8e43-4b66-bb40-fe681af95918_SpotBye-Windows.zip.SpotBye-Windows.zip\\SpotBye.exe"
+        },
+        {
+          "kind": "file-offset-range",
+          "start": 32097792,
+          "end": 32097824
+        }
+      ],
+      "evidence_links": []
+    }
+  },
+  "jsonrpc": "2.0",
+  "id": 3
+}

@@ -1,5 +1,10 @@
 .DS_Store
 
+# Local build, simulator and stock-firmware evidence (never redistributed).
+artifacts/
+research/
+__pycache__/
+
 sonix-player/sonix_player
 sonix-player/sonix_player_debug
 sonix-player/sonix_player_host

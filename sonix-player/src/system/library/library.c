@@ -400,6 +400,7 @@ static bool scan_log_files;
 typedef enum {
 	SCAN_FULL,
 	SCAN_UPDATE,
+	SCAN_IMPORT,
 	SCAN_REORGANIZE,
 } scan_mode_t;
 static volatile scan_mode_t scan_mode;
@@ -2265,6 +2266,25 @@ int library_history_items(library_history_item_t **out) {
 		}
 		sqlite3_finalize(stmt);
 		*out = items;
+	}
+	pthread_mutex_unlock(&db_lock);
+	return count;
+}
+
+int library_history_recent(library_history_item_t *out, int capacity) {
+	if (!out || capacity <= 0) return 0;
+	if (capacity > 64) capacity = 64;
+	pthread_mutex_lock(&db_lock);
+	int count = 0;
+	sqlite3_stmt *stmt = NULL;
+	if (db && sqlite3_prepare_v2(db, "SELECT id, played_at FROM PLAY_HISTORY ORDER BY id DESC LIMIT ?1",
+		-1, &stmt, NULL) == SQLITE_OK) {
+		sqlite3_bind_int(stmt, 1, capacity);
+		while (count < capacity && sqlite3_step(stmt) == SQLITE_ROW) {
+			out[count].id = sqlite3_column_int64(stmt, 0);
+			out[count++].played_at = sqlite3_column_int64(stmt, 1);
+		}
+		sqlite3_finalize(stmt);
 	}
 	pthread_mutex_unlock(&db_lock);
 	return count;
@@ -6543,6 +6563,43 @@ static bool reorganize_run(void) {
 	return done;
 }
 
+// A download is an explicit request to add this file, independent of the
+// user's automatic scanning preferences. Never run a full scan here: that
+// would remove tracks outside the download directory from the index.
+static void import_download_run(void) {
+	char *path = scan_root;
+	pthread_mutex_lock(&db_lock);
+	bool ready = prepare_statements();
+	scan_id_base = count_rows("SELECT COALESCE(MAX(id),0) FROM MEDIA_TABLE");
+	bool started = ready && exec("BEGIN");
+	pthread_mutex_unlock(&db_lock);
+	if (started && file_tracks(path) == 0) {
+		namelist_t files = {.names = &path, .count = 1};
+		update_index(&files, false);
+	}
+	pthread_mutex_lock(&db_lock);
+	if (started) {
+		if (scan_cancel || scan_db_failed) {
+			exec("ROLLBACK");
+		} else if (!exec("COMMIT")) {
+			scan_db_failed = true;
+			exec("ROLLBACK");
+		}
+	}
+	finalize_statements();
+	if (db && started && !scan_db_failed && !scan_cancel) {
+		exec("DELETE FROM COUNT_TABLE");
+		exec("INSERT INTO COUNT_TABLE(cn) SELECT COUNT(*) FROM MEDIA_TABLE");
+		bump_generation(GEN_MEDIA);
+		sqlite3_db_release_memory(db);
+	}
+	pthread_mutex_unlock(&db_lock);
+	if (update_listener) {
+		update_listener(started && !scan_db_failed && !scan_cancel ?
+			LIBRARY_UPDATE_FINISHED : LIBRARY_UPDATE_STOPPED, scan_found, 0, 0);
+	}
+}
+
 static void *scan_thread_func(void *arg) {
 	(void)arg;
 
@@ -6579,6 +6636,9 @@ static void *scan_thread_func(void *arg) {
 		if (update_outcome == LIBRARY_UPDATE_FINISHED && !scan_cancel && !scan_db_failed) {
 			playlists_follow_library();
 		}
+		break;
+	case SCAN_IMPORT:
+		import_download_run();
 		break;
 	case SCAN_REORGANIZE:
 		break;
@@ -6672,6 +6732,15 @@ bool library_scan_start(const char *root) {
 		replace_damaged();
 	}
 	return scan_launch(root, SCAN_FULL);
+}
+
+bool library_import_download(const char *path) {
+	struct stat st;
+	if (!path || path[0] != '/' || strlen(path) >= sizeof(scan_root) ||
+		stat(path, &st) != 0 || !S_ISREG(st.st_mode) || !is_playable(path)) {
+		return false;
+	}
+	return scan_launch(path, SCAN_IMPORT);
 }
 
 // Leaves the settings as they are now for the scan thread to file the index

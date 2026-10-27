@@ -3,6 +3,7 @@
  */
 
 #include "power.h"
+#include "src/system/discovery/download_queue.h"
 
 // LVGL 9.2 made lv_timer_t opaque. There is a lv_timer_set_period() but no
 // getter, and both places here have to read the period before changing it.
@@ -641,7 +642,7 @@ static bool wifi_in_use(void) {
 		   wifitransfer_get_enabled() || qobuzcache_downloading_id() > 0 ||
 		   qobuzcache_network_wanted() || tidalcache_downloading_id() > 0 || tidalcache_network_wanted() ||
 		   podcastcache_downloading_id() > 0 || podcastcache_network_wanted() || podcastdl_busy() ||
-		   lastfm_network_wanted() || ota_busy();
+		   lastfm_network_wanted() || ota_busy() || download_busy();
 }
 
 // Pushes the next suspend attempt out by the anti-hammer delay. A radio that has

@@ -7,6 +7,7 @@
 #include "src/system/library/oggtags.h"
 #include "src/system/image/miniz/miniz_tinfl.h"
 #include "src/system/core/config.h"
+#include "src/system/core/json.h"
 #include "src/system/core/utils.h"
 
 #include <ctype.h>
@@ -15,6 +16,39 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+// Optional attribution sidecar emitted by the discovery downloader. Fill only
+// missing embedded metadata: keep the downloaded audio bytes unchanged. Bound
+// and validate local data too; reject oversized files and symlink redirection.
+static void read_discovery_metadata(const char *filepath, song_metadata_t *out) {
+	char path[1024];
+	if (snprintf(path, sizeof(path), "%s.source.json", filepath) >= (int)sizeof(path)) return;
+	int fd = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+	if (fd < 0) return;
+	struct stat st, audio;
+	char body[8193];
+	if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size < 2 || st.st_size > 8192 ||
+		stat(filepath, &audio) || !S_ISREG(audio.st_mode)) { close(fd); return; }
+	size_t done = 0;
+	while (done < (size_t)st.st_size) {
+		ssize_t n = read(fd, body + done, (size_t)st.st_size - done);
+		if (n <= 0) { close(fd); return; }
+		done += (size_t)n;
+	}
+	close(fd);
+	body[done] = 0;
+	json_doc_t doc;
+	if (!json_parse(body, &doc)) return;
+	int root = json_root(&doc);
+	if (json_obj_llong(&doc, root, "bytes", -1) == audio.st_size) {
+		if (!out->title[0]) json_obj_str(&doc, root, "title", out->title, sizeof(out->title));
+		if (!out->artist[0]) json_obj_str(&doc, root, "artist", out->artist, sizeof(out->artist));
+		if (!out->album[0]) json_obj_str(&doc, root, "album", out->album, sizeof(out->album));
+	}
+	json_free(&doc);
+}
 
 // Standard ID3v1 genre list, used to resolve numeric genre references from
 // both ID3v1 tags and ID3v2 TCON frames written in the old "(N)" style. Past
@@ -2544,6 +2578,7 @@ void metadata_read(const char *filepath, song_metadata_t *out) {
 	}
 	}
 
+	read_discovery_metadata(filepath, out);
 	read_sidecar_tags(filepath, out);
 	clean_fields(out);
 }

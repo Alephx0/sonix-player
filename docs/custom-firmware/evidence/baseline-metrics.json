@@ -1,0 +1,13 @@
+{
+  "kind": "host simulator, not device performance",
+  "resolution": [
+    480,
+    800
+  ],
+  "window_visible_seconds": 0.141,
+  "VmSize": "1305092 kB",
+  "VmHWM": "36020 kB",
+  "VmRSS": "36020 kB",
+  "Threads": "22",
+  "alive_after_navigation": true
+}

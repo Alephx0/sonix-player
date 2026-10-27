@@ -69,9 +69,32 @@
 #include "src/system/core/utils.h"
 #include "src/system/net/webcgi.h"
 #include "src/system/net/wifi.h"
+#include "src/system/discovery/download_queue.h"
 
 
 static volatile sig_atomic_t running = 1;
+
+// The scanner and downloads never touch LVGL. Completed files are handed to
+// the library on the UI thread, one at a time, through its existing worker.
+// Keep a pending generation until indexing really finished; a busy scanner
+// or an absent card must not lose the completion notification.
+static void downloaded_library_poll(lv_timer_t *timer) {
+	(void)timer;
+	static unsigned indexed_revision;
+	unsigned revision = download_revision();
+	if (revision == indexed_revision || !library_is_open() || library_scan_running()) return;
+	static download_job_t jobs[DOWNLOAD_MAX_JOBS];
+	int count = download_snapshot(jobs, DOWNLOAD_MAX_JOBS);
+	for (int i = 0; i < count; ++i) {
+		char title[256];
+		if (jobs[i].state == DOWNLOAD_DONE &&
+			!library_track_title(jobs[i].path, title, sizeof(title))) {
+			library_import_download(jobs[i].path);
+			return;
+		}
+	}
+	indexed_revision = revision;
+}
 
 #ifdef HOST_BUILD
 // Screenshot trigger on the simulator. The device uses volume-up plus power,
@@ -2017,10 +2040,11 @@ int main(int argc, char **argv) {
 		// Both NULL: the player probes the block devices and the mount-point
 		// names the stock firmware uses and reports what it found in the log.
 		.device = NULL,
-		.mount_point = NULL,
 #ifdef HOST_BUILD
+		.mount_point = music_path,
 		.manage_mount = false, // never touch the developer's own filesystem
 #else
+		.mount_point = NULL,
 		.manage_mount = true,
 #endif
 	};
@@ -2218,6 +2242,11 @@ int main(int argc, char **argv) {
 	sleeptimer_init();
 
 	gui_init(&gui_cfg);
+	// Restore paused transfers and completed-file history without requiring a
+	// new online search. The worker stays asleep until a transfer is requested.
+	if (gui_cfg.sd_root_path && storage_sd_writable())
+		download_queue_init(gui_cfg.sd_root_path);
+	lv_timer_create(downloaded_library_poll, 1000, NULL);
 
 	// "Rotate screen", as it was left. After gui_init so there are screens to
 	// redraw, and before the first frame the user sees.
@@ -2405,5 +2434,6 @@ int main(int argc, char **argv) {
 
 	printf("\n");
 
+	download_queue_shutdown();
 	return 0;
 }

@@ -1,4 +1,5 @@
 #include "usb.h"
+#include "src/system/discovery/download_queue.h"
 
 #include "src/system/device/adb.h"
 #include "src/system/device/power.h"
@@ -705,6 +706,7 @@ static void storage_export(void) {
 	// of play would otherwise read as "the track ended, start it again".
 	device_state_note_storage_gone();
 	audio_stop();
+	download_queue_shutdown();
 	library_close();
 	audiobookdb_close();
 	logging_suspend_for_usb();

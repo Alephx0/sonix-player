@@ -1,4 +1,5 @@
 #include "system.h"
+#include "src/system/discovery/download_queue.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -797,6 +798,7 @@ static void card_databases_detach(void) {
 		return;
 	}
 	card_attached = false;
+	download_queue_shutdown(); // release download descriptors before unmount
 
 	// Playback first. The playback thread keeps the track's descriptor open for
 	// the whole track -- and with "remember track" a track is loaded and paused
@@ -822,6 +824,7 @@ static void card_databases_attach(const char *root) {
 		return;
 	}
 	card_attached = true;
+	download_queue_init(root); // restored work stays paused
 
 	// PATH_MAX, because the card root comes from a mount point and a mount point
 	// can be as long as any path.

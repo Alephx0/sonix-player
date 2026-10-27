@@ -809,6 +809,11 @@ bool http_request(const char *url, const http_req_t *req, char **out, size_t *ou
 			return false;
 		}
 
+		if (req->https_only && (!u.secure || strpbrk(current, "\r\n"))) {
+			set_last_error("Provider metadata requires HTTPS on every redirect.");
+			return false;
+		}
+
 		int status = 0;
 		char location[2048] = "";
 		char err[192] = "";
@@ -983,6 +988,83 @@ bool http_stream_open(http_stream_t *st, const char *url, int timeout_secs) {
 		}
 	}
 	return false;
+}
+
+static bool download_number(const char *text, long long *out) {
+    if (!text || *text < '0' || *text > '9') return false;
+    char *end; errno = 0;
+    long long value = strtoll(text, &end, 10);
+    if (errno || *end || value < 0) return false;
+    *out = value; return true;
+}
+
+bool http_download_open(http_stream_t *st, const char *url, long long offset,
+                        long long expected_total, int timeout_secs,
+                        long long *accepted_offset) {
+    if (!st || !url || !accepted_offset || offset < 0 || expected_total <= 0 ||
+        offset >= expected_total || strlen(url) >= 2600) return false;
+    memset(st, 0, sizeof(*st)); st->fd = -1;
+    clear_last_error();
+    char current[2600]; snprintf(current, sizeof(current), "%s", url);
+    for (int hop = 0; hop <= HTTP_MAX_REDIRECTS; hop++) {
+        url_t u;
+        if (strpbrk(current, "\r\n") || !url_parse(current, &u) || !u.secure) {
+            set_last_error("An HTTPS download redirected to an insecure or invalid address.");
+            return false;
+        }
+        conn_t conn; char error[192];
+        if (!conn_open(&conn, &u, timeout_secs, error, sizeof(error))) return false;
+        char host[300],request[2800],range[80]="";
+        host_header_value(&u,host,sizeof(host));
+        if(offset)snprintf(range,sizeof(range),"Range: bytes=%lld-\r\n",offset);
+        int n=snprintf(request,sizeof(request),
+            "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: " HTTP_USER_AGENT "\r\n"
+            "Accept-Encoding: identity\r\nConnection: close\r\n%s\r\n",u.path,host,range);
+        if(n<=0 || (size_t)n>=sizeof(request) || !conn_write_all(&conn,request,(size_t)n)) {
+            conn_close(&conn);return false;
+        }
+        char headers[HTTP_HEADER_BUFFER],value[128];
+        int status=read_headers(&conn,headers,sizeof(headers),st->lead,sizeof(st->lead),&st->lead_len);
+        if(status==301 || status==302 || status==303 || status==307 || status==308) {
+            char location[2048];
+            bool found=header_value(headers,"Location",location,sizeof(location));
+            conn_close(&conn);
+            if(!found || !location[0])return false;
+            int wrote;
+            if(location[0]=='/' && location[1]!='/')
+                wrote=snprintf(current,sizeof(current),"https://%s:%d%s",u.host,u.port,location);
+            else if(location[0]=='/' && location[1]=='/')
+                wrote=snprintf(current,sizeof(current),"https:%s",location);
+            else wrote=snprintf(current,sizeof(current),"%s",location);
+            if(wrote<0 || (size_t)wrote>=sizeof(current))return false;
+            continue;
+        }
+        long long length=0,start=0;
+        bool ok=(status==200 || (status==206 && offset>0)) &&
+            header_value(headers,"Content-Length",value,sizeof(value)) && download_number(value,&length);
+        if(header_value(headers,"Transfer-Encoding",value,sizeof(value)) && strcasecmp(value,"identity"))ok=false;
+        if(header_value(headers,"Content-Encoding",value,sizeof(value)) && strcasecmp(value,"identity"))ok=false;
+        if(status==206) {
+            long long end=0,total=0;char tail=0;
+            ok=ok && header_value(headers,"Content-Range",value,sizeof(value)) &&
+                sscanf(value,"bytes %lld-%lld/%lld%c",&start,&end,&total,&tail)==3 &&
+                start==offset && total==expected_total && end==total-1 && length==total-start;
+        } else ok=ok && length==expected_total;
+        if(!ok || st->lead_len>length) {
+            conn_close(&conn);
+            set_last_error("Download response has an unexpected status, size or byte range (%d).",status);
+            return false;
+        }
+        st->fd=conn.fd;st->tls=conn.tls;st->lead_pos=0;
+        /* Legacy long field cannot hold 2 GiB on MIPS. Discovery uses its own
+         * validated 64-bit expected size; leave zero rather than overflow. */
+        st->content_length=length<=2147483647LL ? (long)length : 0;
+        header_value(headers,"Content-Type",st->content_type,sizeof(st->content_type));
+        *accepted_offset=start;
+        snprintf(last_final_url,sizeof(last_final_url),"%s",current);
+        return true;
+    }
+    set_last_error("Too many download redirects.");return false;
 }
 
 // Reads exactly `len` raw bytes (lead buffer first, then the socket).

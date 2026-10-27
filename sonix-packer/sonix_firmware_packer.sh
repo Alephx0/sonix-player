@@ -60,6 +60,7 @@ die()  { echo -e "${RED}Error:${NC} $*" >&2; exit 1; }
 # Where everything lives
 # ==========================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+source "$SCRIPT_DIR/r1_compatibility_check.sh"
 
 PLAYER_BIN="$SCRIPT_DIR/sonix_player"
 LAUNCH_BIN="$SCRIPT_DIR/sonix_launch"
@@ -323,6 +324,12 @@ build_one() {
 
 	say "    Extracting the filesystem..."
 	unsquashfs -f -d "$SQUASH_DIR" "$MERGED_SQUASHFS" > /dev/null
+	local STOCK_ROOTFS_SIZE
+	STOCK_ROOTFS_SIZE="$(get_size "$MERGED_SQUASHFS")"
+	if [ "$MODEL_DIR" = R1 ]; then
+		r1_compatibility_check "$SQUASH_DIR" "$SCRIPT_DIR/assets/R1" ||
+			die "R1 hardware compatibility checks failed; no image produced."
+	fi
 	rm -f "$MERGED_SQUASHFS"
 
 	# The old chunks go now: what gets written back must not sit next to what it
@@ -660,6 +667,10 @@ build_one() {
 
 	ORIGINAL_SUM="$(get_md5 "$ROOTFS_NEW")"
 	SIZE="$(get_size "$ROOTFS_NEW")"
+	if [ "$MODEL_DIR" = R1 ]; then
+		r1_rootfs_size_check "$SIZE" "$STOCK_ROOTFS_SIZE" ||
+			die "R1 rootfs size check failed; no image produced."
+	fi
 	say "    rootfs.squashfs: $SIZE bytes, md5 $ORIGINAL_SUM"
 
 	step "[$MODEL_NAME] updating ota_update.in"

@@ -109,6 +109,9 @@ typedef struct {
 	// never NULL, so the caller always frees the same way.
 	bool allow_empty_body;
 
+	// Opt-in: fail before sending any request over plain HTTP, including redirects.
+	bool https_only;
+
 } http_req_t;
 
 // Like http_get_ex(), but with the method and body chosen by the caller.
@@ -169,6 +172,15 @@ typedef struct {
 // https://, the host does not resolve, the connection or the TLS handshake
 // fails, or the status is not 200.
 bool http_stream_open(http_stream_t *st, const char *url, int timeout_secs);
+
+// Strict finite-file transfer for discovery. Unlike radio streaming this rejects
+// HTTPS downgrade redirects, encoded/chunked bodies and mismatched byte ranges.
+// A server ignoring Range returns accepted_offset=0 so the caller can restart.
+// expected_total is authoritative provider metadata (1..2 GiB); each read is
+// still bounded by the caller. No ICY request or metadata filtering is used.
+bool http_download_open(http_stream_t *st, const char *url, long long offset,
+                        long long expected_total, int timeout_secs,
+                        long long *accepted_offset);
 
 // Reads up to `len` bytes of *audio* into buf: any ICY metadata blocks in the
 // way are consumed and parsed out, never handed to the caller. Returns the

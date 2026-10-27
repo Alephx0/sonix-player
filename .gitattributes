@@ -1,2 +1,2 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Shell entrypoints must run after a Windows checkout or WSL source sync.
+*.sh text eol=lf

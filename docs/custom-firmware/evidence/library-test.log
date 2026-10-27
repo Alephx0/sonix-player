@@ -1,0 +1,7 @@
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+config: /tmp/sonix-library-2hzaesmn/settings.ini not there yet, starting from defaults
+library: /tmp/sonix-library-2hzaesmn/library.db open, 0 tracks indexed
+library: /tmp/sonix-library-2hzaesmn/library.db open, 2 tracks indexed
+PASS library import: empty index, no duplicates, existing tracks retained, settings unchanged, persistent index

@@ -120,3 +120,26 @@ void md5_hex(const void *data, size_t len, char out[MD5_HEX_LEN]) {
 	}
 	out[MD5_DIGEST_LEN * 2] = '\0';
 }
+
+void md5_init(md5_ctx *c) {
+    memset(c,0,sizeof(*c));
+    c->state[0]=0x67452301;c->state[1]=0xefcdab89;c->state[2]=0x98badcfe;c->state[3]=0x10325476;
+}
+void md5_update(md5_ctx *c,const void *data,size_t len) {
+    const unsigned char *p=data;c->bytes+=len;
+    while(len) {
+        size_t n=64-c->have;if(n>len)n=len;
+        memcpy(c->block+c->have,p,n);c->have+=n;p+=n;len-=n;
+        if(c->have==64){md5_block(c->state,c->block);c->have=0;}
+    }
+}
+void md5_final_hex(md5_ctx *c,char out[MD5_HEX_LEN]) {
+    uint64_t bits=c->bytes*8;unsigned char tail[128]={0};
+    memcpy(tail,c->block,c->have);tail[c->have]=0x80;
+    size_t total=c->have<56?64:128;
+    for(int i=0;i<8;i++)tail[total-8+i]=(unsigned char)(bits>>(8*i));
+    md5_block(c->state,tail);if(total==128)md5_block(c->state,tail+64);
+    static const char hex[]="0123456789abcdef";
+    for(int i=0;i<16;i++){unsigned char v=(unsigned char)(c->state[i/4]>>(8*(i%4)));out[2*i]=hex[v>>4];out[2*i+1]=hex[v&15];}
+    out[32]=0;
+}

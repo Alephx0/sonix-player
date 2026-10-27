@@ -55,6 +55,11 @@ void library_scan_folders_set(const char *const *names, int count);
 // run in progress is stopped first: the scan does everything it would.
 bool library_scan_start(const char *root);
 
+// Adds a completed download on the existing scan worker without clearing the
+// library, changing chosen folders, or enabling Detect changes. UI thread only.
+// False while another scan owns the worker; the caller should retry later.
+bool library_import_download(const char *path);
+
 // "Detect changes": at startup and whenever the card comes back -- put in
 // again, returned by a computer, or left by the Wi-Fi transfer -- the index is
 // brought up to date without emptying it. The folders chosen for the scan are walked, and only a
@@ -427,6 +432,8 @@ void library_history_add(const char *path, const char *name, const char *artist,
 
 // Every entry, oldest first, in an array the caller frees. Returns how many.
 int library_history_items(library_history_item_t **out);
+// Newest first, bounded storage supplied by the caller (for Home previews).
+int library_history_recent(library_history_item_t *out, int capacity);
 
 // One entry's file and title. False when it is not there.
 bool library_history_entry(long long id, char *path, size_t path_size, char *name, size_t name_size);

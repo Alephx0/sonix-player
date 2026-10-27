@@ -1,5 +1,10 @@
 ﻿# Sonix Player
 
+This branch is the **R1 native discovery development fork**. Start with the
+[implementation status, builds, tests and screenshots](docs/custom-firmware/README.md).
+There is no validated flash image for this branch. Stock 2.0 radio compatibility
+is unresolved; the installation instructions below describe upstream releases.
+
 A replacement player for the **HiBy R3 Pro II** and the **HiBy R1**, written on
 LVGL.
 
