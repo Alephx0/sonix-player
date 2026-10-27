@@ -68,6 +68,13 @@ touch coordinates at 480 × 800 and fixed waits; review the resulting images,
 because timing or source ordering can change. PNGs and metrics appear under
 `artifacts/integrated`; selected evidence is copied into this documentation.
 
+For a visible simulator launched on WSLg, keep `[power] screen_off_seconds=0`
+and `standby_mem=0` in its private configuration. `screen_off` and `standby`
+are not the settings keys. Otherwise the settings layer defaults to a 30-second
+screen timeout; the SDL window retains the last frame while input timers are
+paused, which looks like a frozen application. Restart with the correct keys
+if this occurs. Mouse clicks act as taps; hold and drag to scroll.
+
 Add `--cycles 20` for repeated navigation. `--layout 0`, `1`, `2` or `3`
 exercises saved Standard, Waveform, Studio or Sonix selection. Use a separate
 `--label` and `--card-root /path/to/fixture/sd` to reuse the audio fixture across

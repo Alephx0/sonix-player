@@ -29,7 +29,7 @@ def run(repo, label, online=False, layout=None, card_root=None, cycles=0, downlo
         raise RuntimeError('Use a fresh --label/card root for the touch download test')
     config = out / 'device_config.ini'
     config.write_text('[ui]\nlanguage=English\ntheme=dark\n[clock]\nconfigured=1\n'
-                      '[power]\nscreen_off=0\nstandby=0\n')
+                      '[power]\nscreen_off_seconds=0\nstandby_mem=0\n')
     if layout is not None:
         with config.open('a') as stream:
             stream.write(f'[screen]\nplayer_layout_alt={layout}\n')
