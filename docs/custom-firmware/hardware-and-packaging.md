@@ -25,6 +25,9 @@ Local archive: `artifacts/stock/r1-stock-2.0.upt` (ignored, not redistributed).
 - OTA compatibility: `hiby_r1_x1600_auto_rf_auto`.
 - Kernel: 3,731,520 bytes; manifest MD5 `c446c0a3b770674ea13bf8e42f63be7e`.
 - Rootfs: 40,103,936 bytes; manifest MD5 `f50a0ca01ddf12d789668261c1af2f77`.
+- Read-only validation checked all 8 kernel and 77 rootfs chunks, every chain
+  filename, each chunk digest, both assembled sizes and both whole-image digests.
+  Reproduce with `tools/verify_stock_chunks.py`; this checks integrity, not origin.
 - Rootfs contains `module_driver/r1_wireless_select.sh`, which reads
   `axp2101/parameters/detected_soc_id` and `detected_soc_id_valid`.
 
@@ -55,6 +58,9 @@ hardware compatibility. Existing R3 Pro II packing behavior is unchanged.
 
 1. Read actual `/proc/cpuinfo`, `/proc/mtd`, `/proc/meminfo`, `/proc/cmdline`,
    loaded modules, kernel version, and AXP2101 SoC ID on the device.
+   `tools/r1_readonly_diagnostics.sh` collects these to stdout from an existing
+   device shell. It changes no device settings and has only been syntax-checked
+   on the host, not executed on an R1.
 2. Match AIC8800 drivers/firmware and transport startup to a compatible kernel;
    validate Wi-Fi, Bluetooth, simultaneous use, suspend/resume and wake.
 3. Measure RAM during local playback, decoding, browsing and downloads. Host

@@ -1440,6 +1440,7 @@ static void cover_accent_cb(lv_event_t *e) {
 static lv_obj_t *layout_standard_pill;
 static lv_obj_t *layout_alternative_pill;
 static lv_obj_t *layout_studio_pill;
+static lv_obj_t *layout_sonix_pill;
 
 static void layout_refresh(void) {
 	if (!layout_standard_pill) {
@@ -1449,6 +1450,7 @@ static void layout_refresh(void) {
 	settingsrow_pill_active(layout_standard_pill, chosen == PLAYER_LAYOUT_STANDARD);
 	settingsrow_pill_active(layout_alternative_pill, chosen == PLAYER_LAYOUT_ALTERNATIVE);
 	settingsrow_pill_active(layout_studio_pill, chosen == PLAYER_LAYOUT_STUDIO);
+	settingsrow_pill_active(layout_sonix_pill, chosen == PLAYER_LAYOUT_SONIX);
 }
 
 static void layout_pick_cb(lv_event_t *e) {
@@ -1569,6 +1571,7 @@ static void build_nowplaying_page(gui_config_t *cfg) {
 		settingsrow_pill(layout_pills, "musicsettings_layout_alternative", PLAYER_LAYOUT_ALTERNATIVE, layout_pick_cb);
 	layout_studio_pill =
 		settingsrow_pill(layout_pills, "musicsettings_layout_studio", PLAYER_LAYOUT_STUDIO, layout_pick_cb);
+	layout_sonix_pill = settingsrow_pill_text(layout_pills, "Sonix", PLAYER_LAYOUT_SONIX, layout_pick_cb);
 
 	layout_refresh();
 	theme_register_refresh(layout_refresh);

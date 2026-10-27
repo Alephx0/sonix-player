@@ -68,6 +68,13 @@ touch coordinates at 480 × 800 and fixed waits; review the resulting images,
 because timing or source ordering can change. PNGs and metrics appear under
 `artifacts/integrated`; selected evidence is copied into this documentation.
 
+Add `--cycles 20` for repeated navigation. `--layout 0`, `1`, `2` or `3`
+exercises saved Standard, Waveform, Studio or Sonix selection. Use a separate
+`--label` and `--card-root /path/to/fixture/sd` to reuse the audio fixture across
+sequential runs. `tools/make_artwork_fixture.py /path/to/fixture/sd/Downloads`
+creates original geometric `cover.png` test data; it refuses an existing image.
+These images are explicitly synthetic and do not represent provider artwork.
+
 ## Packaging, updating and recovery
 
 Read [hardware-and-packaging.md](hardware-and-packaging.md) before using the packer.
@@ -81,6 +88,11 @@ silently replace its modifications with upstream binaries. No fork firmware
 release exists yet, so an OTA lookup cannot supply this development build.
 The source, dependencies, exact stock baseline, checksums and matching debug
 binary must accompany a future tested release, subject to their licences.
+
+For an already-extracted stock update, run `python3 tools/verify_stock_chunks.py
+/path/to/extracted` to check both image manifests and chunk chains without
+executing firmware. `tools/r1_readonly_diagnostics.sh` can later collect device
+identity, memory, modules and partition information from an existing R1 shell.
 
 ## Maintenance boundaries
 

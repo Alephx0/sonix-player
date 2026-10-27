@@ -20,7 +20,13 @@ Fork: [Alephx0/sonix-player](https://github.com/Alephx0/sonix-player), branch
    Existing embedded tags are retained; missing title/artist/album use an attribution
    sidecar. The original audio bytes are preserved and can be decoded offline.
 
-Tools exposes all six former top-level destinations. Existing Now Playing,
+Search > Sources exposes provider capabilities, an online-search toggle, a
+persisted preferred-format order and a pause-all-transfers action. The new Sonix
+Now Playing layout uses inset centered artwork and mint transport accents;
+it is the default for a fresh 480×800 configuration. Existing saved layout choices
+are respected, and Music settings offers all four arrangements.
+
+Tools exposes all six former top-level destinations. Existing Standard,
 waveform and Studio layouts, streaming integrations and audio controls remain
 in the source. Their full hardware behavior has **not** been regression-certified.
 This fork does not implement a Spotify service client.
@@ -47,15 +53,20 @@ the small test library. Screenshots are a layout check, not a hardware test.
 |---|---|---|
 | ![Releases](screenshots/online-results.png) | ![Source files](screenshots/online-release.png) | ![Downloads](screenshots/download-verified.png) |
 
-Also captured: [keyboard](screenshots/keyboard.png) and
-[existing Now Playing](screenshots/now-playing.png).
+Also captured: [keyboard](screenshots/keyboard.png),
+[provider settings](screenshots/provider-settings.png), and
+[Sonix Now Playing](screenshots/now-playing.png). Artwork-test screenshots use
+original synthetic geometric art, not artwork supplied by the audio provider.
+The original [Standard](screenshots/standard-player.png),
+[Waveform](screenshots/waveform-player.png) and [Studio](screenshots/studio-player.png)
+arrangements were also captured with this fixture.
 
 ## Remaining product work
 
 The feature matrix is the authoritative scope ledger. In particular, online
 artist pages, independent track/playlist search, remote artwork caching,
-streaming previews, provider configuration, a newly designed Now Playing layout,
-configurable Home shortcuts, pinned collections and translations of new strings
+streaming previews, multiple-provider selection/fallback, configurable Home
+shortcuts, pinned collections and translations of new strings
 are incomplete. SpotBye dynamic network tracing needs an isolated Windows VM.
 Hardware testing, prolonged playback/download stress and latest-board recovery
 are still required. Do not interpret successful host tests or MIPS compilation

@@ -12,6 +12,9 @@ player = repo / 'sonix-player'
 source = Path(__file__).resolve().parents[1] / 'sonix-player/tests/library_import.c'
 with tempfile.TemporaryDirectory(prefix='sonix-library-') as temp:
     work = Path(temp)
+    artwork = work / 'art'
+    artwork.mkdir()
+    subprocess.run([sys.executable, str(Path(__file__).with_name('make_artwork_fixture.py')), str(artwork)], check=True)
     for name in ['first', 'second']:
         with wave.open(str(work / (name + '.wav')), 'wb') as wav:
             wav.setparams((1, 2, 44100, 4410, 'NONE', 'not compressed'))

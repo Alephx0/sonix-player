@@ -27,6 +27,7 @@
 #include "src/gui/wireless/wifisettings.h"
 #include "src/gui/wireless/wireless.h"
 #include "src/system/core/lang.h"
+#include "src/system/core/config.h"
 #include "src/system/discovery/discovery.h"
 #include "src/system/discovery/download_queue.h"
 #include "src/system/library/library.h"
@@ -40,7 +41,7 @@
 lv_obj_t *main_menu_screen;
 static lv_obj_t *tools_screen;
 static gui_config_t *cfg;
-static lv_obj_t *page[4], *heading, *nav_icon[3], *nav_label[3];
+static lv_obj_t *page[5], *heading, *nav_icon[3], *nav_label[3];
 static lv_obj_t *mini, *mini_title, *mini_artist, *mini_art, *mini_play, *mini_progress;
 static int selected;
 static cover_image_t mini_image;
@@ -49,12 +50,12 @@ static bool mini_has_art;
 static unsigned home_revision;
 static long long home_history;
 
-enum { HOME, SEARCH, LIBRARY, DOWNLOADS };
+enum { HOME, SEARCH, LIBRARY, DOWNLOADS, PROVIDERS };
 enum { FILTER_ALL, FILTER_LOCAL, FILTER_ONLINE };
 enum { OPEN_FAVOURITES, OPEN_ALBUMS, OPEN_ARTISTS, OPEN_TRACKS, OPEN_PLAYLISTS,
        OPEN_BROWSE, OPEN_MOST_PLAYED, OPEN_TOOLS, OPEN_DOWNLOADS, OPEN_SETTINGS,
        OPEN_CLASSIC_LIBRARY, OPEN_LOCAL_SEARCH, OPEN_WIFI, OPEN_STREAMING,
-       OPEN_DISCOVERY, OPEN_DOWNLOAD_FOLDER };
+       OPEN_DISCOVERY, OPEN_DOWNLOAD_FOLDER, OPEN_PROVIDERS };
 
 #define PAD 20
 #define NAV_H 74
@@ -148,6 +149,7 @@ static void action_cb(lv_event_t *e) {
     case OPEN_WIFI: switch_screen(wifisettings_screen); break;
     case OPEN_STREAMING: switch_screen(streaming_screen); break;
     case OPEN_DISCOVERY: show_page(SEARCH); break;
+    case OPEN_PROVIDERS: show_page(PROVIDERS); break;
     case OPEN_DOWNLOAD_FOLDER: {
         if (!gui_card_available()) { gui_notify_no_card(); break; }
         char path[768];
@@ -398,6 +400,13 @@ static void start_search(const char *query, bool album) {
     snprintf(request_text, sizeof(request_text), "%s", query);
     request_album = album;
     request_filter = search_filter;
+    if (!config_get_bool("discovery", "enabled", true)) {
+        if (album || request_filter == FILTER_ONLINE) {
+            gui_notify_popup("Online discovery is disabled. Enable it in Sources.");
+            return;
+        }
+        request_filter = FILTER_LOCAL;
+    }
     search_keyboard_visible(false);
     lv_label_set_text(search_status, album ? "Loading release..." : "Searching...");
     search_ready = false;
@@ -445,16 +454,33 @@ static void online_hit_cb(lv_event_t *e) {
     if (item->kind == DISCOVERY_ALBUM) { start_search(item->id, true); return; }
     if (!gui_card_available()) { gui_notify_no_card(); return; }
     char error[192] = "Could not open the download queue.";
-    if (!download_queue_init(cfg->sd_root_path) || !download_enqueue(item, error, sizeof(error))) {
+    unsigned id = 0;
+    if (!download_queue_init(cfg->sd_root_path) || !(id = download_enqueue(item, error, sizeof(error)))) {
         gui_notify_popup(error);
         return;
     }
-    gui_notify_popup("Added to Downloads. Play it offline when the transfer finishes.");
+    /* A repeated explicit download tap may select a restored paused job.
+     * Resume that job instead of saying it was added while leaving it idle. */
+    download_resume(id);
+    show_page(DOWNLOADS);
 }
 
 static void search_draw(void) {
     lv_obj_clean(search_results);
     shown = pending;
+    /* A preference reorders original source files; it never transcodes or
+     * hides alternative formats. Stable insertion keeps their source order. */
+    int preference = (int)config_get_int("discovery", "format", 0);
+    const char *preferred = preference == 1 ? "mp3" : preference == 2 ? "flac" : "";
+    int front = 0;
+    if (*preferred) for (int i = 0; i < shown.online.count; i++) {
+        if (shown.online.items[i].kind == DISCOVERY_TRACK && !strcmp(shown.online.items[i].format, preferred)) {
+            discovery_item_t item = shown.online.items[i];
+            memmove(&shown.online.items[front + 1], &shown.online.items[front],
+                    (size_t)(i - front) * sizeof(item));
+            shown.online.items[front++] = item;
+        }
+    }
     const char *groups[] = {"Local tracks", "Local albums", "Local artists"};
     for (int kind = 0; kind < 3; kind++) {
         bool heading_drawn = false;
@@ -518,6 +544,10 @@ static void search_build(void) {
     }
     lv_obj_set_style_border_width(filter_buttons[0], 2, 0);
     lv_obj_set_style_border_color(filter_buttons[0], mint(), 0);
+    lv_obj_t *sources = button(p, "Sources", 80, 46, action_cb, (void *)OPEN_PROVIDERS);
+    lv_obj_set_style_text_font(lv_obj_get_child(sources, 0), &font_ui_14, 0);
+    lv_obj_set_height(lv_obj_get_child(sources, 0), 20);
+    lv_obj_set_pos(sources, 360, 68);
     search_status = label(p, "Local music + Internet Archive", &font_ui_16, cfg->screen_width - 2 * PAD, true);
     lv_obj_set_pos(search_status, 0, 122);
     search_results = column(p, cfg->screen_width - 2 * PAD, body_height() - 150);
@@ -535,6 +565,61 @@ static void search_build(void) {
     search_keyboard = keyboard_create(search_keyboard_parent, cfg->screen_width, 310, search_field,
                                       &icon_search, NULL, submit_cb, NULL);
     search_keyboard_visible(false);
+}
+
+static lv_obj_t *provider_enabled_text, *provider_format_text;
+
+static void provider_refresh(void) {
+    if (!provider_enabled_text) return;
+    lv_label_set_text(provider_enabled_text, config_get_bool("discovery", "enabled", true)
+        ? "Online discovery: On" : "Online discovery: Off");
+    int format = (int)config_get_int("discovery", "format", 0);
+    lv_label_set_text(provider_format_text, format == 1 ? "Prefer MP3 sources" :
+        format == 2 ? "Prefer FLAC sources" : "Use source format order");
+}
+
+static void provider_setting_cb(lv_event_t *e) {
+    if (!tapped()) return;
+    int action = (int)(intptr_t)lv_event_get_user_data(e);
+    if (action == 0) config_set_bool("discovery", "enabled", !config_get_bool("discovery", "enabled", true));
+    else config_set_int("discovery", "format", (config_get_int("discovery", "format", 0) + 1) % 3);
+    config_save();
+    provider_refresh();
+}
+
+static void pause_all_cb(lv_event_t *e) {
+    (void)e;
+    if (!tapped()) return;
+    download_job_t snapshot[DOWNLOAD_MAX_JOBS];
+    int n = download_snapshot(snapshot, DOWNLOAD_MAX_JOBS);
+    for (int i = 0; i < n; i++) if (snapshot[i].state == DOWNLOAD_RUNNING || snapshot[i].state == DOWNLOAD_QUEUED)
+        download_pause(snapshot[i].id);
+    gui_notify_popup("Transfers paused. Resume them individually in Downloads.");
+}
+
+static void providers_build(void) {
+    lv_obj_t *p = page[PROVIDERS];
+    section(p, "Internet Archive");
+    lv_obj_t *note = label(p, "Release search, album files and authorized downloads. No sign-in required.",
+                          &font_ui_18, cfg->screen_width - 2 * PAD, true);
+    lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
+    lv_obj_t *enabled = button(p, "", cfg->screen_width - 2 * PAD, 58, provider_setting_cb, (void *)0);
+    provider_enabled_text = lv_obj_get_child(enabled, 0);
+    lv_obj_t *format = button(p, "", cfg->screen_width - 2 * PAD, 58, provider_setting_cb, (void *)1);
+    provider_format_text = lv_obj_get_child(format, 0);
+    provider_refresh();
+    button(p, "Pause all transfers", cfg->screen_width - 2 * PAD, 58, pause_all_cb, NULL);
+    note = label(p, "Tap to change a setting. Preferred formats appear first; all available formats remain selectable. "
+        "Turning discovery off stops new searches; running transfers can be paused above. Restored transfers always wait for you to resume.",
+        &font_ui_18, cfg->screen_width - 2 * PAD, true);
+    lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
+    section(p, "Provider capabilities");
+    note = label(p, "Supported: release search, release files, source metadata, licensed audio downloads. "
+        "Not supported: streaming previews, artist pages, online playlists or automatic provider fallback. "
+        "Downloads keep the original audio quality and embedded tags, with an attribution sidecar for missing metadata.",
+        &font_ui_18, cfg->screen_width - 2 * PAD, true);
+    lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
+    route(p, "Wi-Fi settings", "Choose a network", &icon_wifi, OPEN_WIFI);
 }
 
 static download_job_t jobs[DOWNLOAD_MAX_JOBS];
@@ -654,7 +739,7 @@ static void poll_cb(lv_timer_t *timer) {
 static void nav_cb(lv_event_t *e) { if (tapped()) show_page((int)(intptr_t)lv_event_get_user_data(e)); }
 
 static void show_page(int tab) {
-    if (tab < HOME || tab > DOWNLOADS) return;
+    if (tab < HOME || tab > PROVIDERS) return;
     selected = tab;
     if (tab != HOME) home_art_drop();
     if (search_keyboard) search_keyboard_visible(false);
@@ -665,12 +750,13 @@ static void show_page(int tab) {
         if (tab == SEARCH) search_build();
         if (tab == LIBRARY) library_build();
         if (tab == DOWNLOADS) downloads_build();
+        if (tab == PROVIDERS) providers_build();
     }
-    for (int i = 0; i < 4; i++) if (page[i]) lv_obj_set_hidden(page[i], i != tab);
-    const char *titles[] = {"Sonix", "Search", "Your Library", "Downloads"};
+    for (int i = 0; i < 5; i++) if (page[i]) lv_obj_set_hidden(page[i], i != tab);
+    const char *titles[] = {"Sonix", "Search", "Your Library", "Downloads", "Discovery"};
     lv_label_set_text(heading, titles[tab]);
     for (int i = 0; i < 3; i++) {
-        bool active = i == (tab == DOWNLOADS ? LIBRARY : tab);
+        bool active = i == (tab == DOWNLOADS ? LIBRARY : tab == PROVIDERS ? SEARCH : tab);
         lv_obj_set_style_image_recolor(nav_icon[i], active ? mint() : quiet(), 0);
         lv_obj_set_style_text_color(nav_label[i], active ? ink() : quiet(), 0);
     }

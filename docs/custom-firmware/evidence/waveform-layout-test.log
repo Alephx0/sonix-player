@@ -1,0 +1,17 @@
+Xvfb display: localhost:99
+480 800
+{
+  "kind": "host simulator, not device performance",
+  "resolution": [
+    480,
+    800
+  ],
+  "window_visible_seconds": 0.142,
+  "provider_preferences_saved": true,
+  "navigation_cycles": 0,
+  "VmSize": "1446692 kB",
+  "VmHWM": "39404 kB",
+  "VmRSS": "38556 kB",
+  "Threads": "23",
+  "alive_after_navigation": true
+}

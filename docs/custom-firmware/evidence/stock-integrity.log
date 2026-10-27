@@ -1,0 +1,3 @@
+PASS xImage: 8 chunks, 3731520 bytes, MD5 c446c0a3b770674ea13bf8e42f63be7e
+PASS rootfs.squashfs: 77 chunks, 40103936 bytes, MD5 f50a0ca01ddf12d789668261c1af2f77
+Integrity only: this does not establish image authenticity or board compatibility.

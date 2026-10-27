@@ -2046,6 +2046,25 @@ static uint64_t thumb_hash(const char *path, int box, bool is_dir) {
 		h ^= (uint8_t)*p;
 		h *= 1099511628211ULL;
 	}
+	/* A cached "no artwork" for a track must expire when a cover is added
+	 * beside it, even though the audio file itself has not changed. One stat
+	 * on the loader thread avoids rescanning every directory on cache hits. */
+	if (!is_dir) {
+		char parent[1024];
+		snprintf(parent, sizeof(parent), "%s", path);
+		char *slash = strrchr(parent, '/');
+		if (slash) {
+			if (slash == parent) slash[1] = 0; else *slash = 0;
+			if (stat(parent, &st) == 0) {
+				snprintf(material, sizeof(material), "|folder-v1|%lld|%ld",
+					(long long)st.st_mtim.tv_sec, st.st_mtim.tv_nsec);
+				for (const char *p = material; *p; p++) {
+					h ^= (uint8_t)*p;
+					h *= 1099511628211ULL;
+				}
+			}
+		}
+	}
 	return h;
 }
 

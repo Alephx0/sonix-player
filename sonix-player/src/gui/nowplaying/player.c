@@ -320,6 +320,8 @@ static int cover_box_w, cover_box_h;   // the artwork spans the full screen widt
 static player_layout_t layout_choice; // the setting, saved in the config
 static bool layout_alt_now;		// and whether the current source can use it
 static bool layout_studio_now;	// likewise for the third arrangement
+static bool layout_sonix_now;
+static lv_obj_t *sonix_cover_empty, *sonix_heading;
 // The shape of the track and the sleeve's colour: up with the alternative
 // layout, and kept when the words are shown over it.
 static bool layout_wave_now;
@@ -939,6 +941,32 @@ static void cover_show(bool have_cover) {
 		return;
 	}
 	bool studio = layout_studio_now;
+	if (layout_sonix_now) {
+		/* Inset the existing decoded sleeve; no second bitmap or blur surface.
+		 * Leave room for the status/back controls and the track row below. */
+		int size = cover_box_w - 64;
+		if (size > cover_box_h - 132) size = cover_box_h - 132;
+		if (size < 64) size = 64;
+		lv_obj_set_size(cover_img, size, size);
+		lv_image_set_inner_align(cover_img, LV_IMAGE_ALIGN_CONTAIN);
+		lv_obj_align(cover_img, LV_ALIGN_BOTTOM_MID, 0, -20);
+		if (sonix_cover_empty) {
+			lv_obj_set_size(sonix_cover_empty, size, size);
+			lv_obj_align(sonix_cover_empty, LV_ALIGN_BOTTOM_MID, 0, -20);
+			lv_obj_set_hidden(sonix_cover_empty, have_cover);
+		}
+		if (cover_placeholder_icon)
+			lv_obj_align(cover_placeholder_icon, LV_ALIGN_BOTTOM_MID, 0,
+				-20 - size / 2 + lv_obj_get_height(cover_placeholder_icon) / 2);
+	} else {
+		lv_image_set_inner_align(cover_img, LV_IMAGE_ALIGN_DEFAULT);
+		if (current_cover.pixels)
+			lv_obj_set_size(cover_img, current_cover.dsc.header.w, current_cover.dsc.header.h);
+		lv_obj_center(cover_img);
+		if (cover_placeholder_icon) lv_obj_center(cover_placeholder_icon);
+		if (sonix_cover_empty) lv_obj_set_hidden(sonix_cover_empty, true);
+	}
+	if (sonix_heading) lv_obj_set_hidden(sonix_heading, !layout_sonix_now);
 	if (have_cover && !studio) {
 		lv_obj_set_hidden(cover_img, false);
 	} else {
@@ -1106,6 +1134,7 @@ static lv_color_t chrome_accent(void) {
 	if (layout_wave_now || (cover_accent && album_tone)) {
 		return alt_mark();
 	}
+	if (layout_sonix_now) return lv_color_hex(theme_is_dark() ? 0x63dfb2 : 0x087954);
 	return theme()->accent;
 }
 
@@ -1818,6 +1847,7 @@ static void lyrics_progress_apply(int32_t progress) {
 	lyrics_progress = progress;
 	lyrics_find_sync(progress == LYRICS_FULL);
 	bool rest = progress == 0;
+	if (sonix_heading) lv_obj_set_hidden(sonix_heading, !layout_sonix_now || !rest);
 	int32_t travel = cover_box_w - lyrics_pane_x;
 
 	if (rest) {
@@ -1841,6 +1871,7 @@ static void lyrics_progress_apply(int32_t progress) {
 	}
 	lyrics_shift(cover_img, away);
 	lyrics_shift(cover_placeholder_icon, away);
+	lyrics_shift(sonix_cover_empty, away);
 	if (!layout_alt_now) {
 		return; // the names stay in their row below the sleeve
 	}
@@ -3006,6 +3037,7 @@ static void apply_layout(void) {
 	align_title_with_star(); // the title may have just left its row, or come back to it
 
 	paint_alt_tint();
+	cover_show(current_cover.pixels != NULL);
 	bar_over_player_update(); // Studio's bar blurs nothing of its own
 }
 
@@ -3024,14 +3056,16 @@ static void update_layout(const device_state_t *state) {
 	bool local = playing_local_file(state);
 	bool lyrics = lyrics_wanted && local;
 	bool studio = layout_choice == PLAYER_LAYOUT_STUDIO;
+	bool sonix = layout_choice == PLAYER_LAYOUT_SONIX;
 	bool wave = layout_choice == PLAYER_LAYOUT_ALTERNATIVE && local;
 	bool alt = wave;
 
-	if (studio == layout_studio_now && alt == layout_alt_now && wave == layout_wave_now && lyrics == lyrics_allowed &&
+	if (sonix == layout_sonix_now && studio == layout_studio_now && alt == layout_alt_now && wave == layout_wave_now && lyrics == lyrics_allowed &&
 		alt_title_pill) {
 		return;
 	}
 	layout_studio_now = studio;
+	layout_sonix_now = sonix;
 	layout_alt_now = alt;
 	layout_wave_now = wave;
 	lyrics_allowed = lyrics;
@@ -5573,6 +5607,19 @@ void player_init(gui_config_t *cfg) {
 	cover_img = lv_image_create(cover_panel);
 	lv_obj_center(cover_img);
 	lv_obj_set_hidden(cover_img, true);
+	sonix_cover_empty = lv_obj_create(cover_panel);
+	lv_obj_remove_style_all(sonix_cover_empty);
+	lv_obj_add_style(sonix_cover_empty, &theme_style_card, 0);
+	lv_obj_set_style_radius(sonix_cover_empty, 12, 0);
+	lv_obj_set_clickable(sonix_cover_empty, false);
+	lv_obj_set_hidden(sonix_cover_empty, true);
+	lv_obj_move_background(sonix_cover_empty);
+	sonix_heading = lv_label_create(cover_panel);
+	lv_label_set_text(sonix_heading, "NOW PLAYING");
+	lv_obj_add_style(sonix_heading, &theme_style_text_dim, 0);
+	lv_obj_set_style_text_font(sonix_heading, &font_ui_16, 0);
+	lv_obj_align(sonix_heading, LV_ALIGN_TOP_MID, 0, 64);
+	lv_obj_set_hidden(sonix_heading, true);
 
 	// ---------------------------------------------------------------------
 	// Studio: the blurred sleeve behind the whole screen, and everything else
@@ -5695,13 +5742,16 @@ void player_init(gui_config_t *cfg) {
 
 	// Whichever arrangement was left selected, now that every widget it moves
 	// exists.
-	int saved = (int)config_get_int("screen", "player_layout_alt", 0);
+	int saved = (int)config_get_int("screen", "player_layout_alt",
+		cfg->screen_width == 480 && cfg->screen_height == 800 ? PLAYER_LAYOUT_SONIX : PLAYER_LAYOUT_STANDARD);
 	layout_choice = (saved == (int)PLAYER_LAYOUT_ALTERNATIVE)	? PLAYER_LAYOUT_ALTERNATIVE
 					: (saved == (int)PLAYER_LAYOUT_STUDIO)		? PLAYER_LAYOUT_STUDIO
+					: (saved == (int)PLAYER_LAYOUT_SONIX)      ? PLAYER_LAYOUT_SONIX
 																: PLAYER_LAYOUT_STANDARD;
 	cover_accent = config_get_bool("screen", "cover_accent", false);
 	layout_alt_now = false; // apply_layout() below puts the standard one up first
 	layout_studio_now = false;
+	layout_sonix_now = layout_choice == PLAYER_LAYOUT_SONIX;
 	apply_layout();
 
 	theme_register_refresh(player_refresh_theme);

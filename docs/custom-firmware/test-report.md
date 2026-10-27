@@ -17,6 +17,10 @@ is under [evidence](evidence/) and actual simulator images under [screenshots](s
 | Fresh live-source integration | Pass: download, MD5, indexing, offline decode | [live output](evidence/live-fresh-test.log) |
 | Packer compatibility/size guard | Pass, two test methods with multiple cases | [packaging output](evidence/packaging-test.log) |
 | Touch keyboard, release search/listing, navigation | Pass by capture/review | Home/Search/Library, keyboard, online release/audio variants and Downloads PNGs |
+| Provider preferences and repeated navigation | Pass | Saved enablement/MP3 preference asserted from config; 20 Home/Search/Library cycles without process exit |
+| Sonix Now Playing with/without artwork | Pass by capture/review | Uses synthetic original artwork fixture, inset art and existing transport widgets |
+| Original three player layouts | Host layout checks pass | Standard, Waveform and Studio captured with the same fixture; this does not certify playback behavior |
+| Stock OTA integrity | Pass, 85 chunks | [stock output](evidence/stock-integrity.log); integrity is not compatibility/authenticity |
 
 The deterministic queue suite exercises licence/source rejection, malformed
 metadata, incremental MD5 vectors, filename sanitization, exact file bytes,
@@ -35,6 +39,8 @@ and actual TLS tests are separate, not presented as one physical-network test.
 Library tests import two generated WAVs into an empty database, preserve existing
 tracks, avoid duplicates, fill metadata from an attribution sidecar, retain the
 Detect changes setting and verify persistence after reopen.
+They also verify newest-first history is capped at 64 rows and a cached absent
+thumbnail becomes a decoded image when artwork is added beside unchanged audio.
 
 The live test uses Archive `loc-jukebox-733632-toccata`, whose metadata declares
 the public-domain mark. In a **new card root**, the real worker downloaded
@@ -51,13 +57,15 @@ WSL. The baseline was measured before changes, using the same rendering mode.
 
 | Metric | Baseline | Integrated sample |
 |---|---:|---:|
-| Process launch to visible SDL window | 0.141 s | 0.132 s |
-| RSS / process high-water sample | 36,020 KiB | 37,744 KiB |
+| Process launch to visible SDL window | 0.141 s | 0.133 s |
+| Resident memory at final sample | 36,020 KiB | 39,480 KiB |
+| Process high-water RSS | 36,020 KiB | 40,352 KiB |
 | Threads at sample | 22 | 23 |
 
 These are single observations, not statistically controlled benchmarks. The
-integrated sample includes navigation, online search and a small indexed fixture;
-the baseline has less work. RSS difference is 1,724 KiB (about 4.8%). Virtual size
+integrated sample includes 20 navigation cycles, online search, an indexed audio
+fixture and synthetic artwork; the baseline has less work. Final RSS difference
+is 3,460 KiB (about 9.6%). Virtual size
 is much larger because of host library/thread mappings and is not resident RAM.
 Window visibility is not device cold boot or a guarantee that every page is ready.
 

@@ -26,11 +26,11 @@ No row marked preserved source implies all of its behavior was tested.
 | Album detail / format selection / source download action | Host-tested | Live release audio variants and format/size labels; no new artwork-rich detail page |
 | Local library sorting/filtering, playlists and favourites | Implemented/unverified | Routes reuse existing pages; exhaustive editing/sorting regression pending |
 | Persistent mini-player | Partial | Artwork/title/artist/state/transport/progress implemented on primary tabs; existing navigation owns legacy pages; actual audio-output state testing pending |
-| New Spotify-inspired full-screen Now Playing | Partial | Existing functional Standard/Studio/waveform layouts retained; no new custom layout delivered |
+| New Spotify-inspired full-screen Now Playing | Implemented; host layout tested | Fourth Sonix layout with inset centered artwork, missing-art card, heading and mint accent; original transport, lyrics/queue and favourite actions reused; physical playback testing pending |
 | Now Playing lyrics/queue/favourite/quality/shuffle/repeat | Implemented/unverified | Existing code and actions retained; simulator opens player; comprehensive behavioral verification pending |
-| Remote artwork cache and embedded artwork/tag enrichment | Partial | Local thumbnail loader reused; source metadata sidecar implemented; no remote-art cache or embedded retagging |
-| Native replaceable provider capability interface | Partial | Bounded native API and explicit capabilities implemented; one adapter, no runtime registry/provider selection UI |
-| Provider settings, quality/fallback/network configuration | Unsupported | Source-format selection exists; no general provider configuration or fallback order |
+| Remote artwork cache and embedded artwork/tag enrichment | Partial | Local thumbnail loader reused, with cached absence invalidated when folder artwork is added; source metadata sidecar implemented; no remote-art cache or embedded retagging |
+| Native replaceable provider capability interface | Partial | Bounded native API and explicit capabilities implemented; one adapter, no runtime registry or multiple-provider selection |
+| Provider settings, quality/fallback/network configuration | Partial; host-tested | Sources page exposes capabilities, persisted search enablement and MP3/FLAC preference, plus pause-all; no alternate provider/fallback order |
 | Authenticated providers and companion service | Unsupported | No companion or additional authenticated provider; existing Sonix services retained |
 | Online streaming preview from discovery | Unsupported | Adapter exposes downloads only; user-facing explanation provided |
 | Authorized source selection and input validation | Host-tested | Explicit public licence policy, HTTPS/source checks, restricted/private filtering and malformed-input tests |

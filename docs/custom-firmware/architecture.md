@@ -29,6 +29,18 @@ Home history queries fetch at most 24 rows for six unique recent tracks. Four
 album thumbnails use existing asynchronous coverloader slots at 112 px and are
 released when Home is hidden. The mini-player requests a 52 px copy of existing
 player artwork. No additional full-resolution remote artwork is retained.
+Thumbnail keys now include the parent directory modification time, so an absent
+cover cached before `cover.png` arrives does not remain absent indefinitely.
+In-place edits to an existing cover with unchanged directory timestamps still
+depend on the existing cache-refresh behavior; no full directory scan was added
+to every thumbnail cache hit.
+
+The fourth Now Playing arrangement (Sonix) resizes the existing artwork widget
+into an inset square, adds a missing-art card and heading, and reuses all original
+transport, favourite, queue and lyrics callbacks. It allocates no second decoded
+sleeve. Its layout choice is persisted alongside the three existing choices;
+only fresh 480×800 configurations default to it. The existing artwork-accent
+setting can override its mint accent using the already-computed album tone.
 
 ## Provider contract
 
@@ -37,6 +49,13 @@ search, release audio listing and validated item structures. The current adapter
 is a single native implementation, not a runtime extension loader. Another
 provider must explicitly implement its supported operations and associated
 validation; unsupported streaming/artist/playlist operations are not advertised.
+
+Search > Sources stores `discovery.enabled` and `discovery.format` in the existing
+configuration. Disabled discovery reduces All to local search and refuses new
+online requests. MP3/FLAC preference stably reorders available source variants,
+without hiding alternatives or changing their bytes. Disabling search does not
+silently cancel requested downloads; the settings page has an explicit pause-all
+action. No fallback registry or authentication UI is implied by this single adapter.
 
 Search uses Archive advanced search with an escaped literal title/creator query.
 At most 24 candidate releases are inspected; policy filtering can leave fewer

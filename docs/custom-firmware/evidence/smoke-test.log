@@ -6,10 +6,12 @@ Xvfb display: localhost:99
     480,
     800
   ],
-  "window_visible_seconds": 0.132,
-  "VmSize": "1445456 kB",
-  "VmHWM": "37744 kB",
-  "VmRSS": "37744 kB",
+  "window_visible_seconds": 0.133,
+  "provider_preferences_saved": true,
+  "navigation_cycles": 20,
+  "VmSize": "1446928 kB",
+  "VmHWM": "40352 kB",
+  "VmRSS": "39480 kB",
   "Threads": "23",
   "alive_after_navigation": true
 }

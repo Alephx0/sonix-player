@@ -1,7 +1,11 @@
+Synthetic UI fixture: /tmp/sonix-library-zdvjg33t/art/cover.png
+cover: 15602056 KB free, decode budget 65536 KB
+cover: decoded png to 240x240 (scaled)
 thread: library update runs below the interface (nice 10)
 thread: library update runs below the interface (nice 10)
 thread: library update runs below the interface (nice 10)
-config: /tmp/sonix-library-2hzaesmn/settings.ini not there yet, starting from defaults
-library: /tmp/sonix-library-2hzaesmn/library.db open, 0 tracks indexed
-library: /tmp/sonix-library-2hzaesmn/library.db open, 2 tracks indexed
-PASS library import: empty index, no duplicates, existing tracks retained, settings unchanged, persistent index
+config: /tmp/sonix-library-zdvjg33t/settings.ini not there yet, starting from defaults
+cover: thumbnail cache in /tmp/sonix-library-zdvjg33t/.local/thumbnails
+library: /tmp/sonix-library-zdvjg33t/library.db open, 0 tracks indexed
+library: /tmp/sonix-library-zdvjg33t/library.db open, 2 tracks indexed
+PASS library import: empty index, no duplicates, existing tracks retained, settings unchanged, persistent index, bounded newest-first history, new folder artwork invalidates cached absence

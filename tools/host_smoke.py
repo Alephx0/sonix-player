@@ -11,20 +11,24 @@ from pathlib import Path
 import shutil
 import signal
 import secrets
+import configparser
 import subprocess
 import time
 
 
-def run(repo, label, online=False):
+def run(repo, label, online=False, layout=None, card_root=None, cycles=0):
     repo = Path(repo).resolve()
     player = repo / 'sonix-player'
     out = repo / 'artifacts' / label
     out.mkdir(parents=True, exist_ok=True)
-    card = out / 'sd'
+    card = Path(card_root).resolve() if card_root else out / 'sd'
     card.mkdir(exist_ok=True)
     config = out / 'device_config.ini'
     config.write_text('[ui]\nlanguage=English\ntheme=dark\n[clock]\nconfigured=1\n'
                       '[power]\nscreen_off=0\nstandby=0\n')
+    if layout is not None:
+        with config.open('a') as stream:
+            stream.write(f'[screen]\nplayer_layout_alt={layout}\n')
     shutil.copytree(repo / 'sonix-packer/assets/R1/usr/resource',
                     player / 'usr/resource', dirs_exist_ok=True)
     env = dict(os.environ, SONIX_PANEL='480x800', SONIX_SD_ROOT=str(card),
@@ -79,13 +83,25 @@ def run(repo, label, online=False):
                                env=env, check=True, timeout=15)
             shot('home')
             if label != 'baseline':
-                def click(x, y):
+                def click(x, y, delay=.8):
                     subprocess.run(['xdotool', 'mousemove', '--window', window, str(x), str(y),
                                     'click', '1'], env=env, check=True)
-                    time.sleep(.8)
+                    time.sleep(delay)
                 for name, x in [('search', 240), ('library', 400), ('home-return', 80)]:
                     click(x, 760)
                     shot(name)
+                click(240, 760)
+                click(410, 208)
+                shot('provider-settings')
+                click(240, 250)
+                shot('provider-disabled')
+                click(240, 250)
+                click(240, 320)  # Prefer MP3, without hiding other formats.
+                saved = configparser.ConfigParser()
+                saved.read(config)
+                assert saved.getboolean('discovery', 'enabled')
+                assert saved.getint('discovery', 'format') == 1
+                metrics['provider_preferences_saved'] = True
                 click(240, 760)
                 if online:
                     click(315, 208)  # Online only: first result is a release.
@@ -102,6 +118,10 @@ def run(repo, label, online=False):
                     click(200, 340)
                     time.sleep(15)
                     shot('online-release')
+                for _ in range(cycles):
+                    for x in [80, 240, 400]:
+                        click(x, 760, .15)
+                metrics['navigation_cycles'] = cycles
                 click(400, 760)
                 click(140, 375)
                 shot('downloads')
@@ -139,5 +159,8 @@ if __name__ == '__main__':
     parser.add_argument('repo')
     parser.add_argument('--label', default='integrated')
     parser.add_argument('--online', action='store_true', help='Exercise live catalog search')
+    parser.add_argument('--layout', type=int, choices=range(4), help='Exercise a saved Now Playing layout')
+    parser.add_argument('--card-root', type=Path, help='Reuse a fixture SD root (run sequentially)')
+    parser.add_argument('--cycles', type=int, default=0, help='Repeated Home/Search/Library cycles')
     args = parser.parse_args()
-    run(args.repo, args.label, args.online)
+    run(args.repo, args.label, args.online, args.layout, args.card_root, args.cycles)
