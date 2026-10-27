@@ -12,7 +12,8 @@ static bool fail(char *out, size_t n, const char *message) {
     if (out && n) snprintf(out,n,"%s",message);
     return false;
 }
-unsigned discovery_capabilities(void) { return DISCOVERY_SEARCH_ALBUMS|DISCOVERY_ALBUM_TRACKS|DISCOVERY_DOWNLOAD; }
+unsigned discovery_capabilities(void) { return DISCOVERY_SEARCH_ALBUMS|DISCOVERY_ALBUM_TRACKS|DISCOVERY_DOWNLOAD|
+    DISCOVERY_ARTIST_RELEASES|DISCOVERY_PAGED_RESULTS; }
 const char *discovery_provider_name(void) { return "Internet Archive · openly licensed audio"; }
 static bool identifier_ok(const char *s) {
     if (!s || !*s || strlen(s)>=128 || *s=='.') return false;
@@ -119,12 +120,15 @@ bool discovery_parse_search(const char *body,discovery_results_t *out,char *err,
         if(out->count==DISCOVERY_MAX_RESULTS){out->truncated=true;break;}
         out->items[out->count++]=item;
     }
-    out->truncated=out->truncated || json_llong(&d,json_path(&d,json_root(&d),"response.numFound"),count)>count;
+    long long start=json_llong(&d,json_path(&d,json_root(&d),"response.start"),0);
+    long long total=json_llong(&d,json_path(&d,json_root(&d),"response.numFound"),count);
+    out->truncated=out->truncated || (start>=0 && total>start && total-start>count);
     json_free(&d); return true;
 }
-bool discovery_parse_album(const char *id,const char *body,discovery_results_t *out,char *err,size_t n) {
+bool discovery_parse_album_page(const char *id,const char *body,unsigned page,discovery_results_t *out,char *err,size_t n) {
     if(!out || !identifier_ok(id))return fail(err,n,"Invalid release identifier.");
     memset(out,0,sizeof(*out)); if(err&&n)err[0]=0;
+    if(page<1 || page>DISCOVERY_MAX_PAGES)return fail(err,n,"Invalid source page.");
     json_doc_t d; if(!parse(body,&d,err,n))return false;
     int root=json_root(&d), meta=json_get(&d,root,"metadata"), files=json_get(&d,root,"files");
     discovery_item_t base={0};
@@ -137,6 +141,7 @@ bool discovery_parse_album(const char *id,const char *body,discovery_results_t *
     snprintf(base.id,sizeof(base.id),"%s",id);base.kind=DISCOVERY_TRACK;
     field(&d,meta,"title",base.album,sizeof(base.album));field(&d,meta,"creator",base.artist,sizeof(base.artist));
     snprintf(base.artwork,sizeof(base.artwork),"https://archive.org/services/img/%s",id);
+    unsigned accepted=0, skip=(page-1)*DISCOVERY_MAX_RESULTS;
     for(int i=0;i<json_len(&d,files);i++) {
         discovery_item_t item=base; int f=json_at(&d,files,i);
         if(truthy(&d,f,"private") || !field(&d,f,"name",item.filename,sizeof(item.filename)))continue;
@@ -151,11 +156,15 @@ bool discovery_parse_album(const char *id,const char *body,discovery_results_t *
         int wrote=snprintf(item.url,sizeof(item.url),"https://archive.org/download/%s/%s",id,file);
         if(wrote<=0 || (size_t)wrote>=sizeof(item.url))continue;
         item.downloadable=true;
+        if(accepted++<skip)continue;
         if(out->count==DISCOVERY_MAX_RESULTS){out->truncated=true;break;}
         out->items[out->count++]=item;
     }
     json_free(&d);
     return out->count>0 || fail(err,n,"No supported downloadable audio with integrity metadata was found.");
+}
+bool discovery_parse_album(const char *id,const char *body,discovery_results_t *out,char *err,size_t n) {
+    return discovery_parse_album_page(id,body,1,out,err,n);
 }
 static bool get(const char *url,char **body,char *err,size_t n) {
     size_t len=0;
@@ -164,25 +173,36 @@ static bool get(const char *url,char **body,char *err,size_t n) {
     if(len>=RESPONSE_LIMIT){free(*body);*body=NULL;return fail(err,n,"Release is too large for this device. Choose a smaller release.");}
     return true;
 }
-bool discovery_search(const char *query,discovery_results_t *out,char *err,size_t n) {
-    if(!query || !*query || strlen(query)>120)return fail(err,n,"Enter a search of 1 to 120 bytes.");
+bool discovery_search_page(const char *query,bool artist_only,unsigned page,discovery_results_t *out,char *err,size_t n) {
+    if(out)memset(out,0,sizeof(*out));
+    if(!out || page<1 || page>DISCOVERY_MAX_PAGES)return fail(err,n,"Invalid search page.");
+    if(!query || !*query || strlen(query)>127)return fail(err,n,"Enter a search of 1 to 127 bytes.");
     /* Quote a literal phrase; never let input inject a license-filter expression. */
-    char literal[241];size_t j=0;
+    char literal[255];size_t j=0;
     for(const unsigned char *p=(const unsigned char*)query;*p;p++) {
         if(*p<32)continue;
         if(*p=='"'||*p=='\\')literal[j++]='\\';
         literal[j++]=(char)*p;
     } literal[j]=0;
+    if(!j)return fail(err,n,"Enter an artist, album or track name.");
     char q[640],encoded[1920],url[2300];
-    snprintf(q,sizeof(q),"mediatype:audio AND licenseurl:* AND (title:\"%s\" OR creator:\"%s\")",literal,literal);
+    if(artist_only)snprintf(q,sizeof(q),"mediatype:audio AND licenseurl:* AND creator:\"%s\"",literal);
+    else snprintf(q,sizeof(q),"mediatype:audio AND licenseurl:* AND (title:\"%s\" OR creator:\"%s\")",literal,literal);
     http_url_encode(q,encoded,sizeof(encoded));
-    snprintf(url,sizeof(url),"https://archive.org/advancedsearch.php?q=%s&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&rows=24&page=1&output=json",encoded);
+    snprintf(url,sizeof(url),"https://archive.org/advancedsearch.php?q=%s&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&rows=24&page=%u&sort[]=identifier%%20asc&output=json",encoded,page);
     char *body=NULL;if(!get(url,&body,err,n))return false;
     bool ok=discovery_parse_search(body,out,err,n);free(body);return ok;
 }
-bool discovery_album(const char *id,discovery_results_t *out,char *err,size_t n) {
-    if(!identifier_ok(id))return fail(err,n,"Invalid release identifier.");
+bool discovery_search(const char *query,discovery_results_t *out,char *err,size_t n) {
+    return discovery_search_page(query,false,1,out,err,n);
+}
+bool discovery_album_page(const char *id,unsigned page,discovery_results_t *out,char *err,size_t n) {
+    if(out)memset(out,0,sizeof(*out));
+    if(!out || !identifier_ok(id) || page<1 || page>DISCOVERY_MAX_PAGES)return fail(err,n,"Invalid release or page.");
     char url[256];snprintf(url,sizeof(url),"https://archive.org/metadata/%s",id);
     char *body=NULL;if(!get(url,&body,err,n))return false;
-    bool ok=discovery_parse_album(id,body,out,err,n);free(body);return ok;
+    bool ok=discovery_parse_album_page(id,body,page,out,err,n);free(body);return ok;
+}
+bool discovery_album(const char *id,discovery_results_t *out,char *err,size_t n) {
+    return discovery_album_page(id,1,out,err,n);
 }

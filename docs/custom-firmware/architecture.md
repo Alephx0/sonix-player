@@ -45,23 +45,31 @@ setting can override its mint accent using the already-computed album tone.
 ## Provider contract
 
 `system/discovery/discovery.h` exposes provider name, capability bits, release
-search, release audio listing and validated item structures. The current adapter
+search, creator release lists, paged release audio listing and validated item structures. The current adapter
 is a single native implementation, not a runtime extension loader. Another
 provider must explicitly implement its supported operations and associated
-validation; unsupported streaming/artist/playlist operations are not advertised.
+validation; unsupported streaming/artist-biography/playlist operations are not advertised.
 
 Search > Sources stores `discovery.enabled` and `discovery.format` in the existing
 configuration. Disabled discovery reduces All to local search and refuses new
 online requests. MP3/FLAC preference stably reorders available source variants,
-without hiding alternatives or changing their bytes. Disabling search does not
+within each page, without hiding alternatives or changing their bytes. Disabling search does not
 silently cancel requested downloads; the settings page has an explicit pause-all
 action. No fallback registry or authentication UI is implied by this single adapter.
 
-Search uses Archive advanced search with an escaped literal title/creator query.
-At most 24 candidate releases are inspected; policy filtering can leave fewer
-results. There is no pagination or global track ranking. Release metadata is
-limited to 256 KiB; excessive data returns a clear failure. Result structures
-are bounded to 24 entries. IDs, filenames, file sizes, digest and source URL are
+Search uses [Archive advanced search](https://archive.org/advancedsearch.php)
+with an escaped literal title/creator query. Release files come from the
+[metadata API](https://archive.org/developers/md-read.html).
+Each page inspects at most 24 candidate releases; policy filtering can leave fewer
+results, including an empty page with more candidates available. Next/Previous
+requests use stable identifier ordering and pages 1–1000. Artist releases search
+the source creator phrase, which may represent multiple contributors rather than
+a canonical artist identity. A release's Results button returns to its catalog
+query and page. There is no global track ranking or search suggestion service.
+Release metadata is limited to 256 KiB; excessive data returns a clear failure.
+Its validated audio variants are paged locally in groups of 24; each page fetches
+the bounded metadata again. Result structures are bounded to 24 entries.
+IDs, filenames, file sizes, digest and source URL are
 validated before a file is accepted into the queue.
 
 Allowed licence URLs are explicit Creative Commons CC0/public-domain mark,
@@ -108,7 +116,11 @@ overrides remain authoritative. This is sidecar enrichment, not embedded retaggi
 A completion generation is polled once per second. Each missing completed file
 is passed to `library_import_download()` through the existing scanner worker and
 transaction/index path. It does not enable Detect changes or prune other tracks.
-A busy scanner defers import. The small import regression uses the real host objects
+A busy or closed library defers import. Round-robin selection prevents a removed
+or undecodable file from starving later completions. Unindexed attempts wait 60
+idle-scanner polls before retry; a new completion starts a fresh sweep. The
+generation remains pending until every current completed file is in the index.
+The import scheduler has a separate deterministic regression. The library import regression uses the real host objects
 and verifies duplicate suppression, existing-track retention and reopen persistence.
 
 Card detach and USB storage export join the transfer worker before releasing

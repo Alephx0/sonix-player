@@ -21,8 +21,8 @@ No row marked preserved source implies all of its behavior was tested.
 | Home recent listening, recent albums, favourites/playlists shortcuts | Partial | Six history entries, four thumbnail cards and fixed shortcuts implemented; empty/small-library screenshots; populated history not stress-tested |
 | Configurable Home shortcuts/personalized or pinned collections | Partial | Existing customizable classic library remains; new Home configuration and pins absent |
 | Unified Local / Online / All search and native keyboard | Host-tested | Local artist hit plus live release search; keyboard and results captured |
-| Search suggestions, ranking, pagination | Unsupported | Literal release query, maximum 24 candidates; refine-query message; no suggestions or pagination |
-| Online artists, tracks, albums, playlists, podcasts | Partial | Release search/listing supports title/creator and track variants; no dedicated online artist pages or global track/playlist API; podcasts stay in existing service screens |
+| Search suggestions, ranking, pagination | Partial; host-tested | Paged literal release query, 24 candidates/page, stable identifier order, Previous/Next; no suggestions or relevance ranking |
+| Online artists, tracks, albums, playlists, podcasts | Partial; host-tested | Creator release lists, title/creator search and paged track variants; no canonical artist profiles/biographies or global track/playlist API; podcasts stay in existing service screens |
 | Album detail / format selection / source download action | Host-tested | Live release audio variants and format/size labels; no new artwork-rich detail page |
 | Local library sorting/filtering, playlists and favourites | Implemented/unverified | Routes reuse existing pages; exhaustive editing/sorting regression pending |
 | Persistent mini-player | Partial | Artwork/title/artist/state/transport/progress implemented on primary tabs; existing navigation owns legacy pages; actual audio-output state testing pending |

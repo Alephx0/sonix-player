@@ -1,0 +1,21 @@
+PASS paged catalog/artist queries: literal escaping, valid page bounds, final/empty eligible pages, release file pagination
+PASS: provider parsing/license bounds, incremental MD5, sanitization, exact bytes, duplicate queue, retry+resume, pause/resume, cancellation, integrity rejection, insufficient storage, removed card, persisted-paused restoration, symlink rejection
+Artifacts: /tmp/sonix-discovery-test-SjT4AA
+http: /etc/resolv.conf has moved; the resolver reads it again
+tls: OpenSSL 3.0.13 30 Jan 2024, certificates from /tmp/sonix-tls-test-0j_e4txy/cert.pem
+http: TLS to 127.0.0.1 failed: tls_cert_rejected
+PASS: actual TLS verification, exact length, valid/invalid ranges, ignored Range restart, encoded/chunked rejection, HTTPS redirects, downgrade refusal, redirect limit, 404, metadata HTTPS-only
+http: /etc/resolv.conf has moved; the resolver reads it again
+tls: OpenSSL 3.0.13 30 Jan 2024, certificates from /etc/ssl/certs/
+LIVE SEARCH: 11 licensed releases (truncated=1)
+01-j.-s.-bach-gesangbuch-cantate-643231 | J.S. BACH - Musikalisches Gesangbuch - Cantate 643231 | https://creativecommons.org/publicdomain/mark/1.0/
+01BachSonataInEFlatBWV10311.AllegroModerato | 01 Bach Sonata In E Flat, BWV 1031 1. Allegro Moderato | http://creativecommons.org/publicdomain/mark/1.0/
+01joh.chr.bachkonzertadur | Johann Christian BACH: Konzert A-Dur für Cembalo | http://creativecommons.org/publicdomain/mark/1.0/
+01joh.christianbachsinfoniebdur1.satz | Johann Christian Bach: Sinfonie B-Dur | http://creativecommons.org/publicdomain/mark/1.0/
+LIVE ALBUM: 18 downloadable audio variants
+01 - J.S.BACH Geistliches Gesangbuch - Cantate 643231 Side A - Gib Dich zufrieden und sei stille.flac | 12129772 bytes | flac
+http: /etc/resolv.conf has moved; the resolver reads it again
+tls: OpenSSL 3.0.13 30 Jan 2024, certificates from /etc/ssl/certs/
+PASS catalog page 1: 11 eligible releases, more=1, first=01-j.-s.-bach-gesangbuch-cantate-643231
+PASS catalog page 2: 12 eligible releases, more=1, first=4thInventionMelody
+PASS creator release list: Herta FLEBBE - Sopran, Frauke HAASEMANN - Alt, Wilhelm KAISER - Tenor, Paul GÜMMER - Bass, 1 eligible releases

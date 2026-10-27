@@ -355,6 +355,9 @@ typedef struct {
 static search_result_t pending, shown;
 static pthread_mutex_t search_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool search_busy, search_ready, request_album;
+static bool request_artist, browse_artist;
+static unsigned request_page = 1, browse_page = 1;
+static char browse_query[256], release_artist[128];
 static int request_filter;
 static char request_text[256];
 static lv_obj_t *search_field, *search_results, *search_status, *filter_buttons[3], *search_keyboard_parent;
@@ -373,12 +376,12 @@ static void local_collect(library_search_type_t type, const char *name, const ch
 static void *search_worker(void *unused) {
     (void)unused;
     memset(&pending, 0, sizeof(pending));
-    if (!request_album && request_filter != FILTER_ONLINE)
+    if (!request_album && !request_artist && request_page == 1 && request_filter != FILTER_ONLINE)
         library_search(request_text, LOCAL_HITS / 3, local_collect, &pending);
     if (request_album)
-        discovery_album(request_text, &pending.online, pending.error, sizeof(pending.error));
+        discovery_album_page(request_text, request_page, &pending.online, pending.error, sizeof(pending.error));
     else if (request_filter != FILTER_LOCAL)
-        discovery_search(request_text, &pending.online, pending.error, sizeof(pending.error));
+        discovery_search_page(request_text, request_artist, request_page, &pending.online, pending.error, sizeof(pending.error));
     pthread_mutex_lock(&search_lock);
     search_ready = true;
     pthread_mutex_unlock(&search_lock);
@@ -394,18 +397,29 @@ static void search_keyboard_visible(bool visible) {
     lv_obj_set_height(search_results, height > 40 ? height : 40);
 }
 
-static void start_search(const char *query, bool album) {
+static void start_search_page(const char *query, bool album, bool artist, unsigned page_number) {
     if (search_busy) { gui_notify_popup("A search is already running."); return; }
     if (!query || !query[0]) { gui_notify_popup("Enter an artist, album or track."); return; }
-    snprintf(request_text, sizeof(request_text), "%s", query);
-    request_album = album;
-    request_filter = search_filter;
+    int filter = (album || artist || page_number > 1) ? FILTER_ONLINE : search_filter;
     if (!config_get_bool("discovery", "enabled", true)) {
-        if (album || request_filter == FILTER_ONLINE) {
+        if (album || filter == FILTER_ONLINE) {
             gui_notify_popup("Online discovery is disabled. Enable it in Sources.");
             return;
         }
-        request_filter = FILTER_LOCAL;
+        filter = FILTER_LOCAL;
+    }
+    /* Pagination may pass request_text itself. Copy before updating state. */
+    char text[sizeof(request_text)];
+    snprintf(text, sizeof(text), "%s", query);
+    snprintf(request_text, sizeof(request_text), "%s", text);
+    request_album = album;
+    request_artist = artist;
+    request_page = page_number;
+    request_filter = filter;
+    if (!album) {
+        snprintf(browse_query, sizeof(browse_query), "%s", text);
+        browse_artist = artist;
+        browse_page = page_number;
     }
     search_keyboard_visible(false);
     lv_label_set_text(search_status, album ? "Loading release..." : "Searching...");
@@ -419,6 +433,25 @@ static void start_search(const char *query, bool album) {
     int rc = pthread_create(&thread, &attr, search_worker, NULL);
     pthread_attr_destroy(&attr);
     if (rc != 0) { search_busy = false; lv_label_set_text(search_status, "Could not start search. Try again."); }
+}
+
+static void start_search(const char *query, bool album) { start_search_page(query, album, false, 1); }
+
+static void page_cb(lv_event_t *e) {
+    if (!tapped() || search_busy) return;
+    int direction = (int)(intptr_t)lv_event_get_user_data(e);
+    if ((direction < 0 && request_page <= 1) || (direction > 0 && request_page >= DISCOVERY_MAX_PAGES)) return;
+    start_search_page(request_text, request_album, request_artist, request_page + direction);
+}
+
+static void results_cb(lv_event_t *e) {
+    (void)e;
+    if (tapped() && browse_query[0]) start_search_page(browse_query, false, browse_artist, browse_page);
+}
+
+static void artist_cb(lv_event_t *e) {
+    (void)e;
+    if (tapped() && release_artist[0]) start_search_page(release_artist, false, true, 1);
 }
 
 static void submit_cb(lv_event_t *e) { (void)e; start_search(lv_textarea_get_text(search_field), false); }
@@ -451,7 +484,11 @@ static void local_hit_cb(lv_event_t *e) {
 static void online_hit_cb(lv_event_t *e) {
     discovery_item_t *item = lv_event_get_user_data(e);
     if (!tapped() || search_busy) return;
-    if (item->kind == DISCOVERY_ALBUM) { start_search(item->id, true); return; }
+    if (item->kind == DISCOVERY_ALBUM) {
+        snprintf(release_artist, sizeof(release_artist), "%s", item->artist);
+        start_search(item->id, true);
+        return;
+    }
     if (!gui_card_available()) { gui_notify_no_card(); return; }
     char error[192] = "Could not open the download queue.";
     unsigned id = 0;
@@ -467,6 +504,7 @@ static void online_hit_cb(lv_event_t *e) {
 
 static void search_draw(void) {
     lv_obj_clean(search_results);
+    lv_obj_scroll_to_y(search_results, 0, LV_ANIM_OFF);
     shown = pending;
     /* A preference reorders original source files; it never transcodes or
      * hides alternative formats. Stable insertion keeps their source order. */
@@ -494,6 +532,16 @@ static void search_draw(void) {
             button(search_results, name, cfg->screen_width - 2 * PAD, 62, local_hit_cb, hit);
         }
     }
+    if (request_album) {
+        lv_obj_t *nav = box(search_results, cfg->screen_width - 2 * PAD, 46, false);
+        lv_obj_set_flex_flow(nav, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_pad_column(nav, 12, 0);
+        button(nav, "Results", 128, 46, results_cb, NULL);
+        if (release_artist[0]) button(nav, "Artist releases", 210, 46, artist_cb, NULL);
+    } else if (request_artist) {
+        lv_obj_t *artist_name = label(search_results, request_text, &font_ui_22_bold, cfg->screen_width - 2 * PAD, false);
+        lv_obj_set_height(artist_name, 30);
+    }
     if (shown.online.count) section(search_results, request_album ? "Available audio files" : "Online releases");
     for (int i = 0; i < shown.online.count; i++) {
         discovery_item_t *item = &shown.online.items[i];
@@ -513,11 +561,19 @@ static void search_draw(void) {
         lv_label_set_long_mode(err, LV_LABEL_LONG_WRAP);
     }
     char status[128];
-    snprintf(status, sizeof(status), "%d local / %d online%s", shown.local_count, shown.online.count,
-             shown.online.truncated ? "  /  Refine for more" : "");
+    snprintf(status, sizeof(status), "%d local / %d online / Page %u", shown.local_count, shown.online.count, request_page);
     lv_label_set_text(search_status, status);
     if (!shown.local_count && !shown.online.count && !shown.error[0])
-        label(search_results, "No matches. Try an artist or album name.", &font_ui_18, cfg->screen_width - 2 * PAD, true);
+        label(search_results, shown.online.truncated ? "No eligible releases on this page. Try the next page." :
+              "No matches. Try an artist or album name.", &font_ui_18, cfg->screen_width - 2 * PAD, true);
+    if (request_page > 1 || shown.online.truncated) {
+        lv_obj_t *nav = box(search_results, cfg->screen_width - 2 * PAD, 52, false);
+        lv_obj_set_flex_flow(nav, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_pad_column(nav, 12, 0);
+        if (request_page > 1) button(nav, "Previous", 180, 52, page_cb, (void *)(intptr_t)-1);
+        if (shown.online.truncated && request_page < DISCOVERY_MAX_PAGES)
+            button(nav, "Next page", 180, 52, page_cb, (void *)(intptr_t)1);
+    }
     if (shown.local_count >= LOCAL_HITS / 3)
         route(search_results, "Search the full local library", "This overview shows up to six hits per category", &icon_search, OPEN_LOCAL_SEARCH);
 }
@@ -614,8 +670,9 @@ static void providers_build(void) {
         &font_ui_18, cfg->screen_width - 2 * PAD, true);
     lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
     section(p, "Provider capabilities");
-    note = label(p, "Supported: release search, release files, source metadata, licensed audio downloads. "
-        "Not supported: streaming previews, artist pages, online playlists or automatic provider fallback. "
+    note = label(p, "Supported: paged release search, artist release lists, release files, source metadata, licensed audio downloads. "
+        "Artist lists follow source creator names, which may include several contributors. "
+        "Not supported: streaming previews, artist biographies, online playlists or automatic provider fallback. "
         "Downloads keep the original audio quality and embedded tags, with an attribution sidecar for missing metadata.",
         &font_ui_18, cfg->screen_width - 2 * PAD, true);
     lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);

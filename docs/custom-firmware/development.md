@@ -55,7 +55,7 @@ python3 tools/host_smoke.py "$PWD" --online
 
 The first command enables ASan/UBSan by default and uses deterministic queue
 fixtures plus a temporary local TLS server. `LIVE=1` additionally exercises live
-catalog search. `test_live_download.py` contacts Archive and stores an openly
+catalog pages and creator release lists. `test_live_download.py` contacts Archive and stores an openly
 licensed fixture under `artifacts/integrated/sd`. It uses the actual HTTPS, queue,
 checksum, metadata index and decoder implementations. It does not emit DAC audio.
 Do not run the live integration and simulator concurrently against the same SD root.
@@ -74,6 +74,14 @@ exercises saved Standard, Waveform, Studio or Sonix selection. Use a separate
 sequential runs. `tools/make_artwork_fixture.py /path/to/fixture/sd/Downloads`
 creates original geometric `cover.png` test data; it refuses an existing image.
 These images are explicitly synthetic and do not represent provider artwork.
+
+`--browse` visits the selected release's artist list. `--paging` uses touch drags
+to reach Next/Previous and captures both pages; these images must be reviewed.
+`--download --browse --label touch-download-new` exercises a complete source-file
+tap, real transfer, digest verification and automatic SQLite library insertion.
+The download scenario requires a fresh label/card root and contacts Archive;
+it fails on transfer errors or missing automatic indexing. It downloads the
+first source variant after MP3 preference, so source content/size may change.
 
 ## Packaging, updating and recovery
 
@@ -108,7 +116,7 @@ identity, memory, modules and partition information from an existing R1 shell.
   suspend, audio, filesystem and recovery checks before a flash candidate.
 - Review new UI strings for translation and long-text layouts before release.
 
-Known reliability limits include source-side metadata/licence accuracy, no
-provider pagination, finite retry policy, sidecar metadata instead of embedded
+Known reliability limits include source-side metadata/licence accuracy, a
+1000-page catalog ceiling and bounded release metadata, finite retry policy, sidecar metadata instead of embedded
 retagging, unmeasured audio scheduling under actual hardware load, and queue
 shutdown waiting on connection establishment. See the feature matrix for scope.

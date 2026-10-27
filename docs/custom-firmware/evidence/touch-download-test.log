@@ -1,0 +1,23 @@
+Xvfb display: localhost:99
+480 800
+{
+  "kind": "host simulator, not device performance",
+  "resolution": [
+    480,
+    800
+  ],
+  "window_visible_seconds": 0.14,
+  "provider_preferences_saved": true,
+  "touch_download": {
+    "source": "01-j.-s.-bach-gesangbuch-cantate-643231",
+    "bytes": 3176440,
+    "md5_verified": true,
+    "automatically_indexed": true
+  },
+  "navigation_cycles": 20,
+  "VmSize": "1445536 kB",
+  "VmHWM": "38104 kB",
+  "VmRSS": "38104 kB",
+  "Threads": "23",
+  "alive_after_navigation": true
+}

@@ -70,30 +70,16 @@
 #include "src/system/net/webcgi.h"
 #include "src/system/net/wifi.h"
 #include "src/system/discovery/download_queue.h"
+#include "src/system/discovery/download_import.h"
 
 
 static volatile sig_atomic_t running = 1;
 
 // The scanner and downloads never touch LVGL. Completed files are handed to
 // the library on the UI thread, one at a time, through its existing worker.
-// Keep a pending generation until indexing really finished; a busy scanner
-// or an absent card must not lose the completion notification.
 static void downloaded_library_poll(lv_timer_t *timer) {
 	(void)timer;
-	static unsigned indexed_revision;
-	unsigned revision = download_revision();
-	if (revision == indexed_revision || !library_is_open() || library_scan_running()) return;
-	static download_job_t jobs[DOWNLOAD_MAX_JOBS];
-	int count = download_snapshot(jobs, DOWNLOAD_MAX_JOBS);
-	for (int i = 0; i < count; ++i) {
-		char title[256];
-		if (jobs[i].state == DOWNLOAD_DONE &&
-			!library_track_title(jobs[i].path, title, sizeof(title))) {
-			library_import_download(jobs[i].path);
-			return;
-		}
-	}
-	indexed_revision = revision;
+	download_import_poll();
 }
 
 #ifdef HOST_BUILD

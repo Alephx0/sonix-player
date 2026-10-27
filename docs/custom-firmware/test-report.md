@@ -21,6 +21,9 @@ is under [evidence](evidence/) and actual simulator images under [screenshots](s
 | Sonix Now Playing with/without artwork | Pass by capture/review | Uses synthetic original artwork fixture, inset art and existing transport widgets |
 | Original three player layouts | Host layout checks pass | Standard, Waveform and Studio captured with the same fixture; this does not certify playback behavior |
 | Stock OTA integrity | Pass, 85 chunks | [stock output](evidence/stock-integrity.log); integrity is not compatibility/authenticity |
+| Paged catalog and creator releases | Pass, deterministic and live provider tests | [live catalog output](evidence/live-catalog-test.log); touch paging/artist captures |
+| Touch-initiated download and automatic library insertion | Pass on host with actual HTTPS and scanner | [touch output](evidence/touch-download-test.log), 3,176,440 bytes with matching MD5 |
+| Failed import fairness and retry | Pass with ASan + UBSan | [suite output](evidence/discovery-test.log); removed/undecodable jobs do not starve later completions |
 
 The deterministic queue suite exercises licence/source rejection, malformed
 metadata, incremental MD5 vectors, filename sanitization, exact file bytes,
@@ -29,6 +32,18 @@ cancel, corrupt data, simulated full storage, removed/replaced card root,
 persisted-paused recovery, symlinked download directory rejection, and a
 concurrently created destination that must not be replaced. The full-storage
 fixture wraps both `fstatvfs` and `fstatvfs64`, matching the app's large-file flags.
+
+Pagination fixtures cover literal escaping, creator-only queries, page bounds,
+final and empty-but-not-final catalog pages, and a 30-file release split into
+24/6 variants. Live catalog pages returned 11 and 12 eligible releases with
+distinct first identifiers. The creator phrase returned one eligible release.
+The full touch workflow downloaded the selected Bach release's MP3 variant into
+a fresh card root and observed the main application's completion poll import it
+into SQLite, without calling the import API from the test. This verifies UI-to-
+worker-to-library integration on the host; it does not establish device playback.
+The final touch run used the revised fair import scheduler and completed 20
+additional Home/Search/Library cycles without process exit. Next/Previous
+gestures were checked in a separate [paging run](evidence/paging-test.log).
 
 TLS tests use an actual temporary certificate/server and the app's HTTP/TLS code.
 They check accepted/rejected ranges and totals, ignored-Range restart, exact

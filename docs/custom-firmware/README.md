@@ -13,8 +13,10 @@ Fork: [Alephx0/sonix-player](https://github.com/Alephx0/sonix-player), branch
 
 1. Home offers recent listening, recently added albums, favourites and playlists.
 2. Search has All / Local / Online filters and the native touch keyboard.
-3. Online finds Internet Archive releases with explicit supported public licences.
-4. Open a release and tap an available audio format to enqueue its source file.
+3. Online finds Internet Archive releases with explicit supported public licences;
+   Previous/Next browses more results within fixed memory bounds.
+4. Open a release, browse its creator's releases, or tap an available audio format
+   to enqueue its source file. Results returns to the preceding catalog page.
 5. Your Library > Downloads shows progress, pause/resume, retry, cancel and play.
 6. A completed, checksum-verified file is imported into the existing local library.
    Existing embedded tags are retained; missing title/artist/album use an attribution
@@ -61,10 +63,16 @@ The original [Standard](screenshots/standard-player.png),
 [Waveform](screenshots/waveform-player.png) and [Studio](screenshots/studio-player.png)
 arrangements were also captured with this fixture.
 
+New live-path captures: [artist releases](screenshots/artist-releases.png),
+[catalog page two](screenshots/page-two.png), and
+[touch-initiated completed download](screenshots/touch-transfer-indexed.png).
+The touch download's size, checksum and automatic library import are asserted
+in [its test output](evidence/touch-download-test.log).
+
 ## Remaining product work
 
 The feature matrix is the authoritative scope ledger. In particular, online
-artist pages, independent track/playlist search, remote artwork caching,
+artist profiles/biographies, independent track/playlist search, remote artwork caching,
 streaming previews, multiple-provider selection/fallback, configurable Home
 shortcuts, pinned collections and translations of new strings
 are incomplete. SpotBye dynamic network tracing needs an isolated Windows VM.
