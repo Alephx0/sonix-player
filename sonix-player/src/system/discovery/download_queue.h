@@ -1,7 +1,7 @@
 #ifndef SONIX_DOWNLOAD_QUEUE_H
 #define SONIX_DOWNLOAD_QUEUE_H
 #include "discovery.h"
-#define DOWNLOAD_MAX_JOBS 8
+#define DOWNLOAD_MAX_JOBS 32
 typedef enum {
     DOWNLOAD_QUEUED, DOWNLOAD_RUNNING, DOWNLOAD_PAUSED, DOWNLOAD_DONE,
     DOWNLOAD_FAILED, DOWNLOAD_CANCELLED
@@ -19,6 +19,10 @@ typedef struct {
 bool download_queue_init(const char *sd_root);
 /* 0 on error; existing job ID on duplicate. Rejects unlicensed or malformed item. */
 unsigned download_enqueue(const discovery_item_t *item, char *error, size_t size);
+/* Atomic bounded release submission: no partial enqueue on failure. */
+bool download_enqueue_release(const discovery_results_t *release, char *error, size_t size);
+/* Exact source identity; copies the matching job without a large UI snapshot. */
+bool download_lookup(const discovery_item_t *item, download_job_t *out);
 int download_snapshot(download_job_t *out, int capacity);
 bool download_cancel(unsigned id);
 bool download_pause(unsigned id);

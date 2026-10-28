@@ -37,7 +37,7 @@ int http_stream_read(http_stream_t *s,void *b,int n){(void)s;usleep(10000);if(at
 void http_stream_wake(http_stream_t *s){(void)s;atomic_store(&woken,1);}
 void http_stream_close(http_stream_t *s){s->fd=-1;}
 static discovery_item_t item(const char *name){discovery_item_t it={0};it.kind=DISCOVERY_TRACK;it.downloadable=true;it.bytes=sizeof(payload);strcpy(it.id,"test-release");strcpy(it.title,name);strcpy(it.artist,"Test Artist");strcpy(it.album,"Test Release");snprintf(it.filename,sizeof(it.filename),"%s.mp3",name);strcpy(it.format,"mp3");strcpy(it.license,"https://creativecommons.org/licenses/by/4.0/");char enc[768];http_url_encode(it.filename,enc,sizeof(enc));snprintf(it.url,sizeof(it.url),"https://archive.org/download/%s/%s",it.id,enc);md5_hex(payload,sizeof(payload),it.md5);return it;}
-static download_job_t snapshot(unsigned id){download_job_t j[8];int n=download_snapshot(j,8);for(int i=0;i<n;i++)if(j[i].id==id)return j[i];assert(!"missing job");return j[0];}
+static download_job_t snapshot(unsigned id){download_job_t j[DOWNLOAD_MAX_JOBS];int n=download_snapshot(j,DOWNLOAD_MAX_JOBS);for(int i=0;i<n;i++)if(j[i].id==id)return j[i];assert(!"missing job");return j[0];}
 static download_job_t wait_terminal(unsigned id){for(int i=0;i<1000;i++){download_job_t j=snapshot(id);if(j.state==DOWNLOAD_DONE||j.state==DOWNLOAD_FAILED||j.state==DOWNLOAD_CANCELLED)return j;usleep(10000);}assert(!"timed out");return snapshot(id);}
 static void wait_progress(unsigned id){for(int i=0;i<400;i++){if(snapshot(id).done>0)return;usleep(10000);}assert(!"no progress");}
 static void test_md5(void){const char *vectors[]={"","a","abc","message digest","abcdefghijklmnopqrstuvwxyz"};for(int i=0;i<5;i++){char a[33],b[33];md5_hex(vectors[i],strlen(vectors[i]),a);md5_ctx c;md5_init(&c);for(size_t j=0;j<strlen(vectors[i]);j++)md5_update(&c,vectors[i]+j,1);md5_final_hex(&c,b);assert(!strcmp(a,b));}char known[33];md5_ctx c;md5_init(&c);md5_update(&c,"abc",3);md5_final_hex(&c,known);assert(!strcmp(known,"900150983cd24fb0d6963f7d28e17f72"));for(int len=55;len<140;len++){char a[33],b[33];md5_hex(payload,(size_t)len,a);md5_init(&c);md5_update(&c,payload,30);md5_update(&c,payload+30,(size_t)len-30);md5_final_hex(&c,b);assert(!strcmp(a,b));}}
@@ -89,7 +89,46 @@ static void test_release_links(void) {
     assert(!discovery_release_link(NULL,id,sizeof(id)));
     puts("PASS direct release links: exact host, bounded IDs, query handling, rejected traversal/unsupported links");
 }
-int main(void){test_release_links();memset(payload,'a',sizeof(payload));test_md5();test_provider();test_pages();char temp[]="/tmp/sonix-discovery-test-XXXXXX";assert(mkdtemp(temp));assert(!download_queue_init(""));assert(download_queue_init(temp));assert(download_queue_init(temp));char err[192];discovery_item_t a=item("complete");unsigned id=download_enqueue(&a,err,sizeof(err));assert(id);assert(download_enqueue(&a,err,sizeof(err))==id);download_job_t j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE&&j.done==sizeof(payload));struct stat st;assert(!stat(j.path,&st)&&st.st_size==sizeof(payload));assert(download_revision()==1);
+static void test_release_queue(void) {
+    char root[]="/tmp/sonix-release-test-XXXXXX",error[192];assert(mkdtemp(root));
+    assert(download_queue_init(root));
+    discovery_results_t *r=calloc(1,sizeof(*r));assert(r);
+    r->count=2;r->items[0]=item("first");r->items[1]=item("second");
+    r->truncated=true;assert(!download_enqueue_release(r,error,sizeof(error)));
+    download_job_t jobs[DOWNLOAD_MAX_JOBS],job;
+    assert(download_snapshot(jobs,DOWNLOAD_MAX_JOBS)==0);
+    r->truncated=false;r->items[1].downloadable=false;
+    assert(!download_enqueue_release(r,error,sizeof(error)));
+    assert(download_snapshot(jobs,DOWNLOAD_MAX_JOBS)==0);
+    r->items[1].downloadable=true;assert(download_enqueue_release(r,error,sizeof(error)));
+    assert(download_lookup(&r->items[0],&job));download_pause(job.id);
+    assert(download_lookup(&r->items[1],&job));download_pause(job.id);
+    assert(download_snapshot(jobs,DOWNLOAD_MAX_JOBS)==2);
+    for(int i=2;i<DOWNLOAD_MAX_JOBS;i++) {
+        char name[40];snprintf(name,sizeof(name),"filled-%d",i);discovery_item_t x=item(name);
+        unsigned id=download_enqueue(&x,error,sizeof(error));assert(id);download_pause(id);
+    }
+    r->items[0]=item("overflow-first");r->items[1]=item("overflow-second");
+    assert(!download_enqueue_release(r,error,sizeof(error)));
+    assert(!download_lookup(&r->items[0],&job));
+    assert(download_snapshot(jobs,DOWNLOAD_MAX_JOBS)==DOWNLOAD_MAX_JOBS);
+    /* Reclaim earlier cancelled slots while the worker owns the final slot. */
+    unsigned active=jobs[DOWNLOAD_MAX_JOBS-1].id;
+    assert(download_cancel(jobs[0].id));assert(download_cancel(jobs[1].id));usleep(200000);
+    atomic_store(&mode,2);assert(download_resume(active));wait_progress(active);
+    assert(download_enqueue_release(r,error,sizeof(error)));
+    assert(wait_terminal(active).state==DOWNLOAD_DONE);
+    assert(download_lookup(&r->items[0],&job));assert(wait_terminal(job.id).state==DOWNLOAD_DONE);
+    assert(download_lookup(&r->items[1],&job));assert(wait_terminal(job.id).state==DOWNLOAD_DONE);
+    assert(snapshot(active).state==DOWNLOAD_DONE);
+    assert(download_snapshot(jobs,DOWNLOAD_MAX_JOBS)==DOWNLOAD_MAX_JOBS);
+    atomic_store(&mode,0);
+    download_queue_shutdown();assert(download_queue_init(root));
+    assert(download_snapshot(jobs,DOWNLOAD_MAX_JOBS)==DOWNLOAD_MAX_JOBS);
+    for(int i=0;i<DOWNLOAD_MAX_JOBS;i++)assert(jobs[i].state==DOWNLOAD_PAUSED);
+    download_queue_shutdown();free(r);
+}
+int main(void){test_release_links();memset(payload,'a',sizeof(payload));test_release_queue();test_md5();test_provider();test_pages();char temp[]="/tmp/sonix-discovery-test-XXXXXX";assert(mkdtemp(temp));assert(!download_queue_init(""));assert(download_queue_init(temp));assert(download_queue_init(temp));char err[192];discovery_item_t a=item("complete");unsigned initial_revision=download_revision();unsigned id=download_enqueue(&a,err,sizeof(err));assert(id);assert(download_enqueue(&a,err,sizeof(err))==id);download_job_t j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE&&j.done==sizeof(payload));struct stat st;assert(!stat(j.path,&st)&&st.st_size==sizeof(payload));assert(download_revision()==initial_revision+1);
 atomic_store(&opens,0);atomic_store(&mode,1);a=item("retry");id=download_enqueue(&a,err,sizeof(err));j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE&&j.attempts==2);assert(atomic_load(&opens)==2);
 atomic_store(&mode,2);a=item("pause");id=download_enqueue(&a,err,sizeof(err));wait_progress(id);assert(download_pause(id));usleep(150000);assert(snapshot(id).state==DOWNLOAD_PAUSED);assert(download_resume(id));j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE);
 a=item("cancel");id=download_enqueue(&a,err,sizeof(err));wait_progress(id);assert(download_cancel(id));usleep(150000);assert(snapshot(id).state==DOWNLOAD_CANCELLED);assert(access(snapshot(id).path,F_OK)!=0);
@@ -103,6 +142,6 @@ a=item("concurrent-file");id=download_enqueue(&a,err,sizeof(err));assert(id);wai
 int other=open(j.path,O_CREAT|O_EXCL|O_WRONLY,0600);assert(other>=0);assert(write(other,"keep",4)==4);close(other);
 j=wait_terminal(id);assert(j.state==DOWNLOAD_FAILED&&strstr(j.error,"finalize"));
 char kept[4];other=open(j.path,O_RDONLY);assert(other>=0&&read(other,kept,4)==4&&!memcmp(kept,"keep",4));close(other);
-download_queue_shutdown();assert(download_queue_init(temp));download_job_t restored[8];int n=download_snapshot(restored,8);assert(n>=4);for(int i=0;i<n;i++)assert(restored[i].state==DOWNLOAD_PAUSED);download_queue_shutdown();
+download_queue_shutdown();assert(download_queue_init(temp));download_job_t restored[DOWNLOAD_MAX_JOBS];int n=download_snapshot(restored,DOWNLOAD_MAX_JOBS);assert(n>=4);for(int i=0;i<n;i++)assert(restored[i].state==DOWNLOAD_PAUSED);download_queue_shutdown();
 char root2[]="/tmp/sonix-discovery-symlink-XXXXXX";assert(mkdtemp(root2));char link[512];snprintf(link,sizeof(link),"%s/Downloads",root2);assert(!symlink(temp,link));assert(!download_queue_init(root2));
 printf("PASS: provider parsing/license bounds, incremental MD5, sanitization, exact bytes, duplicate queue, retry+resume, pause/resume, cancellation, integrity rejection, insufficient storage, removed card, persisted-paused restoration, symlink rejection\nArtifacts: %s\n",temp);return 0;}

@@ -37,3 +37,14 @@ Performance reports record host RSS and idle CPU over a stated interval and
 visible/total widget counts. These are regression signals, not device budgets.
 Each completed run writes its actions, assertions, screenshots and metrics to an
 artifact report. See `UI_DECISIONS.md` for current evidence and remaining gaps.
+
+
+Online extension journeys: `--journey online-release` verifies shared cover geometry,
+scrolling, sheet dismissal, playback preservation, local-first results during an
+artificially delayed real provider request, editing during that request, and stale
+response rejection on Local. The delay is host-only and does not replace responses.
+`--journey online-live` uses real Archive HTTPS and native UI taps to download,
+automatically index, play locally and disable discovery without interrupting audio.
+`test_live_download.py --fresh` additionally denies new network connections with
+host seccomp before importing/decoding the completed file. This is not an R1 Wi-Fi
+or DAC test. Provider tests cover atomic release capacity and stable worker slots.

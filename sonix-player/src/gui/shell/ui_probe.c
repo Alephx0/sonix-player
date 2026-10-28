@@ -8,6 +8,8 @@
 #include "src/gui/nowplaying/player.h"
 #include "src/system/discovery/discovery.h"
 extern void main_menu_probe_online_track(const discovery_item_t *item);
+extern void main_menu_probe_online_album(const discovery_results_t *results);
+extern void main_menu_probe_search_text(const char *text);
 #include "src/system/core/config.h"
 #include "src/system/playback/device_state.h"
 #include "src/system/playback/playlist.h"
@@ -64,17 +66,19 @@ static void probe_poll(lv_timer_t *timer) {
 	unlink(path);
 	command[strcspn(command, "\r\n")] = 0;
 	/* Setup only; test interactions are delivered through SDL input. */
-	if (!strncmp(command, "online-fixture ", 15)) {
+	if (!strncmp(command, "online-fixture ", 15) || !strncmp(command,"release-fixture ",16)) {
         /* Offline metadata fixture; the real parser and real sheet render it. */
-        FILE *fixture=fopen(command+15,"r");
+        bool album=!strncmp(command,"release-fixture ",16);
+        FILE *fixture=fopen(command+(album?16:15),"r");
         if(fixture) {
             char json[8192];size_t len=fread(json,1,sizeof(json)-1,fixture);json[len]=0;fclose(fixture);
             discovery_results_t *results=calloc(1,sizeof(*results));char error[192];
             if(results && discovery_parse_album("sonix-ui-fixture",json,results,error,sizeof(error)) && results->count)
-                main_menu_probe_online_track(&results->items[0]);
+                {if(album)main_menu_probe_online_album(results);else main_menu_probe_online_track(&results->items[0]);}
             free(results);
         }
-    } else if (!strncmp(command, "playlist ", 9))
+    } else if(!strncmp(command,"search-text ",12))main_menu_probe_search_text(command+12);
+    else if (!strncmp(command, "playlist ", 9))
 		playlistview_open(command + 9, false);
 	else if (!strncmp(command, "album ", 6)) {
 		char album[512];

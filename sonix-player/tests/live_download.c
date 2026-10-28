@@ -11,6 +11,26 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
+#include <stddef.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+
+/* After transfer shutdown, forbid new connections in this host test process.
+ * This proves local indexing/decode needs no network, without changing host Wi-Fi. */
+static void block_connections(void) {
+    struct sock_filter instructions[] = {
+        BPF_STMT(BPF_LD|BPF_W|BPF_ABS, offsetof(struct seccomp_data,nr)),
+        BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_connect, 0, 1),
+        BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ERRNO|EPERM),
+        BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ALLOW)
+    };
+    struct sock_fprog program={sizeof(instructions)/sizeof(instructions[0]),instructions};
+    assert(prctl(PR_SET_NO_NEW_PRIVS,1,0,0,0)==0);
+    assert(prctl(PR_SET_SECCOMP,SECCOMP_MODE_FILTER,&program)==0);
+}
 
 int main(int argc, char **argv) {
     assert(argc == 2);
@@ -43,6 +63,8 @@ int main(int argc, char **argv) {
         return 4;
     }
     printf("PASS completed file and source MD5: %lld bytes, %u attempts (use --fresh to force network transfer)\n", completed.done, completed.attempts);
+    block_connections();
+    puts("PASS network disabled for subsequent import and decoding (host seccomp connect denied)");
     snprintf(path, sizeof(path), "%s/.local", argv[1]); mkdir(path, 0755);
     snprintf(path, sizeof(path), "%s/.local/library.db", argv[1]);
     assert(library_open(path));

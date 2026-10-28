@@ -1,0 +1,10 @@
+http: /etc/resolv.conf has moved; the resolver reads it again
+tls: OpenSSL 3.0.13 30 Jan 2024, certificates from /etc/ssl/certs/
+thread: library update runs below the interface (nice 10)
+config: /home/justi/sonix-r1-build/artifacts/live-1793208807557174526/sd/settings.ini not there yet, starting from defaults
+Live licensed source: jukebox-733632_toccata.mp3 | https://creativecommons.org/publicdomain/mark/1.0/ | 6419897 bytes
+PASS completed file and source MD5: 6419897 bytes, 1 attempts (use --fresh to force network transfer)
+PASS network disabled for subsequent import and decoding (host seccomp connect denied)
+library: /home/justi/sonix-r1-build/artifacts/live-1793208807557174526/sd/.local/library.db open, 0 tracks indexed
+PASS indexed metadata: jukebox-733632_toccata.mp3
+PASS offline decode: 1024 frames, 44100 Hz, 2 channels (MP3)

@@ -212,16 +212,108 @@ def preview_online(s,card):
     s.capture('online-downloads');s.metrics()
 
 
+def online_release(s,card):
+    local=s.setup('playlist Night Drive');s.click_label('Night Walk');before=s.snapshot()
+    fixture=s.out/'release.json'
+    fixture.write_text(json.dumps({'metadata':{'mediatype':'audio','title':'A Very Long Online Release Title for Night Listening and Quiet Mornings','creator':'Night Ensemble','licenseurl':'https://creativecommons.org/licenses/by/4.0/'},'files':[
+        {'name':'night-walk.flac','title':'Night Walk','size':'10485760','md5':'0123456789abcdef0123456789abcdef'},
+        {'name':'morning.flac','title':'Morning Light','size':'10485760','md5':'0123456789abcdef0123456789abcdef'}]}))
+    state=s.setup('release-fixture '+str(fixture));state=s.capture('online-release')
+    covers=[n['rect'] for n in s.visible(state) if n['type']=='image' and n['rect'][2]-n['rect'][0]==220]
+    localcovers=[n['rect'] for n in s.visible(local) if n['type']=='image' and n['rect'][2]-n['rect'][0]==220]
+    s.check(covers==localcovers,'online release reuses local collection artwork geometry')
+    s.check(state['file']==before['file'] and state['priority']==before['priority'],'opening online release preserves audio and playback queue')
+    for title in ('Home','Search','Your Library'):s.label(state,title)
+    s.check(not state['now_playing_open'],'online release retains mini-player preview')
+    # Scroll actual release content and open the source-details sheet.
+    s.command('drag',235,604,235,320);s.click_label('Morning Light')
+    sheet=s.capture('online-release-details');s.check(sheet['modal'],'release track opens the shared details sheet')
+    s.label(sheet,'Download to microSD');s.check(sheet['file']==before['file'],'opening source details leaves audio unchanged')
+    s.command('click',240,48);s.check(not s.snapshot()['modal'],'source sheet dismisses to release')
+    # Fresh query publishes indexed hits during a deliberately slow real online request.
+    s.snapshot('search-text Night');deadline=time.monotonic()+1.8;state=None
+    while time.monotonic()<deadline:
+        state=s.snapshot()
+        if any(n.get('text')=='Night Walk' and n['rect'][1]<650 for n in s.visible(state)):break
+        time.sleep(.05)
+    s.label(state,'Night Walk')
+    s.check(any('Loading online' in n.get('text','') for n in s.visible(state)),'local hits appear while the independent online worker is still pending')
+    s.capture('unified-search-local-first')
+    s.snapshot('search-text Cafe');deadline=time.monotonic()+1.8
+    while time.monotonic()<deadline:
+        state=s.snapshot()
+        if any(n.get('text')=='Caf\u00e9 Lights' and n['rect'][1]<650 for n in s.visible(state)):break
+        time.sleep(.05)
+    s.label(state,'Caf\u00e9 Lights')
+    s.check(not any(n.get('text')=='Night Walk' and n['rect'][1]<650 for n in s.visible(state)),'a new local query is not blocked by the old online request')
+    s.check(state['file']==before['file'] and state['priority']==before['priority'],'searches preserve playback and priority queue')
+    # Switching to Local invalidates outstanding online results.
+    s.click_label('Local');time.sleep(5.5);state=s.capture('unified-search-local-only')
+    s.label(state,'Caf\u00e9 Lights')
+    s.check(not any(n.get('text')=='Online releases' for n in s.visible(state)),'late network responses cannot contaminate Local results')
+    s.metrics()
+
+
+def online_live(s,card):
+    # Real HTTPS provider, native transfer worker, automatic importer and decoder.
+    s.snapshot('search-text https://archive.org/details/loc-jukebox-733632-toccata')
+    deadline=time.monotonic()+45
+    while time.monotonic()<deadline:
+        state=s.snapshot()
+        if any(n.get('text','').startswith('Internet Archive / ') for n in s.visible(state)):break
+        time.sleep(.2)
+    s.check(any(n.get('text','').startswith('Internet Archive / ') for n in s.visible(state)),'live release link opens the native online album')
+    s.capture('live-online-release')
+    # The release's primary Download action submits the complete one-file release.
+    primary=next(n for n in s.visible(state) if n['clickable'] and n['rect'][2]-n['rect'][0]==64 and n['rect'][3]-n['rect'][1]==64)
+    x,y,r,b=primary['rect'];s.command('click',(x+r)//2,(y+b)//2)
+    deadline=time.monotonic()+150;path=None
+    while time.monotonic()<deadline:
+        with sqlite3.connect('file:'+str(card/'.local/library.db')+'?mode=ro',uri=True) as db:
+            # Production library path table, inspect schema through SQLite rather than assuming transfer completion implies import.
+            rows=db.execute("SELECT path FROM MEDIA_TABLE WHERE path LIKE ?",(str(card/'Downloads')+'/%',)).fetchall()
+        if rows:path=rows[0][0];break
+        time.sleep(.2)
+    s.check(path is not None,'completed live download automatically enters the local index')
+    state=s.capture('live-download-indexed')
+    status=next(n for n in s.visible(state) if n.get('text','').startswith('Downloaded  /'))
+    row=state['nodes'][status['parent']];x,y,r,b=row['rect'];s.command('click',180,(y+b)//2)
+    state=s.capture('live-download-playing')
+    s.check(state['file']==path and state['status']==1,'download manager starts the completed local file')
+    s.check(not state['now_playing_open'],'downloaded playback remains in mini-player preview')
+    s.snapshot('search-text https://archive.org/details/loc-jukebox-733632-toccata')
+    deadline=time.monotonic()+45
+    while time.monotonic()<deadline:
+        state=s.snapshot()
+        if any(n.get('text','').startswith('Internet Archive / ') for n in s.visible(state)):break
+        time.sleep(.2)
+    s.command('drag',230,600,230,300);state=s.snapshot()
+    row=next(n for n in s.visible(state) if n.get('text')=='1' and 44<n['rect'][1]<640)
+    s.command('click',180,(row['rect'][1]+row['rect'][3])//2)
+    sheet=s.capture('live-existing-copy');s.label(sheet,'Play offline copy')
+    s.check(not any(n.get('text')=='Download to microSD' for n in s.visible(sheet)),'known indexed source offers local playback instead of a duplicate download')
+    s.click_label('Play offline copy');s.check(s.snapshot()['file']==path,'existing-copy action uses the local file')
+    # Disable discovery in Sources. Playback must continue from the local file.
+    s.snapshot('search-text Toccata');s.click_label('Sources');s.click_label('Online discovery: On')
+    time.sleep(1);offline=s.capture('live-discovery-disabled')
+    s.check(offline['file']==path and offline['status']==1,'local playback continues with online discovery disabled')
+    s.report['downloaded_file']=path
+    s.metrics()
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('repo',type=Path);p.add_argument('--baseline',type=Path);p.add_argument('--card',type=Path)
-    p.add_argument('--journey',choices=['collections','empty-liked','preview-online'],default='collections')
+    p.add_argument('--journey',choices=['collections','empty-liked','preview-online','online-release','online-live'],default='collections')
     a=p.parse_args();repo=a.repo.resolve();out=Path(tempfile.mkdtemp(prefix='ui-collections-',dir=repo/'artifacts'))
     s=Session(repo,out,a.baseline);started=False
+    if a.journey=='online-release':s.env['SONIX_TEST_ONLINE_DELAY_MS']='4000'
     try:
         card=a.card.resolve() if a.card else create(repo,out/'sd')
         s.command('start',3,'--card',card);started=True
         if a.journey=='collections':journey(s,card)
         elif a.journey=='preview-online':preview_online(s,card)
+        elif a.journey=='online-release':online_release(s,card)
+        elif a.journey=='online-live':online_live(s,card)
         else:
             s.command('click',400,770);s.click_label('Liked Songs')
             state=s.capture('liked-songs');_,play=s.collection_geometry(state)

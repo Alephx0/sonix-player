@@ -1,5 +1,33 @@
 # UI decisions and recurring corrections
 
+## 2026-10-28: integrated online release milestone
+
+Submitted All searches previously waited for HTTPS before publishing local hits.
+Separate bounded local/provider workers now publish independently. Query generations
+invalidate stale results, including filter changes. A host-only delay exercises this
+without mocking provider responses. Local search remains usable while online waits.
+
+Extracted reference collection header widgets from medialist, reused on online
+releases, and retained the shared footer and details sheet. Complete <=24-file
+responses can be admitted atomically into 32 persistent slots; downloads remain
+single-worker and separate from playback. The manager groups source files by release.
+Paged releases explicitly retain per-file downloads, not an incomplete Download All.
+
+Code-review correction: never compact queue slots while a transfer worker owns a
+slot index. Batch admission reuses inactive slots in place. Regression coverage
+checks capacity rejection, successful replacement and persisted 32-job restoration.
+Test corrections: search-hit assertions exclude mini-player labels; use escaped
+Unicode in shell-generated Python fixtures to preserve accented expected titles.
+
+Rendered/interactive evidence: full collection regression 71 checks, new online
+release/search journey 14 checks. Real HTTPS UI flow verifies automatic import and
+local playback with discovery disabled. A separate live test denies connect() before
+indexing and decoder reads; 6,419,897 verified bytes decode at 44.1 kHz stereo.
+Provider/queue/TLS tests, host build, target build and glibc <=2.22 ABI gate pass.
+Source review and remaining structured-discography/matching/artwork/hardware work
+are documented in `custom-firmware/native-online.md`. Host RSS is evidence only,
+not a claim that 64 MB R1 performance is established.
+
 ## 2026-10-28: artwork taps, playback preview and initial online flow
 
 The decorative artwork panel on Library shortcuts intercepted touches. Make the

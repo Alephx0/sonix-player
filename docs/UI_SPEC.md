@@ -96,3 +96,19 @@ Completed files enter the local library through the existing import pipeline.
 Expose unsupported links clearly. Do not label this a SpotBye service connection
 or Spotify catalog client. Additional providers and online previews remain future
 work; source identity and downloadable audio identity stay explicit.
+
+
+Online milestone extension: All starts independent local-index and provider workers
+with a short debounce. Local hits publish without waiting for the provider; edits
+and filter changes invalidate stale results. A release opens a dedicated native
+page using the same collection-header component as local albums/playlists, with
+Download replacing Play. Complete releases of at most 24 source files can be
+submitted atomically to the persistent 32-file queue, still one transfer at a time.
+Paged releases retain individual file downloads and must not claim a partial page
+is a complete album. Downloads group entries by release and retain individual
+pause/resume/retry/cancel actions. Completed indexed copies offer offline playback.
+
+The initial source lacks reliable structured release-type/featured-credit and ISRC
+coverage. Creator search must not pretend to be a verified Albums / Singles / EPs /
+Featured On discography. Structured online discographies, cross-provider recording
+matching, remote artwork and larger release jobs remain subsequent milestones.

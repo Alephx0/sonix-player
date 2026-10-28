@@ -223,3 +223,10 @@ bool discovery_album_page(const char *id,unsigned page,discovery_results_t *out,
 bool discovery_album(const char *id,discovery_results_t *out,char *err,size_t n) {
     return discovery_album_page(id,1,out,err,n);
 }
+
+const discovery_provider_t *discovery_provider(void) {
+    static const discovery_provider_t archive={1,"internet-archive","Internet Archive",
+        DISCOVERY_SEARCH_ALBUMS|DISCOVERY_ALBUM_TRACKS|DISCOVERY_DOWNLOAD|DISCOVERY_ARTIST_RELEASES|DISCOVERY_PAGED_RESULTS,
+        discovery_search_page,discovery_album_page};
+    return &archive;
+}

@@ -38,3 +38,9 @@ One modal layer owns cleanup. Only the handle drags the sheet; scrollable conten
 owns vertical scrolling and queue handles own row dragging. Artwork decoding is
 asynchronous. Collection rows reuse a fixed pool; do not allocate one widget per
 track or preload all artwork.
+
+
+Reference collection cover/title/artist/metadata/action widgets are now built by
+`gui/library/collection_header.c`, used by medialist and the native online release
+page. Online pages retain the shared footer; source details use the existing sheet.
+The online placeholder deliberately uses no remote artwork buffer in this milestone.

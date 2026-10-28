@@ -120,7 +120,7 @@ static bool get_field(const json_doc_t *d,int obj,const char *name,char *out,siz
 static void restore(void) {
     int fd=openat(dir_fd,QUEUE_FILE,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);if(fd<0)return;
     struct stat st;
-    if(fstat(fd,&st)||!S_ISREG(st.st_mode)||st.st_size<=0||st.st_size>65536){close(fd);return;}
+    if(fstat(fd,&st)||!S_ISREG(st.st_mode)||st.st_size<=0||st.st_size>262144){close(fd);return;}
     char *body=malloc((size_t)st.st_size+1);if(!body){close(fd);return;}
     size_t got=0;while(got<(size_t)st.st_size){ssize_t n=read(fd,body+got,(size_t)st.st_size-got);if(n<=0)break;got+=(size_t)n;}close(fd);body[got]=0;
     json_doc_t d;
@@ -310,21 +310,83 @@ bad:
     close(root_fd);root_fd=dir_fd=-1;
     pthread_mutex_unlock(&lock);pthread_mutex_unlock(&lifecycle);return false;
 }
+static int duplicate(const discovery_item_t *item) {
+    for(int i=0;i<count;i++)if(!strcmp(jobs[i].item.url,item->url) &&
+        !strcmp(jobs[i].item.md5,item->md5) && jobs[i].state!=DOWNLOAD_CANCELLED)return i;
+    return -1;
+}
+static bool reusable(int i) {
+    return jobs[i].id!=processing_id && (jobs[i].state==DOWNLOAD_DONE ||
+        (jobs[i].state==DOWNLOAD_CANCELLED && cleaned[i]));
+}
+static unsigned create_job(const discovery_item_t *item,int slot) {
+    download_job_t *job=&jobs[slot];cleaned[slot]=false;memset(job,0,sizeof(*job));
+    job->id=next_id++;job->state=DOWNLOAD_QUEUED;job->item=*item;job->total=item->bytes;
+    char name[256];filename(item,name,sizeof(name));snprintf(job->path,sizeof(job->path),"%.480s/Downloads/%s",card_root,name);
+    dirty=true;return job->id;
+}
+static unsigned enqueue_locked(const discovery_item_t *item) {
+    int found=duplicate(item);
+    if(found>=0)return jobs[found].id;
+    int slot=count;
+    if(slot==DOWNLOAD_MAX_JOBS) {
+        slot=-1;for(int i=0;i<count;i++)if(reusable(i)){slot=i;break;}
+        if(slot<0)return 0;
+    } else count++;
+    return create_job(item,slot);
+}
+
 unsigned download_enqueue(const discovery_item_t *item,char *err,size_t size) {
     if(!discovery_item_valid(item)){error_text(err,size,"This source does not authorize a supported download.");return 0;}
     pthread_mutex_lock(&lock);
-    if(!started || stopping){pthread_mutex_unlock(&lock);error_text(err,size,"Insert a writable microSD card first.");return 0;}
-    for(int i=0;i<count;i++)if(!strcmp(jobs[i].item.url,item->url) && !strcmp(jobs[i].item.md5,item->md5) && jobs[i].state!=DOWNLOAD_CANCELLED) {
-        unsigned id=jobs[i].id;pthread_mutex_unlock(&lock);error_text(err,size,"");return id;
+    unsigned id=started&&!stopping?enqueue_locked(item):0;
+    if(id)pthread_cond_signal(&changed);
+    pthread_mutex_unlock(&lock);
+    error_text(err,size,id?"":"Download queue unavailable or full (32 files).");return id;
+}
+bool download_lookup(const discovery_item_t *item,download_job_t *out) {
+    if(!item || !out)return false;
+    pthread_mutex_lock(&lock);int i=duplicate(item);if(i>=0)*out=jobs[i];pthread_mutex_unlock(&lock);
+    return i>=0;
+}
+bool download_enqueue_release(const discovery_results_t *release,char *err,size_t size) {
+    if(!release || release->count<1 || release->count>DISCOVERY_MAX_RESULTS || release->truncated) {
+        error_text(err,size,"Open the complete release before downloading all files.");return false;
     }
-    int slot=count;
-    if(slot==DOWNLOAD_MAX_JOBS) {
-        slot=-1;for(int i=0;i<count;i++)if(jobs[i].id!=processing_id && (jobs[i].state==DOWNLOAD_DONE||(jobs[i].state==DOWNLOAD_CANCELLED && cleaned[i]))){slot=i;break;}
-        if(slot<0){pthread_mutex_unlock(&lock);error_text(err,size,"Download queue is full (8 jobs).");return 0;}
-    } else count++;
-    download_job_t *job=&jobs[slot];cleaned[slot]=false;memset(job,0,sizeof(*job));job->id=next_id++;job->state=DOWNLOAD_QUEUED;job->item=*item;job->total=item->bytes;
-    char name[256];filename(item,name,sizeof(name));snprintf(job->path,sizeof(job->path),"%.480s/Downloads/%s",card_root,name);
-    unsigned id=job->id;dirty=true;pthread_cond_signal(&changed);pthread_mutex_unlock(&lock);error_text(err,size,"");return id;
+    for(int i=0;i<release->count;i++)if(!discovery_item_valid(&release->items[i]) ||
+        strcmp(release->items[0].id,release->items[i].id)) {
+        error_text(err,size,"Release contains an invalid or unrelated source.");return false;
+    }
+    pthread_mutex_lock(&lock);
+    int needed=0,available=DOWNLOAD_MAX_JOBS-count;
+    bool keep[DOWNLOAD_MAX_JOBS]={0};
+    for(int i=0;i<release->count;i++) {
+        int found=duplicate(&release->items[i]);
+        if(found>=0){keep[found]=true;continue;}
+        bool earlier=false;
+        for(int j=0;j<i;j++)if(!strcmp(release->items[j].url,release->items[i].url) &&
+            !strcmp(release->items[j].md5,release->items[i].md5)){earlier=true;break;}
+        if(!earlier)needed++;
+    }
+    for(int i=0;i<count;i++)if(!keep[i] && reusable(i))available++;
+    if(!started || stopping || needed>available) {
+        pthread_mutex_unlock(&lock);error_text(err,size,"Not enough download slots. Finish or cancel other transfers first.");return false;
+    }
+    /* Retain matching completed jobs while reserving all required slots. */
+    for(int i=0;i<release->count;i++) {
+        int found=duplicate(&release->items[i]);
+        if(found>=0 && (jobs[found].state==DOWNLOAD_PAUSED || jobs[found].state==DOWNLOAD_FAILED))jobs[found].state=DOWNLOAD_QUEUED;
+    }
+    for(int i=0;i<release->count;i++) {
+        if(duplicate(&release->items[i])>=0)continue;
+        int slot=count;
+        if(count==DOWNLOAD_MAX_JOBS) {
+            /* Keep slot indices stable: the transfer worker owns its active slot. */
+            slot=-1;for(int j=0;j<count;j++)if(!keep[j] && reusable(j)){slot=j;break;}
+        } else count++;
+        if(slot>=0){create_job(&release->items[i],slot);keep[slot]=true;}
+    }
+    dirty=true;pthread_cond_signal(&changed);pthread_mutex_unlock(&lock);error_text(err,size,"");return true;
 }
 int download_snapshot(download_job_t *out,int capacity) {
     if(!out||capacity<=0)return 0;

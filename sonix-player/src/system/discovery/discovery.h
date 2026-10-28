@@ -26,6 +26,15 @@ typedef struct {
 } discovery_results_t;
 unsigned discovery_capabilities(void);
 const char *discovery_provider_name(void);
+/* Versioned native contract. No desktop runtime or provider-owned UI state. */
+typedef struct {
+    unsigned version;
+    const char *id, *name;
+    unsigned capabilities;
+    bool (*search)(const char *,bool,unsigned,discovery_results_t *,char *,size_t);
+    bool (*album)(const char *,unsigned,discovery_results_t *,char *,size_t);
+} discovery_provider_t;
+const discovery_provider_t *discovery_provider(void);
 /* Blocking, worker-thread only. Result storage is caller owned. No UI calls. */
 bool discovery_search(const char *query, discovery_results_t *out, char *error, size_t error_size);
 bool discovery_album(const char *identifier, discovery_results_t *out, char *error, size_t error_size);

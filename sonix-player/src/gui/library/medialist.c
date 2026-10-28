@@ -1,3 +1,4 @@
+#include "collection_header.h"
 #include "src/system/library/collections.h"
 #include "discography.h"
 #include "collectionview.h"
@@ -4558,6 +4559,25 @@ static void head_build(panel_t *p) {
 	lv_obj_set_clickable(p->head, false);
 	lv_obj_set_event_bubble(p->head, true);
 
+	char meta[200] = "";
+	if (is_playlist) {
+        snprintf(meta, sizeof(meta), "Playlist \xC2\xB7 %d %s", p->count, p->count == 1 ? "song" : "songs");
+    } else if (info.genre[0] && info.year > 0) {
+		snprintf(meta, sizeof(meta), "%s \xC2\xB7 %d", info.genre, info.year);
+	} else if (info.genre[0]) {
+		snprintf(meta, sizeof(meta), "%s", info.genre);
+	} else if (info.year > 0) {
+		snprintf(meta, sizeof(meta), "%d", info.year);
+	}
+    if(reference_layout()) {
+        collection_header_t h;
+        lv_event_cb_t callbacks[]={head_shuffle_cb,head_play_cb,
+            p->kind==LIBRARY_LIST_PLAYLIST?head_options_cb:head_queue_cb};
+        collection_header_build(p->head,width,p->title,info.artist,meta,&icon_play,&icon_shuffle,
+            p->kind==LIBRARY_LIST_PLAYLIST?&icon_ellipsis_vertical:&icon_list_queue,callbacks,p,&h);
+        p->head_cover=h.cover;p->head_title=h.title;p->head_artist=h.artist;p->head_meta=h.meta;
+        memcpy(p->head_buttons,h.buttons,sizeof(h.buttons));
+    } else {
 	// The album glyph on a card until the picture arrives, and for good when
 	// the record has none.
 	p->head_cover = lv_image_create(p->head);
@@ -4578,16 +4598,6 @@ static void head_build(panel_t *p) {
 		p->head_artist = head_line(p->head, width, info.artist, reference_layout()?&font_ui_18:&font_ui_24, 1);
 	}
 
-	char meta[200] = "";
-	if (is_playlist) {
-        snprintf(meta, sizeof(meta), "Playlist \xC2\xB7 %d %s", p->count, p->count == 1 ? "song" : "songs");
-    } else if (info.genre[0] && info.year > 0) {
-		snprintf(meta, sizeof(meta), "%s \xC2\xB7 %d", info.genre, info.year);
-	} else if (info.genre[0]) {
-		snprintf(meta, sizeof(meta), "%s", info.genre);
-	} else if (info.year > 0) {
-		snprintf(meta, sizeof(meta), "%d", info.year);
-	}
 	if (meta[0]) {
 		p->head_meta = head_line(p->head, width, meta, &font_ui_20, 1);
 		lv_obj_add_style(p->head_meta, &theme_style_text_dim, 0);
@@ -4607,6 +4617,7 @@ static void head_build(panel_t *p) {
 	p->head_buttons[1] = head_play_button(buttons, head_play_cb, p);
 	p->head_buttons[2] = head_glyph_button(buttons, p->kind == LIBRARY_LIST_PLAYLIST ? &icon_ellipsis_vertical : &icon_list_queue,
         p->kind == LIBRARY_LIST_PLAYLIST ? head_options_cb : head_queue_cb, p);
+    }
     if (!p->count) {
         lv_obj_add_state(p->head_buttons[0], LV_STATE_DISABLED);
         lv_obj_add_state(p->head_buttons[1], LV_STATE_DISABLED);
@@ -4616,12 +4627,6 @@ static void head_build(panel_t *p) {
             lv_obj_add_state(p->head_buttons[2], LV_STATE_DISABLED);
             lv_obj_set_style_opa(p->head_buttons[2], LV_OPA_30, LV_STATE_DISABLED);
         }
-    }
-    if(reference_layout()) {
-        lv_obj_set_flex_align(buttons,LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_ignore_layout(p->head_buttons[1],true);
-        lv_obj_align(p->head_buttons[1],LV_ALIGN_RIGHT_MID,-4,0);
-        lv_obj_set_height(buttons,UI_COLLECTION_ACTION_HEIGHT);
     }
 	/* Paint the whole page even on its first opening, before any artwork arrives. */
 	page_paint(p);

@@ -1,3 +1,4 @@
+#include "src/gui/online/online_album.h"
 #include "src/gui/library/homeview.h"
 #include "src/gui/library/playlistview.h"
 #include "src/gui/shell/bottomsheet.h"
@@ -218,6 +219,14 @@ typedef struct {
 static search_result_t pending, shown;
 static pthread_mutex_t search_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool search_busy, search_ready, request_album;
+static bool local_busy, local_ready, local_wanted, online_wanted;
+static unsigned local_epoch, online_epoch;
+static char local_text[256], online_text[256];
+static bool online_album_request, online_artist_request;
+static unsigned online_page;
+static discovery_results_t online_pending;
+static char online_error[192];
+static void search_draw(void);
 static bool request_artist, browse_artist;
 static unsigned request_page = 1, browse_page = 1;
 static char browse_query[256], release_artist[128];
@@ -228,7 +237,7 @@ static keyboard_t *search_keyboard;
 static int search_filter;
 static bool request_instant, instant_pending;
 static uint32_t instant_changed;
-static unsigned search_epoch, request_epoch;
+static unsigned search_epoch;
 
 static void local_collect(const library_instant_hit_t *item, void *user) {
     search_result_t *r = user;
@@ -272,18 +281,44 @@ static void search_art_update(void) {
 }
 static void *search_worker(void *unused) {
     (void)unused;
-    memset(&pending, 0, sizeof(pending));
-    if (!request_album && !request_artist && request_page == 1 && request_filter != FILTER_ONLINE)
-        library_search_instant(request_text, LOCAL_HITS / 5, local_collect, &pending);
+    memset(&pending,0,sizeof(pending));
+    library_search_instant(local_text,LOCAL_HITS/5,local_collect,&pending);
     search_resolve_art();
-    if (request_album)
-        discovery_album_page(request_text, request_page, &pending.online, pending.error, sizeof(pending.error));
-    else if (request_filter != FILTER_LOCAL)
-        discovery_search_page(request_text, request_artist, request_page, &pending.online, pending.error, sizeof(pending.error));
-    pthread_mutex_lock(&search_lock);
-    search_ready = true;
-    pthread_mutex_unlock(&search_lock);
+    pthread_mutex_lock(&search_lock);local_ready=true;pthread_mutex_unlock(&search_lock);
     return NULL;
+}
+static void *online_worker(void *unused) {
+    (void)unused;
+#ifdef HOST_BUILD
+    const char *delay=getenv("SONIX_TEST_ONLINE_DELAY_MS");
+    if(delay){int ms=atoi(delay);if(ms>0 && ms<=5000)usleep(ms*1000);}
+#endif
+    memset(&online_pending,0,sizeof(online_pending));online_error[0]=0;
+    const discovery_provider_t *provider=discovery_provider();
+    if(online_album_request)provider->album(online_text,online_page,&online_pending,online_error,sizeof(online_error));
+    else provider->search(online_text,online_artist_request,online_page,&online_pending,online_error,sizeof(online_error));
+    pthread_mutex_lock(&search_lock);search_ready=true;pthread_mutex_unlock(&search_lock);
+    return NULL;
+}
+static bool start_worker(void *(*fn)(void *)) {
+    pthread_attr_t attr;pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
+    pthread_attr_setstacksize(&attr,256*1024);
+    pthread_t thread;int rc=pthread_create(&thread,&attr,fn,NULL);pthread_attr_destroy(&attr);
+    return rc==0;
+}
+static void dispatch_search(void) {
+    if(local_wanted && !local_busy) {
+        local_wanted=false;local_epoch=search_epoch;snprintf(local_text,sizeof(local_text),"%s",request_text);
+        local_ready=false;local_busy=true;
+        if(!start_worker(search_worker)){local_busy=false;lv_label_set_text(search_status,"Could not start local search.");}
+    }
+    if(online_wanted && !search_busy) {
+        online_wanted=false;online_epoch=search_epoch;snprintf(online_text,sizeof(online_text),"%s",request_text);
+        online_album_request=request_album;online_artist_request=request_artist;online_page=request_page;
+        search_ready=false;search_busy=true;
+        if(!start_worker(online_worker)){search_busy=false;snprintf(shown.error,sizeof(shown.error),"Could not start online search.");search_draw();}
+    }
 }
 
 static void search_keyboard_visible(bool visible) {
@@ -296,7 +331,6 @@ static void search_keyboard_visible(bool visible) {
 }
 
 static void start_search_page(const char *query, bool album, bool artist, unsigned page_number) {
-    if (search_busy) { gui_notify_popup("A search is already running."); return; }
     if (!query || !query[0]) { gui_notify_popup("Enter an artist, album or track."); return; }
     char linked_id[128];
     if (!album && !artist && search_filter != FILTER_LOCAL &&
@@ -325,58 +359,51 @@ static void start_search_page(const char *query, bool album, bool artist, unsign
     request_artist = artist;
     request_page = page_number;
     request_filter = filter;
-    request_instant = false;
-    request_epoch = ++search_epoch;
+    ++search_epoch;
     instant_pending = false;
     if (!album) {
         snprintf(browse_query, sizeof(browse_query), "%s", text);
         browse_artist = artist;
         browse_page = page_number;
     }
-    search_keyboard_visible(false);
-    lv_label_set_text(search_status, album ? "Loading release..." : "Searching...");
-    search_ready = false;
-    search_busy = true;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    pthread_attr_setstacksize(&attr, 256 * 1024);
-    pthread_t thread;
-    int rc = pthread_create(&thread, &attr, search_worker, NULL);
-    pthread_attr_destroy(&attr);
-    if (rc != 0) { search_busy = false; lv_label_set_text(search_status, "Could not start search. Try again."); }
+    if(!request_instant)search_keyboard_visible(false);
+    if(!album)memset(&shown,0,sizeof(shown));
+    local_wanted=!album && !artist && page_number==1 && filter!=FILTER_ONLINE;
+    online_wanted=album || filter!=FILTER_LOCAL;
+#ifndef HOST_BUILD
+    if(online_wanted) {wifi_status_t wifi;wifi_get_status(&wifi);if(wifi.state!=WIFI_STATE_CONNECTED) {
+        online_wanted=false;snprintf(shown.error,sizeof(shown.error),"Connect Wi-Fi to search online. Local music is available.");
+    }}
+#endif
+    if(album)lv_label_set_text(search_status,"Loading release...");else search_draw();
+    dispatch_search();
 }
 
-static void start_search(const char *query, bool album) { start_search_page(query, album, false, 1); }
+static void start_search(const char *query, bool album) { request_instant=false;start_search_page(query, album, false, 1); }
 
 static void instant_changed_cb(lv_event_t *e) {
     (void)e;
     search_epoch++;
     instant_changed=lv_tick_get();
-    instant_pending=search_filter!=FILTER_ONLINE;
+    instant_pending=true;
+    local_wanted=online_wanted=false;
 }
 
 static void start_instant(void) {
     const char *query=lv_textarea_get_text(search_field);
     instant_pending=false;
     if(!query[0]) {
+        local_wanted=online_wanted=false;memset(&shown,0,sizeof(shown));
         search_browse();
         lv_label_set_text(search_status,"");
         return;
     }
-    snprintf(request_text,sizeof(request_text),"%s",query);
-    request_album=request_artist=false;request_page=1;request_filter=FILTER_LOCAL;
-    request_instant=true;request_epoch=search_epoch;
-    search_busy=true;search_ready=false;
-    pthread_attr_t attr;pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
-    pthread_attr_setstacksize(&attr,256*1024);
-    pthread_t thread;int rc=pthread_create(&thread,&attr,search_worker,NULL);pthread_attr_destroy(&attr);
-    if(rc){search_busy=false;lv_label_set_text(search_status,"Could not start search");}
+    request_instant=true;
+    start_search_page(query,false,false,1);
 }
 
 static void page_cb(lv_event_t *e) {
-    if (!tapped() || search_busy) return;
+    if (!tapped()) return;
     int direction = (int)(intptr_t)lv_event_get_user_data(e);
     if ((direction < 0 && request_page <= 1) || (direction > 0 && request_page >= DISCOVERY_MAX_PAGES)) return;
     start_search_page(request_text, request_album, request_artist, request_page + direction);
@@ -389,14 +416,17 @@ static void results_cb(lv_event_t *e) {
 
 static void artist_cb(lv_event_t *e) {
     (void)e;
-    if (tapped() && release_artist[0]) start_search_page(release_artist, false, true, 1);
+    if (tapped() && release_artist[0]) {
+        switch_screen(main_menu_screen);show_page(SEARCH);request_instant=false;
+        start_search_page(release_artist,false,true,1);
+    }
 }
 
 static void submit_cb(lv_event_t *e) { (void)e; start_search(lv_textarea_get_text(search_field), false); }
 static void field_cb(lv_event_t *e) { (void)e; search_keyboard_visible(true); }
 
 static void filter_cb(lv_event_t *e) {
-    if (!tapped() || search_busy) return;
+    if (!tapped()) return;
     search_filter = (int)(intptr_t)lv_event_get_user_data(e);
     for (int i = 0; i < 3; i++) {
         lv_obj_set_style_border_width(filter_buttons[i], i == search_filter ? 2 : 1, 0);
@@ -466,16 +496,24 @@ static void online_download_cb(lv_event_t *e) {
     }
     download_resume(id);
     bottomsheet_close(false);
-    show_page(DOWNLOADS);
+    main_menu_open_downloads();
 }
 static void online_artist_cb(lv_event_t *e) {
     (void)e;
     char artist[128];snprintf(artist,sizeof(artist),"%s",online_selection.artist);
     bottomsheet_close(false);
-    start_search_page(artist,false,true,1);
+    switch_screen(main_menu_screen);show_page(SEARCH);
+    request_instant=false;start_search_page(artist,false,true,1);
 }
 static void online_queue_cb(lv_event_t *e) {
-    (void)e;bottomsheet_close(false);show_page(DOWNLOADS);
+    (void)e;bottomsheet_close(false);main_menu_open_downloads();
+}
+static void online_play_existing_cb(lv_event_t *e) {
+    (void)e;download_job_t job;
+    char local_title[256];
+    if(download_lookup(&online_selection,&job) && access(job.path,R_OK)==0 && library_track_title(job.path,local_title,sizeof(local_title))) {
+        bottomsheet_close(false);player_play_file(job.path);
+    } else gui_notify_popup("This file is no longer available on the card.");
 }
 static void online_track_sheet(const discovery_item_t *item) {
     online_selection=*item;
@@ -493,20 +531,26 @@ static void online_track_sheet(const discovery_item_t *item) {
     char technical[128];snprintf(technical,sizeof(technical),"%s  /  %.1f MB  /  Original source",item->format,(double)item->bytes/1048576);
     lv_obj_t *detail=label(content,technical,&font_ui_18,w,false);
     lv_obj_set_height(detail,28);
-    label(content,"Internet Archive",&font_ui_18,w,true);
+    label(content,discovery_provider_name(),&font_ui_18,w,true);
     lv_obj_t *license=label(content,item->license,&font_ui_16,w,true);
     lv_obj_set_height(license,48);
     lv_label_set_long_mode(license,LV_LABEL_LONG_WRAP);
-    if(discovery_item_valid(item)) {
-        lv_obj_t *download=button(content,"Download to microSD",w,56,online_download_cb,NULL);
+    download_job_t existing;
+    bool found=download_lookup(item,&existing);
+    char local_title[256];
+    bool playable=found && access(existing.path,R_OK)==0 && library_track_title(existing.path,local_title,sizeof(local_title));
+    if(playable)button(content,"Play offline copy",w,56,online_play_existing_cb,NULL);
+    else if(discovery_item_valid(item) && (!found || existing.state==DOWNLOAD_PAUSED || existing.state==DOWNLOAD_FAILED)) {
+        lv_obj_t *download=button(content,found?"Resume download":"Download to microSD",w,56,online_download_cb,NULL);
         lv_obj_set_style_bg_color(download,lv_color_hex(0x167c40),0);
     }
+    if(found)label(content,download_state_name(existing.state),&font_ui_18,w,true);
     if(item->artist[0]) button(content,"More by this artist",w,52,online_artist_cb,NULL);
     button(content,"View downloads",w,52,online_queue_cb,NULL);
 }
 static void online_hit_cb(lv_event_t *e) {
     discovery_item_t *item = lv_event_get_user_data(e);
-    if (!tapped() || search_busy) return;
+    if (!tapped()) return;
     if (item->kind == DISCOVERY_ALBUM) {
         snprintf(release_artist, sizeof(release_artist), "%s", item->artist);
         start_search(item->id, true);
@@ -521,13 +565,20 @@ void main_menu_probe_online_track(const discovery_item_t *item) {
     show_page(SEARCH);
     online_track_sheet(item);
 }
+void main_menu_probe_online_album(const discovery_results_t *results) {
+    switch_screen(main_menu_screen);show_page(SEARCH);
+    online_album_open(cfg,results,1,online_track_sheet,page_cb,artist_cb);
+}
+void main_menu_probe_search_text(const char *text) {
+    switch_screen(main_menu_screen);show_page(SEARCH);
+    lv_textarea_set_text(search_field,text);
+}
 #endif
 
 static void search_draw(void) {
     search_art_drop();
     lv_obj_clean(search_results);
     lv_obj_scroll_to_y(search_results, 0, LV_ANIM_OFF);
-    shown = pending;
     /* A preference reorders original source files; it never transcodes or
      * hides alternative formats. Stable insertion keeps their source order. */
     int preference = (int)config_get_int("discovery", "format", 0);
@@ -599,10 +650,10 @@ static void search_draw(void) {
         lv_label_set_long_mode(err, LV_LABEL_LONG_WRAP);
     }
     char status[128];
-    if(request_instant)snprintf(status,sizeof(status),"%d local results%s",shown.local_count,search_filter==FILTER_ALL?" / Search key also checks online":"");
-    else snprintf(status, sizeof(status), "%d local / %d online / Page %u", shown.local_count, shown.online.count, request_page);
+    snprintf(status,sizeof(status),"%d local / %d online%s",shown.local_count,shown.online.count,
+        (online_wanted || (search_busy && online_epoch==search_epoch))?" / Loading online...":"");
     lv_label_set_text(search_status, status);
-    if (!shown.local_count && !shown.online.count && !shown.error[0])
+    if (!local_wanted && !local_busy && !online_wanted && !search_busy && !shown.local_count && !shown.online.count && !shown.error[0])
         label(search_results, shown.online.truncated ? "No eligible releases on this page. Try the next page." :
               "No matches. Try an artist or album name.", &font_ui_18, cfg->screen_width - 2 * PAD, true);
     if (request_page > 1 || shown.online.truncated) {
@@ -741,7 +792,11 @@ static void provider_refresh(void) {
 static void provider_setting_cb(lv_event_t *e) {
     if (!tapped()) return;
     int action = (int)(intptr_t)lv_event_get_user_data(e);
-    if (action == 0) config_set_bool("discovery", "enabled", !config_get_bool("discovery", "enabled", true));
+    if (action == 0) {
+        bool enabled=!config_get_bool("discovery","enabled",true);
+        config_set_bool("discovery","enabled",enabled);
+        if(!enabled){search_epoch++;online_wanted=false;memset(&shown.online,0,sizeof(shown.online));}
+    }
     else config_set_int("discovery", "format", (config_get_int("discovery", "format", 0) + 1) % 3);
     config_save();
     provider_refresh();
@@ -784,6 +839,7 @@ static void providers_build(void) {
 }
 
 static download_job_t jobs[DOWNLOAD_MAX_JOBS];
+static lv_obj_t *job_group[DOWNLOAD_MAX_JOBS], *job_cancel[DOWNLOAD_MAX_JOBS];
 static lv_obj_t *job_title[DOWNLOAD_MAX_JOBS], *job_status[DOWNLOAD_MAX_JOBS], *job_card[DOWNLOAD_MAX_JOBS];
 static int job_count;
 
@@ -794,7 +850,6 @@ static void job_cb(lv_event_t *e) {
     if (job->state == DOWNLOAD_DONE) {
         if (!gui_card_available()) { gui_notify_no_card(); return; }
         player_play_file(job->path);
-        player_sheet_open(true);
     } else if (job->state == DOWNLOAD_PAUSED || job->state == DOWNLOAD_FAILED) download_resume(job->id);
     else if (job->state == DOWNLOAD_QUEUED || job->state == DOWNLOAD_RUNNING) download_pause(job->id);
 }
@@ -811,6 +866,8 @@ static void downloads_build(void) {
                            cfg->screen_width - 2 * PAD, true);
     lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
     for (int i = 0; i < DOWNLOAD_MAX_JOBS; i++) {
+        job_group[i]=label(p,"",&font_ui_18,cfg->screen_width-2*PAD,false);
+        lv_obj_set_height(job_group[i],52);
         job_card[i] = button(p, NULL, cfg->screen_width - 2 * PAD, 112, job_cb, (void *)(intptr_t)i);
         job_title[i] = label(job_card[i], "", &font_ui_20, cfg->screen_width - 140, false);
         lv_obj_set_height(job_title[i], 28);
@@ -818,27 +875,44 @@ static void downloads_build(void) {
         job_status[i] = label(job_card[i], "", &font_ui_16, cfg->screen_width - 140, true);
         lv_obj_set_pos(job_status[i], 12, 42);
         lv_label_set_long_mode(job_status[i], LV_LABEL_LONG_WRAP);
-        lv_obj_t *cancel = button(job_card[i], "X", 52, 52, cancel_cb, (void *)(intptr_t)i);
+        lv_obj_t *cancel = job_cancel[i] = button(job_card[i], "X", 52, 52, cancel_cb, (void *)(intptr_t)i);
         lv_obj_set_event_bubble(cancel, false);
         lv_obj_align(cancel, LV_ALIGN_RIGHT_MID, -8, 0);
         lv_obj_set_hidden(job_card[i], true);
     }
-    route(p, "Browse downloaded files", "Open the Downloads folder on your card", &icon_folder, OPEN_DOWNLOAD_FOLDER);
+    route(p, "Listen offline", "Open your indexed music", &icon_music2, OPEN_TRACKS);
 }
 
 static void downloads_update(void) {
     job_count = download_snapshot(jobs, DOWNLOAD_MAX_JOBS);
+    /* Keep release members adjacent without altering transfer scheduling. */
+    for(int i=1;i<job_count;i++) {
+        download_job_t job=jobs[i];int j=i;
+        while(j>0 && strcmp(jobs[j-1].item.id,job.item.id)>0){jobs[j]=jobs[j-1];j--;}
+        jobs[j]=job;
+    }
     for (int i = 0; i < DOWNLOAD_MAX_JOBS; i++) {
         lv_obj_set_hidden(job_card[i], i >= job_count);
+        bool group=i<job_count && (!i || strcmp(jobs[i-1].item.id,jobs[i].item.id));
+        lv_obj_set_hidden(job_group[i],!group);
+        if(group) {
+            int total=0,done=0;
+            for(int j=i;j<job_count && !strcmp(jobs[i].item.id,jobs[j].item.id);j++) {total++;done+=jobs[j].state==DOWNLOAD_DONE;}
+            char title[256];snprintf(title,sizeof(title),"%.180s\n%d of %d downloaded",jobs[i].item.album,done,total);
+            lv_label_set_text(job_group[i],title);
+        }
         if (i >= job_count) continue;
         download_job_t *job = &jobs[i];
-        lv_label_set_text(job_title[i], job->item.title);
+        char local_title[256];
+        bool indexed=job->state==DOWNLOAD_DONE && library_track_title(job->path,local_title,sizeof(local_title));
+        lv_label_set_text(job_title[i],indexed?local_title:job->item.title);
+        lv_obj_set_hidden(job_cancel[i],job->state==DOWNLOAD_DONE || job->state==DOWNLOAD_CANCELLED);
         char status[256];
         snprintf(status, sizeof(status), "%s  /  %.1f / %.1f MB\n%s", download_state_name(job->state),
                  (double)job->done / 1048576, (double)job->total / 1048576, job->error);
         if (job->state == DOWNLOAD_RUNNING)
-            snprintf(status, sizeof(status), "%.1f / %.1f MB  /  %u KB/s\nTap to pause",
-                     (double)job->done / 1048576, (double)job->total / 1048576, job->bytes_per_second / 1024);
+            snprintf(status, sizeof(status), "%d%% / %s / %u KB/s\nTap to pause",
+                     job->total?(int)(100*job->done/job->total):0, job->item.format, job->bytes_per_second / 1024);
         lv_label_set_text(job_status[i], status);
     }
 }
@@ -888,13 +962,41 @@ static void mini_update(void) {
 static void poll_cb(lv_timer_t *timer) {
     (void)timer;
     search_art_update();
-    if (search_busy) {
-        pthread_mutex_lock(&search_lock);
-        bool ready = search_ready;
-        pthread_mutex_unlock(&search_lock);
-        if (ready) { if(request_epoch==search_epoch)search_draw(); search_busy = false; }
+    if(instant_pending && lv_tick_elaps(instant_changed)>=180)start_instant();
+    if(local_busy) {
+        pthread_mutex_lock(&search_lock);bool ready=local_ready;pthread_mutex_unlock(&search_lock);
+        if(ready) {
+            local_busy=false;
+            if(local_epoch==search_epoch) {
+                shown.local_count=pending.local_count;
+                memcpy(shown.local,pending.local,sizeof(shown.local));
+                memcpy(shown.artwork,pending.artwork,sizeof(shown.artwork));
+                memcpy(shown.artist,pending.artist,sizeof(shown.artist));
+                search_draw();
+            }
+        }
     }
-    if(!search_busy && instant_pending && lv_tick_elaps(instant_changed)>=180)start_instant();
+    if(search_busy) {
+        pthread_mutex_lock(&search_lock);bool ready=search_ready;pthread_mutex_unlock(&search_lock);
+        if(ready) {
+            search_busy=false;
+            if(online_epoch==search_epoch) {
+                if(request_album) {
+                    /* Keep the previous results and scroll position under the release page. */
+                    lv_label_set_text(search_status,online_error);
+                    if(online_pending.count && selected==SEARCH &&
+                       (lv_screen_active()==main_menu_screen || online_album_active())) {
+                        snprintf(release_artist,sizeof(release_artist),"%s",online_pending.items[0].artist);
+                        online_album_open(cfg,&online_pending,request_page,online_track_sheet,page_cb,artist_cb);
+                    }
+                } else {
+                    shown.online=online_pending;snprintf(shown.error,sizeof(shown.error),"%s",online_error);
+                    search_draw();
+                }
+            }
+        }
+    }
+    dispatch_search();
     if (player_sheet_is_open()) return;
     if(mini && lv_screen_active()==lv_obj_get_parent(mini)) mini_update();
     if (lv_screen_active() != main_menu_screen) return;
