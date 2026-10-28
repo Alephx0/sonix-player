@@ -44,3 +44,10 @@ Reference collection cover/title/artist/metadata/action widgets are now built by
 `gui/library/collection_header.c`, used by medialist and the native online release
 page. Online pages retain the shared footer; source details use the existing sheet.
 The online placeholder deliberately uses no remote artwork buffer in this milestone.
+
+
+Online settings retain the existing native column/button system. Three 46 px
+category controls sit above independently scrollable settings; Save/Discard/Defaults
+remain above the persistent mini-player. Values fit single 52 px rows. Queue
+status filters use five equal touch targets. Do not port desktop-only controls
+as inert switches or replace the local playback/navigation state.

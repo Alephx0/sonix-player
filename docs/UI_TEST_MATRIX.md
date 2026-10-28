@@ -48,3 +48,10 @@ automatically index, play locally and disable discovery without interrupting aud
 `test_live_download.py --fresh` additionally denies new network connections with
 host seccomp before importing/decoding the completed file. This is not an R1 Wi-Fi
 or DAC test. Provider tests cover atomic release capacity and stable worker slots.
+
+
+`--journey online-settings` verifies draft/save/discard/defaults, paused download
+admission, status filters, uninterrupted playback, restart and destination
+persistence. `tests/discovery/run.sh` additionally checks saved options, rate
+limiting, retry limits and stable filenames. See
+[SpotBye inspection and parity evidence](custom-firmware/spotbye-parity.md).

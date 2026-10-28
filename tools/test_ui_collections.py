@@ -294,16 +294,51 @@ def online_live(s,card):
     s.check(not any(n.get('text')=='Download to microSD' for n in s.visible(sheet)),'known indexed source offers local playback instead of a duplicate download')
     s.click_label('Play offline copy');s.check(s.snapshot()['file']==path,'existing-copy action uses the local file')
     # Disable discovery in Sources. Playback must continue from the local file.
-    s.snapshot('search-text Toccata');s.click_label('Sources');s.click_label('Online discovery: On')
+    s.snapshot('search-text Toccata');s.click_label('Sources');s.click_label('Online discovery: On');s.click_label('Save')
     time.sleep(1);offline=s.capture('live-discovery-disabled')
     s.check(offline['file']==path and offline['status']==1,'local playback continues with online discovery disabled')
     s.report['downloaded_file']=path
     s.metrics()
 
 
+def online_settings(s,card):
+    s.setup('playlist Night Drive');s.click_label('Night Walk');before=s.snapshot()
+    s.command('click',240,770);s.click_label('Sources');s.capture('online-settings-sources')
+    s.click_label('Online discovery: On');s.click_label('Discard');s.label(s.snapshot(),'Online discovery: On')
+    s.check(True,'Discard restores saved discovery choice')
+    s.click_label('Transfers');s.click_label('Start new downloads: On')
+    s.click_label('Network attempts: 3');s.click_label('Speed limit: Unlimited')
+    s.click_label('Files');s.click_label('Filename: Source identity');s.click_label('Save')
+    s.label(s.snapshot(),'Settings saved');s.capture('online-settings-files')
+    s.click_label('Transfers');state=s.capture('online-settings-transfers')
+    for text in ('Start new downloads: Off','Network attempts: 1','Speed limit: 128 KiB/s'):s.label(state,text)
+    s.check(state['file']==before['file'] and state['status']==1 and state['priority']==before['priority'],'settings preserve playback, mini-player and playback queue')
+    s.check(not state['now_playing_open'],'settings do not expand Now Playing')
+    fixture=s.out/'settings-release.json';fixture.write_text(json.dumps({'metadata':{'mediatype':'audio','title':'Settings Test Release','creator':'Test Artist','licenseurl':'https://creativecommons.org/licenses/by/4.0/'},'files':[{'name':'test.flac','title':'Test Recording','size':'10485760','md5':'0123456789abcdef0123456789abcdef'}]}))
+    s.setup('online-fixture '+str(fixture));s.click_label('Download to microSD');time.sleep(.3)
+    state=s.capture('downloads-paused');s.label(state,'Test Recording')
+    s.check(any(n.get('text','').startswith('Paused  /') for n in s.visible(state)),'Start Off admits a paused job through the actual Download action')
+    s.check(state['file']==before['file'] and state['priority']==before['priority'],'download admission leaves playback queue untouched')
+    s.click_label('Done');s.label(s.snapshot(),'No downloads in this filter.')
+    s.check(not any(n.get('text')=='Test Recording' for n in s.visible(s.snapshot())),'Done filter excludes paused downloads')
+    s.capture('downloads-done-empty');s.click_label('Paused');s.label(s.snapshot(),'Test Recording')
+    s.click_label('Pause all');s.label(s.snapshot(),'Test Recording')
+    s.check(True,'Paused filter and Pause all retain paused jobs')
+    s.command('stop');s.command('start',3,'--card',card,'--preserve-config')
+    s.command('click',240,770);s.click_label('Sources');s.click_label('Transfers');state=s.capture('online-settings-restored')
+    for text in ('Start new downloads: Off','Network attempts: 1','Speed limit: 128 KiB/s'):s.label(state,text)
+    s.click_label('Files');s.label(s.snapshot(),'Filename: Title - Artist')
+    s.check(True,'saved source, retry, rate and filename settings survive process restart')
+    manifest=json.loads((card/'Downloads/.sonix-downloads.json').read_text())
+    s.check('Test Recording - Test Artist' in manifest['jobs'][0]['destination'],'filename choice is captured in the persistent job')
+    s.click_label('Defaults');s.click_label('Discard');s.label(s.snapshot(),'Filename: Title - Artist')
+    s.check(True,'Defaults is a draft and can be discarded')
+    s.metrics()
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('repo',type=Path);p.add_argument('--baseline',type=Path);p.add_argument('--card',type=Path)
-    p.add_argument('--journey',choices=['collections','empty-liked','preview-online','online-release','online-live'],default='collections')
+    p.add_argument('--journey',choices=['collections','empty-liked','preview-online','online-release','online-live','online-settings'],default='collections')
     a=p.parse_args();repo=a.repo.resolve();out=Path(tempfile.mkdtemp(prefix='ui-collections-',dir=repo/'artifacts'))
     s=Session(repo,out,a.baseline);started=False
     if a.journey=='online-release':s.env['SONIX_TEST_ONLINE_DELAY_MS']='4000'
@@ -314,6 +349,7 @@ def main():
         elif a.journey=='preview-online':preview_online(s,card)
         elif a.journey=='online-release':online_release(s,card)
         elif a.journey=='online-live':online_live(s,card)
+        elif a.journey=='online-settings':online_settings(s,card)
         else:
             s.command('click',400,770);s.click_label('Liked Songs')
             state=s.capture('liked-songs');_,play=s.collection_geometry(state)

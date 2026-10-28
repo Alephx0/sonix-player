@@ -1,0 +1,197 @@
+{
+  "actions": [
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-6dqcfu90/sd"
+    ],
+    [
+      "click",
+      "254",
+      "537"
+    ],
+    [
+      "click",
+      "240",
+      "770"
+    ],
+    [
+      "click",
+      "420",
+      "199"
+    ],
+    [
+      "shot",
+      "online-settings-sources"
+    ],
+    [
+      "click",
+      "240",
+      "236"
+    ],
+    [
+      "click",
+      "239",
+      "592"
+    ],
+    [
+      "click",
+      "239",
+      "131"
+    ],
+    [
+      "click",
+      "240",
+      "192"
+    ],
+    [
+      "click",
+      "240",
+      "256"
+    ],
+    [
+      "click",
+      "240",
+      "320"
+    ],
+    [
+      "click",
+      "388",
+      "131"
+    ],
+    [
+      "click",
+      "240",
+      "192"
+    ],
+    [
+      "click",
+      "90",
+      "592"
+    ],
+    [
+      "shot",
+      "online-settings-files"
+    ],
+    [
+      "click",
+      "239",
+      "131"
+    ],
+    [
+      "shot",
+      "online-settings-transfers"
+    ],
+    [
+      "click",
+      "240",
+      "512"
+    ],
+    [
+      "shot",
+      "downloads-paused"
+    ],
+    [
+      "click",
+      "329",
+      "131"
+    ],
+    [
+      "shot",
+      "downloads-done-empty"
+    ],
+    [
+      "click",
+      "240",
+      "131"
+    ],
+    [
+      "click",
+      "353",
+      "223"
+    ],
+    [
+      "stop"
+    ],
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-6dqcfu90/sd",
+      "--preserve-config"
+    ],
+    [
+      "click",
+      "240",
+      "770"
+    ],
+    [
+      "click",
+      "420",
+      "199"
+    ],
+    [
+      "click",
+      "239",
+      "131"
+    ],
+    [
+      "shot",
+      "online-settings-restored"
+    ],
+    [
+      "click",
+      "388",
+      "131"
+    ],
+    [
+      "click",
+      "388",
+      "592"
+    ],
+    [
+      "click",
+      "239",
+      "592"
+    ],
+    [
+      "stop"
+    ]
+  ],
+  "checks": [
+    "online-settings-sources: native 480x800 render",
+    "Discard restores saved discovery choice",
+    "online-settings-files: native 480x800 render",
+    "online-settings-transfers: native 480x800 render",
+    "settings preserve playback, mini-player and playback queue",
+    "settings do not expand Now Playing",
+    "downloads-paused: native 480x800 render",
+    "Start Off admits a paused job through the actual Download action",
+    "download admission leaves playback queue untouched",
+    "Done filter excludes paused downloads",
+    "downloads-done-empty: native 480x800 render",
+    "Paused filter and Pause all retain paused jobs",
+    "online-settings-restored: native 480x800 render",
+    "saved source, retry, rate and filename settings survive process restart",
+    "filename choice is captured in the persistent job",
+    "Defaults is a draft and can be discarded"
+  ],
+  "screenshots": [
+    "online-settings-sources.png",
+    "online-settings-files.png",
+    "online-settings-transfers.png",
+    "downloads-paused.png",
+    "downloads-done-empty.png",
+    "online-settings-restored.png"
+  ],
+  "metrics": {
+    "host_rss_kib": 40184,
+    "idle_cpu_percent_one_core": 1.0,
+    "sample_seconds": 1.0,
+    "lvgl": "9.6.0",
+    "note": "SDL software rendering on host; not a measurement of R1 RAM or timing"
+  },
+  "baseline": "No approved baseline supplied",
+  "result": "PASS"
+}

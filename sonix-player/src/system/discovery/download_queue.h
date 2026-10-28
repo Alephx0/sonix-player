@@ -13,7 +13,16 @@ typedef struct {
     long long done, total;
     unsigned bytes_per_second, attempts;
     char path[768], error[192];
+    char destination[256]; /* Captured at enqueue, stable across preference changes. */
 } download_job_t;
+typedef struct {
+    bool start_immediately;
+    unsigned attempts; /* 1..3 */
+    unsigned rate_kib; /* 0 unlimited, otherwise 64..1024 KiB/s */
+    unsigned naming; /* 0 source identity, 1 title - artist, 2 artist - title */
+} download_options_t;
+void download_configure(const download_options_t *options);
+download_options_t download_options(void);
 /* Call once per card/root before enqueue. Repeated call with same root is safe.
  * Changing roots is rejected while worker runs. NULL/empty is never a card. */
 bool download_queue_init(const char *sd_root);

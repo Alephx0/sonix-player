@@ -1,0 +1,20 @@
+{
+  "evidence_id": "ev_3552e5bd3421f6829271ff7e5835c8e73fd51b4ba344918841694041d7473da5",
+  "operation": "inspect_go_binary",
+  "provider": {
+    "id": "go-build-info",
+    "name": "REA Go build-information reader",
+    "version": "1"
+  },
+  "authority": "shipped-artifact",
+  "confidence": "observed",
+  "architecture": "amd64",
+  "bits": 64,
+  "sha256": "fd46c09b4797b2ca7c645819a8b9e44220390a89efb8df98beeb9f536f3dd9e1",
+  "limitations": [
+    "Embedded build metadata is observed file content, not proof of compiler identity, dependency authenticity or runtime behavior.",
+    "Only Go build information is inspected; function names, source mappings, type metadata and decompiled code are not recovered.",
+    "Resource guards bound stable artifact reads and cumulative header searches to 256 MiB each, aggregate embedded strings to 1 MiB, structural table decoding to 16 MiB and complete metadata payloads to 8 MiB; these are not operating-system memory or CPU limits."
+  ],
+  "note": "Projection of REA build-metadata inspection. Full bundle and reference captures remain in ignored research/spotbye-runtime; no account state or source bodies included."
+}

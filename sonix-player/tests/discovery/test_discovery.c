@@ -1,4 +1,6 @@
 #define _GNU_SOURCE 1
+#include "src/system/discovery/preferences.h"
+#include "src/system/core/config.h"
 #include "src/system/discovery/discovery.h"
 #include "src/system/discovery/download_queue.h"
 #include "src/system/net/http.h"
@@ -128,7 +130,38 @@ static void test_release_queue(void) {
     for(int i=0;i<DOWNLOAD_MAX_JOBS;i++)assert(jobs[i].state==DOWNLOAD_PAUSED);
     download_queue_shutdown();free(r);
 }
-int main(void){test_release_links();memset(payload,'a',sizeof(payload));test_release_queue();test_md5();test_provider();test_pages();char temp[]="/tmp/sonix-discovery-test-XXXXXX";assert(mkdtemp(temp));assert(!download_queue_init(""));assert(download_queue_init(temp));assert(download_queue_init(temp));char err[192];discovery_item_t a=item("complete");unsigned initial_revision=download_revision();unsigned id=download_enqueue(&a,err,sizeof(err));assert(id);assert(download_enqueue(&a,err,sizeof(err))==id);download_job_t j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE&&j.done==sizeof(payload));struct stat st;assert(!stat(j.path,&st)&&st.st_size==sizeof(payload));assert(download_revision()==initial_revision+1);
+static void test_preferences(void) {
+    char root[]="/tmp/sonix-preferences-XXXXXX",error[192],config[512];assert(mkdtemp(root));
+    snprintf(config,sizeof(config),"%s/settings.ini",root);config_init(config);
+    discovery_preferences_t prefs=discovery_preferences_load();assert(prefs.transfers.start_immediately && prefs.transfers.attempts==3);
+    prefs.transfers=(download_options_t){false,1,128,1};prefs.format=2;prefs.enabled=false;
+    assert(discovery_preferences_save(&prefs));assert(config_init(config));
+    prefs=discovery_preferences_load();assert(!prefs.enabled && prefs.format==2 && !prefs.transfers.start_immediately && prefs.transfers.naming==1 && prefs.transfers.rate_kib==128);
+    assert(download_queue_init(root));int previous_opens=atomic_load(&opens);
+    discovery_item_t a=item("Title"),b=item("Other");unsigned id=download_enqueue(&a,error,sizeof(error));assert(id);
+    usleep(100000);download_job_t job=snapshot(id);assert(job.state==DOWNLOAD_PAUSED && atomic_load(&opens)==previous_opens);
+    assert(strstr(job.path,"Title - Test Artist") && !strchr(job.destination,'/'));
+    discovery_results_t release={0};release.count=2;release.items[0]=a;release.items[1]=b;
+    assert(download_enqueue_release(&release,error,sizeof(error)));assert(snapshot(id).state==DOWNLOAD_PAUSED);
+    download_job_t second;assert(download_lookup(&b,&second) && second.state==DOWNLOAD_PAUSED);
+    char original[768];snprintf(original,sizeof(original),"%s",job.path);
+    prefs.transfers.naming=2;assert(discovery_preferences_save(&prefs));
+    assert(!strcmp(snapshot(id).path,original));
+    download_queue_shutdown();assert(download_queue_init(root));assert(download_lookup(&a,&job));
+    assert(job.state==DOWNLOAD_PAUSED && !strcmp(job.path,original));id=job.id;
+    atomic_store(&mode,0);struct timespec begin,end;clock_gettime(CLOCK_MONOTONIC,&begin);
+    assert(download_resume(id));assert(wait_terminal(id).state==DOWNLOAD_DONE);clock_gettime(CLOCK_MONOTONIC,&end);
+    double elapsed=(end.tv_sec-begin.tv_sec)+(end.tv_nsec-begin.tv_nsec)/1e9;assert(elapsed>=.45);
+    /* The new naming preference affects only new jobs. */
+    a=item("New");id=download_enqueue(&a,error,sizeof(error));assert(strstr(snapshot(id).path,"Test Artist - New"));
+    prefs.transfers.rate_kib=0;assert(discovery_preferences_save(&prefs));
+    atomic_store(&opens,0);atomic_store(&mode,1);assert(download_resume(id));job=wait_terminal(id);
+    assert(job.state==DOWNLOAD_FAILED && job.attempts==1 && atomic_load(&opens)==1);
+    download_queue_shutdown();atomic_store(&mode,0);
+    prefs=discovery_preferences_defaults();assert(discovery_preferences_save(&prefs));
+    puts("PASS saved settings, paused admission/release, stable persisted filenames, live rate limiting, retry limit");
+}
+int main(void){test_release_links();memset(payload,'a',sizeof(payload));test_preferences();test_release_queue();test_md5();test_provider();test_pages();char temp[]="/tmp/sonix-discovery-test-XXXXXX";assert(mkdtemp(temp));assert(!download_queue_init(""));assert(download_queue_init(temp));assert(download_queue_init(temp));char err[192];discovery_item_t a=item("complete");unsigned initial_revision=download_revision();unsigned id=download_enqueue(&a,err,sizeof(err));assert(id);assert(download_enqueue(&a,err,sizeof(err))==id);download_job_t j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE&&j.done==sizeof(payload));struct stat st;assert(!stat(j.path,&st)&&st.st_size==sizeof(payload));assert(download_revision()==initial_revision+1);
 atomic_store(&opens,0);atomic_store(&mode,1);a=item("retry");id=download_enqueue(&a,err,sizeof(err));j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE&&j.attempts==2);assert(atomic_load(&opens)==2);
 atomic_store(&mode,2);a=item("pause");id=download_enqueue(&a,err,sizeof(err));wait_progress(id);assert(download_pause(id));usleep(150000);assert(snapshot(id).state==DOWNLOAD_PAUSED);assert(download_resume(id));j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE);
 a=item("cancel");id=download_enqueue(&a,err,sizeof(err));wait_progress(id);assert(download_cancel(id));usleep(150000);assert(snapshot(id).state==DOWNLOAD_CANCELLED);assert(access(snapshot(id).path,F_OK)!=0);

@@ -136,3 +136,13 @@ The local-first journey sampled 42,084 KiB host RSS and 8% of one core over one
 second. The live UI journey's separate measurements are retained in its report.
 Host build, MIPS target build and glibc <=2.22 ABI verification passed. These
 captures are candidates, not approved visual baselines; hardware remains untested.
+
+
+### SpotBye reference and settings follow-up
+
+The exact user-opened SpotBye executable has now been inspected with REA, and its
+settings/source/queue UI observed on Windows. Saved native download preferences
+and status filters are implemented. See [parity report](spotbye-parity.md) for
+observed controls, implemented behavior, verification and unresolved provider gaps.
+This supersedes the earlier audit's statement that only static inspection had
+been performed; it does not establish full SpotBye service compatibility.

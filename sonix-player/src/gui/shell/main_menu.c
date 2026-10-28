@@ -40,6 +40,7 @@
 #include "src/system/core/config.h"
 #include "src/system/discovery/discovery.h"
 #include "src/system/discovery/download_queue.h"
+#include "src/system/discovery/preferences.h"
 #include "src/system/library/library.h"
 #include "src/system/net/wifi.h"
 #include "src/system/playback/device_state.h"
@@ -489,12 +490,13 @@ static void online_download_cb(lv_event_t *e) {
     if (!gui_card_available()) { gui_notify_no_card(); return; }
     char error[192] = "Could not open the download queue.";
     unsigned id = 0;
+    download_job_t previous;bool existed=download_lookup(&online_selection,&previous);
     if (!download_queue_init(cfg->sd_root_path) ||
         !(id = download_enqueue(&online_selection, error, sizeof(error)))) {
         gui_notify_popup(error);
         return;
     }
-    download_resume(id);
+    if(existed)download_resume(id);
     bottomsheet_close(false);
     main_menu_open_downloads();
 }
@@ -778,70 +780,100 @@ static void search_build(void) {
     search_keyboard_visible(false);
 }
 
-static lv_obj_t *provider_enabled_text, *provider_format_text;
-
+static discovery_preferences_t provider_draft;
+static lv_obj_t *provider_body,*provider_values[6],*provider_tabs[3],*provider_notice;
+static int provider_tab;
 static void provider_refresh(void) {
-    if (!provider_enabled_text) return;
-    lv_label_set_text(provider_enabled_text, config_get_bool("discovery", "enabled", true)
-        ? "Online discovery: On" : "Online discovery: Off");
-    int format = (int)config_get_int("discovery", "format", 0);
-    lv_label_set_text(provider_format_text, format == 1 ? "Prefer MP3 sources" :
-        format == 2 ? "Prefer FLAC sources" : "Use source format order");
+    char text[96];
+    if(provider_values[0])lv_label_set_text(provider_values[0],provider_draft.enabled?"Online discovery: On":"Online discovery: Off");
+    if(provider_values[1])lv_label_set_text(provider_values[1],(const char *[]){"Use source format order","Prefer MP3 sources","Prefer FLAC sources"}[provider_draft.format]);
+    if(provider_values[2])lv_label_set_text(provider_values[2],provider_draft.transfers.start_immediately?"Start new downloads: On":"Start new downloads: Off");
+    if(provider_values[3]){snprintf(text,sizeof(text),"Network attempts: %u",provider_draft.transfers.attempts);lv_label_set_text(provider_values[3],text);}
+    if(provider_values[4]){if(provider_draft.transfers.rate_kib)snprintf(text,sizeof(text),"Speed limit: %u KiB/s",provider_draft.transfers.rate_kib);else snprintf(text,sizeof(text),"Speed limit: Unlimited");lv_label_set_text(provider_values[4],text);}
+    if(provider_values[5])lv_label_set_text(provider_values[5],(const char *[]){"Filename: Source identity","Filename: Title - Artist","Filename: Artist - Title"}[provider_draft.transfers.naming]);
 }
-
 static void provider_setting_cb(lv_event_t *e) {
-    if (!tapped()) return;
-    int action = (int)(intptr_t)lv_event_get_user_data(e);
-    if (action == 0) {
-        bool enabled=!config_get_bool("discovery","enabled",true);
-        config_set_bool("discovery","enabled",enabled);
-        if(!enabled){search_epoch++;online_wanted=false;memset(&shown.online,0,sizeof(shown.online));}
+    if(!tapped())return;
+    switch((intptr_t)lv_event_get_user_data(e)) {
+    case 0:provider_draft.enabled=!provider_draft.enabled;break;
+    case 1:provider_draft.format=(provider_draft.format+1)%3;break;
+    case 2:provider_draft.transfers.start_immediately=!provider_draft.transfers.start_immediately;break;
+    case 3:provider_draft.transfers.attempts=provider_draft.transfers.attempts%3+1;break;
+    case 4:provider_draft.transfers.rate_kib=provider_draft.transfers.rate_kib==0?128:provider_draft.transfers.rate_kib==128?512:0;break;
+    case 5:provider_draft.transfers.naming=(provider_draft.transfers.naming+1)%3;break;
     }
-    else config_set_int("discovery", "format", (config_get_int("discovery", "format", 0) + 1) % 3);
-    config_save();
+    lv_label_set_text(provider_notice,"Unsaved changes");provider_refresh();
+}
+static void provider_choice(int id) {
+    lv_obj_t *b=button(provider_body,"",cfg->screen_width-2*PAD,52,provider_setting_cb,(void *)(intptr_t)id);
+    provider_values[id]=lv_obj_get_child(b,0);
+}
+static void provider_note(const char *text) {
+    lv_obj_t *l=label(provider_body,text,&font_ui_18,cfg->screen_width-2*PAD,true);
+    lv_label_set_long_mode(l,LV_LABEL_LONG_WRAP);
+}
+static void provider_content(void) {
+    lv_obj_clean(provider_body);memset(provider_values,0,sizeof(provider_values));
+    for(int i=0;i<3;i++)lv_obj_set_style_bg_color(provider_tabs[i],lv_color_hex(i==provider_tab?0x167c40:0x282828),0);
+    if(provider_tab==0) {
+        section(provider_body,"Internet Archive");provider_choice(0);provider_choice(1);
+        provider_note("Release search and original audio downloads. Other catalog and download providers are not connected.");
+        route(provider_body,"Wi-Fi settings","Choose a network",&icon_wifi,OPEN_WIFI);
+    } else if(provider_tab==1) {
+        provider_choice(2);provider_choice(3);provider_choice(4);
+        provider_note("One transfer at a time. Start Off adds paused jobs. Restored jobs always wait for Resume. Retry settings apply to the next transfer.");
+    } else {
+        provider_choice(5);
+        provider_note("Destination: microSD / Downloads\nNew filenames keep a source suffix to distinguish recordings. Existing jobs keep their filenames.");
+        provider_note("Existing files: verify size and checksum; never overwrite. Original audio and embedded tags are preserved. Source details are saved alongside the audio.");
+    }
+    lv_obj_scroll_to_y(provider_body,0,LV_ANIM_OFF);provider_refresh();
+}
+static void provider_tab_cb(lv_event_t *e) {
+    if(!tapped())return;provider_tab=(int)(intptr_t)lv_event_get_user_data(e);provider_content();
+}
+static void provider_save_cb(lv_event_t *e) {
+    if(!tapped())return;
+    intptr_t action=(intptr_t)lv_event_get_user_data(e);
+    if(action==1){provider_draft=discovery_preferences_load();lv_label_set_text(provider_notice,"Changes discarded");}
+    else if(action==2){provider_draft=discovery_preferences_defaults();lv_label_set_text(provider_notice,"Defaults ready - tap Save");}
+    else {
+        if(!discovery_preferences_save(&provider_draft)){lv_label_set_text(provider_notice,"Could not save settings");return;}
+        if(!provider_draft.enabled){search_epoch++;online_wanted=false;memset(&shown.online,0,sizeof(shown.online));}
+        lv_label_set_text(provider_notice,"Settings saved");
+    }
     provider_refresh();
 }
-
-static void pause_all_cb(lv_event_t *e) {
-    (void)e;
-    if (!tapped()) return;
-    download_job_t snapshot[DOWNLOAD_MAX_JOBS];
-    int n = download_snapshot(snapshot, DOWNLOAD_MAX_JOBS);
-    for (int i = 0; i < n; i++) if (snapshot[i].state == DOWNLOAD_RUNNING || snapshot[i].state == DOWNLOAD_QUEUED)
-        download_pause(snapshot[i].id);
-    gui_notify_popup("Transfers paused. Resume them individually in Downloads.");
-}
-
 static void providers_build(void) {
-    lv_obj_t *p = page[PROVIDERS];
-    section(p, "Internet Archive");
-    lv_obj_t *note = label(p, "Search music or paste an Archive release link. Open a track to choose a download. No sign-in required.",
-                          &font_ui_18, cfg->screen_width - 2 * PAD, true);
-    lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
-    lv_obj_t *enabled = button(p, "", cfg->screen_width - 2 * PAD, 58, provider_setting_cb, (void *)0);
-    provider_enabled_text = lv_obj_get_child(enabled, 0);
-    lv_obj_t *format = button(p, "", cfg->screen_width - 2 * PAD, 58, provider_setting_cb, (void *)1);
-    provider_format_text = lv_obj_get_child(format, 0);
-    provider_refresh();
-    button(p, "Pause all transfers", cfg->screen_width - 2 * PAD, 58, pause_all_cb, NULL);
-    note = label(p, "Tap to change a setting. Preferred formats appear first; all available formats remain selectable. "
-        "Turning discovery off stops new searches; running transfers can be paused above. Restored transfers always wait for you to resume.",
-        &font_ui_18, cfg->screen_width - 2 * PAD, true);
-    lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
-    section(p, "Provider capabilities");
-    note = label(p, "Supported: paged release search, direct release links, artist release lists, track details and licensed audio downloads. "
-        "Artist lists follow source creator names, which may include several contributors. "
-        "Not supported: streaming previews, artist biographies, online playlists or automatic provider fallback. "
-        "Downloads keep the original audio quality and embedded tags, with an attribution sidecar for missing metadata.",
-        &font_ui_18, cfg->screen_width - 2 * PAD, true);
-    lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
-    route(p, "Wi-Fi settings", "Choose a network", &icon_wifi, OPEN_WIFI);
+    lv_obj_t *p=page[PROVIDERS];int w=cfg->screen_width-2*PAD;
+    lv_obj_t *tabs=box(p,w,46,false);lv_obj_set_flex_flow(tabs,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(tabs,8,0);
+    for(int i=0;i<3;i++)provider_tabs[i]=button(tabs,(const char *[]){"Sources","Transfers","Files"}[i],(w-16)/3,46,provider_tab_cb,(void *)(intptr_t)i);
+    provider_body=column(p,w,body_height()-46-52-24-36);
+    lv_obj_t *actions=box(p,w,52,false);lv_obj_set_flex_flow(actions,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(actions,8,0);
+    for(int i=0;i<3;i++)button(actions,(const char *[]){"Save","Discard","Defaults"}[i],(w-16)/3,52,provider_save_cb,(void *)(intptr_t)i);
+    provider_notice=label(p,"",&font_ui_16,w,true);lv_obj_set_height(provider_notice,24);
 }
 
 static download_job_t jobs[DOWNLOAD_MAX_JOBS];
 static lv_obj_t *job_group[DOWNLOAD_MAX_JOBS], *job_cancel[DOWNLOAD_MAX_JOBS];
 static lv_obj_t *job_title[DOWNLOAD_MAX_JOBS], *job_status[DOWNLOAD_MAX_JOBS], *job_card[DOWNLOAD_MAX_JOBS];
-static int job_count;
+static int job_count,job_filter;
+static lv_obj_t *job_filters[5],*jobs_empty,*jobs_summary;
+static void downloads_update(void);
+static void job_filter_cb(lv_event_t *e) {
+    if(!tapped())return;job_filter=(int)(intptr_t)lv_event_get_user_data(e);downloads_update();
+}
+static void job_all_cb(lv_event_t *e) {
+    if(!tapped())return;
+    bool resume=(intptr_t)lv_event_get_user_data(e)==1;
+    download_job_t snapshot[DOWNLOAD_MAX_JOBS];int n=download_snapshot(snapshot,DOWNLOAD_MAX_JOBS);
+    for(int i=0;i<n;i++) {
+        if(resume && (snapshot[i].state==DOWNLOAD_PAUSED || snapshot[i].state==DOWNLOAD_FAILED))download_resume(snapshot[i].id);
+        else if(!resume && (snapshot[i].state==DOWNLOAD_RUNNING || snapshot[i].state==DOWNLOAD_QUEUED))download_pause(snapshot[i].id);
+    }
+    downloads_update();
+}
+
 
 static void job_cb(lv_event_t *e) {
     intptr_t index = (intptr_t)lv_event_get_user_data(e);
@@ -861,7 +893,15 @@ static void cancel_cb(lv_event_t *e) {
 
 static void downloads_build(void) {
     lv_obj_t *p = page[DOWNLOADS];
-    section(p, "Your download queue");
+    int w=cfg->screen_width-2*PAD;
+    lv_obj_t *filters=box(p,w,46,false);lv_obj_set_flex_flow(filters,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(filters,5,0);
+    for(int i=0;i<5;i++)job_filters[i]=button(filters,(const char *[]){"All","Active","Paused","Done","Failed"}[i],(w-20)/5,46,job_filter_cb,(void *)(intptr_t)i);
+    jobs_summary=label(p,"",&font_ui_16,w,true);
+    lv_obj_t *actions=box(p,w,48,false);lv_obj_set_flex_flow(actions,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(actions,12,0);
+    button(actions,"Start all",(w-12)/2,48,job_all_cb,(void *)1);
+    button(actions,"Pause all",(w-12)/2,48,job_all_cb,(void *)0);
+    jobs_empty=label(p,"",&font_ui_18,w,true);
+    lv_label_set_long_mode(jobs_empty,LV_LABEL_LONG_WRAP);
     lv_obj_t *hint = label(p, "Tap a transfer to pause or resume. Tap a completed track to play.", &font_ui_18,
                            cfg->screen_width - 2 * PAD, true);
     lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
@@ -885,6 +925,25 @@ static void downloads_build(void) {
 
 static void downloads_update(void) {
     job_count = download_snapshot(jobs, DOWNLOAD_MAX_JOBS);
+    int total=job_count,counts[5]={job_count,0,0,0,0};
+    for(int i=0;i<job_count;i++) {
+        download_state_t state=jobs[i].state;
+        counts[1]+=state==DOWNLOAD_QUEUED || state==DOWNLOAD_RUNNING;
+        counts[2]+=state==DOWNLOAD_PAUSED;counts[3]+=state==DOWNLOAD_DONE;counts[4]+=state==DOWNLOAD_FAILED;
+    }
+    int kept=0;
+    for(int i=0;i<job_count;i++) {
+        download_state_t state=jobs[i].state;
+        if(job_filter==0 || (job_filter==1 && (state==DOWNLOAD_QUEUED || state==DOWNLOAD_RUNNING)) ||
+           (job_filter==2 && state==DOWNLOAD_PAUSED) || (job_filter==3 && state==DOWNLOAD_DONE) ||
+           (job_filter==4 && state==DOWNLOAD_FAILED))jobs[kept++]=jobs[i];
+    }
+    job_count=kept;char summary[128];
+    snprintf(summary,sizeof(summary),"%d total / %d active / %d done / %d failed",total,counts[1],counts[3],counts[4]);
+    lv_label_set_text(jobs_summary,summary);
+    lv_obj_set_hidden(jobs_empty,job_count>0);
+    lv_label_set_text(jobs_empty,total?"No downloads in this filter.":"No downloads yet. Choose a recording in Search to get started.");
+    for(int i=0;i<5;i++)lv_obj_set_style_bg_color(job_filters[i],lv_color_hex(i==job_filter?0x167c40:0x282828),0);
     /* Keep release members adjacent without altering transfer scheduling. */
     for(int i=1;i<job_count;i++) {
         download_job_t job=jobs[i];int j=i;
@@ -1043,7 +1102,7 @@ static void show_page(int tab) {
         if (tab == PROVIDERS) providers_build();
     }
     for (int i = 0; i < 5; i++) if (page[i]) lv_obj_set_hidden(page[i], i != tab);
-    const char *titles[] = {"Sonix", "Search", "Your Library", "Downloads", "Discovery"};
+    const char *titles[] = {"Sonix", "Search", "Your Library", "Downloads", "Online settings"};
     lv_label_set_text(heading, titles[tab]);
     lv_obj_set_hidden(header_add,tab!=LIBRARY);
     lv_obj_set_hidden(header_search,tab!=LIBRARY);lv_obj_set_hidden(header_tools,tab==LIBRARY);
@@ -1054,6 +1113,7 @@ static void show_page(int tab) {
         lv_obj_set_style_text_color(nav_label[i], active ? ink() : quiet(), 0);
     }
     if (tab == HOME) home_build();
+    if (tab == PROVIDERS) {provider_draft=discovery_preferences_load();provider_tab=0;provider_content();lv_label_set_text(provider_notice,"");}
     if (tab == DOWNLOADS) downloads_update();
     if(tab==LIBRARY) collectionview_refresh();
 }

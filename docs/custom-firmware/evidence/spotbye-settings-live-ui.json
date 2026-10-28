@@ -1,0 +1,106 @@
+{
+  "actions": [
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-t5kq5cby/sd"
+    ],
+    [
+      "shot",
+      "live-online-release"
+    ],
+    [
+      "click",
+      "429",
+      "457"
+    ],
+    [
+      "shot",
+      "live-download-indexed"
+    ],
+    [
+      "click",
+      "180",
+      "439"
+    ],
+    [
+      "shot",
+      "live-download-playing"
+    ],
+    [
+      "drag",
+      "230",
+      "600",
+      "230",
+      "300"
+    ],
+    [
+      "click",
+      "180",
+      "529"
+    ],
+    [
+      "shot",
+      "live-existing-copy"
+    ],
+    [
+      "click",
+      "240",
+      "512"
+    ],
+    [
+      "click",
+      "420",
+      "199"
+    ],
+    [
+      "click",
+      "240",
+      "236"
+    ],
+    [
+      "click",
+      "90",
+      "592"
+    ],
+    [
+      "shot",
+      "live-discovery-disabled"
+    ],
+    [
+      "stop"
+    ]
+  ],
+  "checks": [
+    "live release link opens the native online album",
+    "live-online-release: native 480x800 render",
+    "completed live download automatically enters the local index",
+    "live-download-indexed: native 480x800 render",
+    "live-download-playing: native 480x800 render",
+    "download manager starts the completed local file",
+    "downloaded playback remains in mini-player preview",
+    "live-existing-copy: native 480x800 render",
+    "known indexed source offers local playback instead of a duplicate download",
+    "existing-copy action uses the local file",
+    "live-discovery-disabled: native 480x800 render",
+    "local playback continues with online discovery disabled"
+  ],
+  "screenshots": [
+    "live-online-release.png",
+    "live-download-indexed.png",
+    "live-download-playing.png",
+    "live-existing-copy.png",
+    "live-discovery-disabled.png"
+  ],
+  "metrics": {
+    "host_rss_kib": 41336,
+    "idle_cpu_percent_one_core": 6.0,
+    "sample_seconds": 1.0,
+    "lvgl": "9.6.0",
+    "note": "SDL software rendering on host; not a measurement of R1 RAM or timing"
+  },
+  "baseline": "No approved baseline supplied",
+  "downloaded_file": "/home/justi/sonix-r1-build/artifacts/ui-collections-t5kq5cby/sd/Downloads/loc-jukebox-733632-toccata-9aa8736a3941-jukebox-733632_toccata.mp3.mp3",
+  "result": "PASS"
+}

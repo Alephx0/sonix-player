@@ -35,6 +35,18 @@ static int count, root_fd=-1, dir_fd=-1;
 static bool cleaned[DOWNLOAD_MAX_JOBS];
 static unsigned next_id=1, revision;
 static char card_root[512];
+static download_options_t options={true,3,0,0};
+void download_configure(const download_options_t *value) {
+    if(!value)return;
+    pthread_mutex_lock(&lock);options=*value;
+    if(options.attempts<1 || options.attempts>3)options.attempts=3;
+    if(options.rate_kib && (options.rate_kib<64 || options.rate_kib>1024))options.rate_kib=0;
+    if(options.naming>2)options.naming=0;
+    pthread_cond_signal(&changed);pthread_mutex_unlock(&lock);
+}
+download_options_t download_options(void) {
+    pthread_mutex_lock(&lock);download_options_t out=options;pthread_mutex_unlock(&lock);return out;
+}
 static http_stream_t *active_stream;
 static unsigned active_id, processing_id;
 static struct stat card_identity;
@@ -61,9 +73,21 @@ void download_safe_name(const char *text,char *out,size_t size) {
     out[used]=0;size_t leading=strspn(out,". ");if(leading)memmove(out,out+leading,used-leading+1);
     if(!*out)snprintf(out,size,"Track");
 }
-static void filename(const discovery_item_t *it,char *out,size_t n) {
-    char title[100];download_safe_name(it->title,title,sizeof(title));
-    snprintf(out,n,"%s-%.12s-%s.%s",it->id,it->md5,title,it->format);
+static void filename(const discovery_item_t *it,unsigned naming,char *out,size_t n) {
+    char title[100],artist[100];download_safe_name(it->title,title,sizeof(title));
+    download_safe_name(it->artist,artist,sizeof(artist));
+    if(naming) {
+        /* Include full source identity in the digest, never rely on title alone. */
+        char identity[33];md5_hex(it->url,strlen(it->url),identity);
+        /* Bound on UTF-8 code points before formatting, never split a name. */
+        char short_title[81],short_artist[81];
+        download_safe_name(title,short_title,sizeof(short_title));download_safe_name(artist,short_artist,sizeof(short_artist));
+        snprintf(out,n,"%.80s - %.80s-%.12s-%.12s.%s",naming==1?short_title:short_artist,
+                 naming==1?short_artist:short_title,identity,it->md5,it->format);
+    } else snprintf(out,n,"%s-%.12s-%s.%s",it->id,it->md5,title,it->format);
+}
+static bool destination_valid(const char *name) {
+    return name && *name && name[0]!='.' && !strpbrk(name,"/\\") && strlen(name)<256;
 }
 static bool card_present(void) {
     struct stat st;
@@ -106,7 +130,7 @@ static void persist(void) {
     if(fd<0)return;
     FILE *f=fdopen(fd,"w");if(!f){close(fd);return;}
     fprintf(f,"{\"version\":1,\"jobs\":[");
-    for(int i=0;i<n;i++){if(i)fputc(',',f);fprintf(f,"{\"id\":%u,\"state\":%d,\"item\":",snapshot[i].id,snapshot[i].state);item_write(f,&snapshot[i].item);fputc('}',f);}
+    for(int i=0;i<n;i++){if(i)fputc(',',f);fprintf(f,"{\"id\":%u,\"state\":%d,\"item\":",snapshot[i].id,snapshot[i].state);item_write(f,&snapshot[i].item);fputs(",\"destination\":",f);quote(f,snapshot[i].destination);fputc('}',f);}
     fputs("]}\n",f);
     bool ok=!ferror(f)&&fflush(f)==0&&fsync(fd)==0;
     if(fclose(f)!=0)ok=false;
@@ -139,7 +163,11 @@ static void restore(void) {
         /* Never start network work merely because a removable card contains a
          * manifest. Restored work requires an explicit Resume action. */
         job.state=DOWNLOAD_PAUSED;job.id=next_id++;job.total=job.item.bytes;
-        char name[256];filename(&job.item,name,sizeof(name));
+        char name[256];
+        int dest=json_get(&d,obj,"destination");
+        if(dest>=0) {if(!get_field(&d,obj,"destination",name,sizeof(name)) || !destination_valid(name))continue;}
+        else filename(&job.item,0,name,sizeof(name)); /* legacy manifest */
+        snprintf(job.destination,sizeof(job.destination),"%s",name);
         int wrote=snprintf(job.path,sizeof(job.path),"%.480s/Downloads/%s",card_root,name);
         if(wrote<=0||(size_t)wrote>=sizeof(job.path))continue;
         jobs[count++]=job;
@@ -166,7 +194,7 @@ static void error_job(unsigned id,const char *message) {
 }
 /* Returns 1 success, 0 retryable network failure, -1 terminal/storage/checksum. */
 static int transfer(download_job_t *job) {
-    unsigned id=job->id;char name[256],part[272];filename(&job->item,name,sizeof(name));snprintf(part,sizeof(part),".%s.part",name);
+    unsigned id=job->id;char name[256],part[272];snprintf(name,sizeof(name),"%s",job->destination);snprintf(part,sizeof(part),".%s.part",name);
     if(!card_present()){error_job(id,"microSD card was removed or changed.");return -1;}
     int final=openat(dir_fd,name,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
     if(final>=0) {
@@ -196,6 +224,8 @@ static int transfer(download_job_t *job) {
         }
         pthread_mutex_lock(&lock);active_stream=&stream;active_id=id;pthread_mutex_unlock(&lock);
         unsigned char buf[CHUNK];struct timespec begin,now;clock_gettime(CLOCK_MONOTONIC,&begin);long long initial=offset;
+        unsigned limit_rate=download_options().rate_kib;
+        struct timespec limit_begin=begin;long long limit_initial=offset;
         while(offset<job->total && !interrupted(id)) {
             if(!card_present()){error_job(id,"microSD card was removed or changed.");ok=false;result=-1;break;}
             int want=(int)((job->total-offset)>CHUNK?CHUNK:(job->total-offset));
@@ -213,6 +243,24 @@ static int transfer(download_job_t *job) {
             clock_gettime(CLOCK_MONOTONIC,&now);
             double elapsed=(double)(now.tv_sec-begin.tv_sec)+(now.tv_nsec-begin.tv_nsec)/1e9;
             progress(id,offset,elapsed>0?(unsigned)((offset-initial)/elapsed):0);
+            /* Short interruptible waits keep Pause/Cancel responsive while limited. */
+            unsigned rate=download_options().rate_kib;
+            if(rate!=limit_rate){limit_rate=rate;limit_begin=now;limit_initial=offset;}
+            if(rate) {
+                double target=(double)(offset-limit_initial)/(rate*1024.0);
+                double limited_elapsed=(double)(now.tv_sec-limit_begin.tv_sec)+(now.tv_nsec-limit_begin.tv_nsec)/1e9;
+                while(limited_elapsed<target && !interrupted(id)) {
+                    struct timespec until;clock_gettime(CLOCK_REALTIME,&until);
+                    until.tv_nsec+=50000000;if(until.tv_nsec>=1000000000){until.tv_sec++;until.tv_nsec-=1000000000;}
+                    pthread_mutex_lock(&lock);
+                    if(!stopping && options.rate_kib==rate)pthread_cond_timedwait(&changed,&lock,&until);
+                    bool same=options.rate_kib==rate;pthread_mutex_unlock(&lock);
+                    if(!same)break;
+                    clock_gettime(CLOCK_MONOTONIC,&now);
+                    limited_elapsed=(double)(now.tv_sec-limit_begin.tv_sec)+(now.tv_nsec-limit_begin.tv_nsec)/1e9;
+                }
+            }
+
         }
         pthread_mutex_lock(&lock);active_stream=NULL;active_id=0;pthread_mutex_unlock(&lock);
         http_stream_close(&stream);
@@ -249,7 +297,7 @@ static void *run(void *unused) {
         int cleanup=-1;
         for(int i=0;i<count;i++)if(jobs[i].state==DOWNLOAD_CANCELLED && !cleaned[i] && jobs[i].id!=processing_id){cleanup=i;break;}
         if(cleanup>=0) {
-            char name[256],part[272];filename(&jobs[cleanup].item,name,sizeof(name));snprintf(part,sizeof(part),".%s.part",name);
+            char name[256],part[272];snprintf(name,sizeof(name),"%s",jobs[cleanup].destination);snprintf(part,sizeof(part),".%s.part",name);
             pthread_mutex_unlock(&lock);unlinkat(dir_fd,part,0);pthread_mutex_lock(&lock);
             cleaned[cleanup]=true;pthread_mutex_unlock(&lock);continue;
         }
@@ -261,13 +309,14 @@ static void *run(void *unused) {
         jobs[selected].state=DOWNLOAD_RUNNING;jobs[selected].attempts=0;jobs[selected].error[0]=0;
         download_job_t job=jobs[selected];processing_id=job.id;pthread_mutex_unlock(&lock);persist();
         int result=-1;
-        for(unsigned attempt=1;attempt<=3;attempt++) {
+        unsigned max_attempts=download_options().attempts;
+        for(unsigned attempt=1;attempt<=max_attempts;attempt++) {
             pthread_mutex_lock(&lock);jobs[selected].attempts=attempt;pthread_mutex_unlock(&lock);
             if(interrupted(job.id))break;
             result=transfer(&job);
             if(result!=0 || interrupted(job.id))break;
             /* Bounded 1,2 second retry delay, interruptible by pause/cancel. */
-            if(attempt<3) {
+            if(attempt<max_attempts) {
                 struct timespec until;clock_gettime(CLOCK_REALTIME,&until);until.tv_sec+=(1U<<(attempt-1));
                 pthread_mutex_lock(&lock);
                 if(!stopping && jobs[selected].state==DOWNLOAD_RUNNING)pthread_cond_timedwait(&changed,&lock,&until);
@@ -282,7 +331,7 @@ static void *run(void *unused) {
         }
         bool cancelled=jobs[selected].state==DOWNLOAD_CANCELLED;
         jobs[selected].bytes_per_second=0;processing_id=0;pthread_mutex_unlock(&lock);
-        if(cancelled){char name[256],part[272];filename(&job.item,name,sizeof(name));snprintf(part,sizeof(part),".%s.part",name);unlinkat(dir_fd,part,0);}
+        if(cancelled){char name[256],part[272];snprintf(name,sizeof(name),"%s",job.destination);snprintf(part,sizeof(part),".%s.part",name);unlinkat(dir_fd,part,0);}
         persist();
     }
     pthread_mutex_lock(&lock);
@@ -321,8 +370,8 @@ static bool reusable(int i) {
 }
 static unsigned create_job(const discovery_item_t *item,int slot) {
     download_job_t *job=&jobs[slot];cleaned[slot]=false;memset(job,0,sizeof(*job));
-    job->id=next_id++;job->state=DOWNLOAD_QUEUED;job->item=*item;job->total=item->bytes;
-    char name[256];filename(item,name,sizeof(name));snprintf(job->path,sizeof(job->path),"%.480s/Downloads/%s",card_root,name);
+    job->id=next_id++;job->state=options.start_immediately?DOWNLOAD_QUEUED:DOWNLOAD_PAUSED;job->item=*item;job->total=item->bytes;
+    char name[256];filename(item,options.naming,name,sizeof(name));snprintf(job->destination,sizeof(job->destination),"%s",name);snprintf(job->path,sizeof(job->path),"%.480s/Downloads/%s",card_root,name);
     dirty=true;return job->id;
 }
 static unsigned enqueue_locked(const discovery_item_t *item) {
@@ -375,7 +424,7 @@ bool download_enqueue_release(const discovery_results_t *release,char *err,size_
     /* Retain matching completed jobs while reserving all required slots. */
     for(int i=0;i<release->count;i++) {
         int found=duplicate(&release->items[i]);
-        if(found>=0 && (jobs[found].state==DOWNLOAD_PAUSED || jobs[found].state==DOWNLOAD_FAILED))jobs[found].state=DOWNLOAD_QUEUED;
+        if(options.start_immediately && found>=0 && (jobs[found].state==DOWNLOAD_PAUSED || jobs[found].state==DOWNLOAD_FAILED))jobs[found].state=DOWNLOAD_QUEUED;
     }
     for(int i=0;i<release->count;i++) {
         if(duplicate(&release->items[i])>=0)continue;

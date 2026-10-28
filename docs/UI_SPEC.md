@@ -112,3 +112,14 @@ The initial source lacks reliable structured release-type/featured-credit and IS
 coverage. Creator search must not pretend to be a verified Albums / Singles / EPs /
 Featured On discography. Structured online discographies, cross-provider recording
 matching, remote artwork and larger release jobs remain subsequent milestones.
+
+
+## SpotBye settings and downloads
+
+Online settings use Sources / Transfers / Files with explicit Save and Discard.
+Defaults is a draft until saved. Persist source/format, start-new-downloads,
+network-attempt, rate-limit and filename preferences. Existing jobs keep their
+destination; source audio/tags and playback remain unchanged. Downloads offers
+All / Active / Paused / Done / Failed, counts, Start all and Pause all.
+This does not establish Spotify/SpotBye provider compatibility; see
+[observed parity and gaps](custom-firmware/spotbye-parity.md).

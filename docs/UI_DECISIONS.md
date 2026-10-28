@@ -106,3 +106,20 @@ Remaining verification: hardware timing/RAM/audio/standby, approved pixel
 baselines, and exhaustive UI automation of every unrelated screen. Existing
 model suites cover queue/repeat/discography/search invariants; this change's UI
 journey does not claim to exercise every control in those screens.
+
+
+## 2026-10-28: inspect the running SpotBye, then implement native settings
+
+REA inspected the exact user-opened 2.0.0 executable; Windows pointer/screenshot
+inspection established settings and download-manager controls. CDP runtime tracing
+was unavailable; repository URLs returned 404. Preserve this distinction: observed
+UI is not a verified provider protocol.
+
+Added saved native source/format, start-paused, retry, rate and filename options,
+with draft Save/Discard/Defaults, plus queue filters and batch start/pause. Filename
+preferences are captured per job so later edits and restarts preserve destinations.
+The settings journey passed 16 checks with real 480 x 800 SDL interaction and
+inspection; live regression, provider tests and offline decode also passed.
+Detailed parity gaps, screenshots and reports are in
+[spotbye-parity.md](custom-firmware/spotbye-parity.md). This remains partial:
+SpotBye catalog/providers, tagging/template parity and hardware validation are open.
