@@ -123,3 +123,12 @@ destination; source audio/tags and playback remain unchanged. Downloads offers
 All / Active / Paused / Done / Failed, counts, Start all and Pause all.
 This does not establish Spotify/SpotBye provider compatibility; see
 [observed parity and gaps](custom-firmware/spotbye-parity.md).
+
+
+Catalog extension: Search -> Sources saves Archive releases / Deezer tracks /
+Deezer albums. Deezer is a metadata-only adapter with real service IDs, duration
+and ISRC when provided. Exact Deezer track/album links open details/releases;
+artist actions list source releases without inventing discography categories.
+Catalog metadata does not imply a playable/downloadable audio source. Original
+Archive transfer validation remains independent. Artwork uses the existing shared
+asynchronous image loader, with visible result covers and one album cover.

@@ -78,3 +78,13 @@ These are candidate captures, not approved baselines. Host RSS was 40,184 KiB,
 with 1% of one core over a one-second sample; neither proves R1 performance.
 Host and MIPS builds and the glibc <=2.22 ABI gate passed. Device flashing,
 Wi-Fi/DAC behavior and full provider parity remain unverified.
+
+
+## Supplied-source follow-up
+
+The user subsequently supplied an accessible MIT-licensed SpotiFLAC fork.
+[Source audit and native catalog implementation](spotiflac-source-audit.md) supersedes
+the earlier statement that no source reference was accessible. It does not establish
+a source-to-binary relationship for SpotBye 2.0.0. A new Deezer metadata adapter
+adds actual track/album search, direct links, IDs/ISRC, release lists and artwork.
+Full-audio download providers and exact SpotBye parity remain unresolved.

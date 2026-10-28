@@ -146,3 +146,13 @@ and status filters are implemented. See [parity report](spotbye-parity.md) for
 observed controls, implemented behavior, verification and unresolved provider gaps.
 This supersedes the earlier audit's statement that only static inspection had
 been performed; it does not establish full SpotBye service compatibility.
+
+
+### Native catalog discovery
+
+Search Sources now offers saved Archive releases, Deezer tracks and Deezer albums.
+The latter two fetch metadata through Sonix HTTPS and retain service identifiers
+for release/artist navigation. Thumbnail and album art use the existing shared
+asynchronous loader. Catalog items are rejected by the audio-download validator;
+Archive remains the full-download provider. See
+[source review and remaining differences](spotiflac-source-audit.md).

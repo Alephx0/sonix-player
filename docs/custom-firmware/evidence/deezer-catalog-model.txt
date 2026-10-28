@@ -1,0 +1,19 @@
+PASS direct release links: exact host, bounded IDs, query handling, rejected traversal/unsupported links
+config: /tmp/sonix-preferences-vswCZZ/settings.ini not there yet, starting from defaults
+config: loaded 7 settings from /tmp/sonix-preferences-vswCZZ/settings.ini
+PASS saved settings, paused admission/release, stable persisted filenames, live rate limiting, retry limit
+PASS paged catalog/artist queries: literal escaping, valid page bounds, final/empty eligible pages, release file pagination
+PASS: provider parsing/license bounds, incremental MD5, sanitization, exact bytes, duplicate queue, retry+resume, pause/resume, cancellation, integrity rejection, insufficient storage, removed card, persisted-paused restoration, symlink rejection
+Artifacts: /tmp/sonix-discovery-test-nX6Hse
+PASS import handoff: busy/closed deferral, removed and undecodable jobs cannot starve later files, bounded retry, confirmed-index generation
+http: /etc/resolv.conf has moved; the resolver reads it again
+tls: OpenSSL 3.0.13 30 Jan 2024, certificates from /tmp/sonix-tls-test-804i7x3c/cert.pem
+http: TLS to 127.0.0.1 failed: tls_cert_rejected
+PASS: actual TLS verification, exact length, valid/invalid ranges, ignored Range restart, encoded/chunked rejection, HTTPS redirects, downgrade refusal, redirect limit, 404, metadata HTTPS-only
+PASS catalog IDs/ISRC, URL boundaries, non-downloadable entries, paging, hostile responses and bounded parsing
+http: /etc/resolv.conf has moved; the resolver reads it again
+tls: OpenSSL 3.0.13 30 Jan 2024, certificates from /etc/ssl/certs/
+PASS live track search: 24 entries; first NUEVAYoL
+PASS live release: DeBÍ TiRAR MáS FOToS / 17 tracks
+PASS live artist releases and album search; no audio transferred
+PASS catalog IDs/ISRC, URL boundaries, non-downloadable entries, paging, hostile responses and bounded parsing

@@ -8,7 +8,7 @@
 #define DISCOVERY_MAX_FILE_BYTES (2LL * 1024 * 1024 * 1024)
 typedef enum { DISCOVERY_ALBUM, DISCOVERY_TRACK } discovery_kind_t;
 enum { DISCOVERY_SEARCH_ALBUMS=1, DISCOVERY_ALBUM_TRACKS=2, DISCOVERY_DOWNLOAD=4,
-       DISCOVERY_ARTIST_RELEASES=8, DISCOVERY_PAGED_RESULTS=16 };
+       DISCOVERY_ARTIST_RELEASES=8, DISCOVERY_PAGED_RESULTS=16, DISCOVERY_SEARCH_TRACKS=32 };
 typedef struct {
     discovery_kind_t kind;
     char id[128];                 /* Archive item identifier */
@@ -18,6 +18,9 @@ typedef struct {
     char format[16], md5[33];
     long long bytes;
     bool downloadable;
+    unsigned catalog;            /* 0 Archive audio; 1 Deezer metadata only */
+    char album_id[32], artist_id[32], isrc[13];
+    unsigned duration;
 } discovery_item_t;
 typedef struct {
     discovery_item_t items[DISCOVERY_MAX_RESULTS];

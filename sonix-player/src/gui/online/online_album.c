@@ -1,4 +1,5 @@
 #include "online_album.h"
+#include "src/gui/streaming/qobuzart.h"
 #include "src/gui/library/collection_header.h"
 #include "src/gui/shell/main_menu.h"
 #include "src/gui/shell/switcher.h"
@@ -11,6 +12,22 @@
 static lv_obj_t *screen,*list;
 static discovery_results_t release;
 static gui_config_t *config;
+static lv_obj_t *art;
+static cover_image_t cover;
+static lv_timer_t *art_timer;
+static int art_owner;
+static void art_poll(lv_timer_t *timer) {
+    (void)timer;bool finished=false;
+    if(art && !cover.pixels && qobuzart_take(&art_owner,0,&cover,&finished)) {
+        lv_image_set_src(art,&cover.dsc);lv_obj_set_style_image_recolor_opa(art,LV_OPA_TRANSP,0);
+    }
+}
+static void art_drop(void) {
+    qobuzart_release(&art_owner,0);
+    if(art)lv_image_set_src(art,&icon_album_big);
+    cover_free(&cover);art=NULL;
+    if(art_timer){lv_timer_delete(art_timer);art_timer=NULL;}
+}
 static online_track_cb_t open_track;
 bool online_album_active(void) {return screen && lv_screen_active()==screen;}
 static lv_obj_t *label(lv_obj_t *parent,const char *text,int w,int h,const lv_font_t *font,uint32_t color) {
@@ -36,8 +53,18 @@ static void download_album_cb(lv_event_t *e) {
     }
     main_menu_open_downloads();
 }
-static void loaded(lv_event_t *e) {(void)e;main_menu_mount_footer(screen);}
-static void unloaded(lv_event_t *e) {(void)e;main_menu_restore_footer(screen);}
+static void loaded(lv_event_t *e) {
+    (void)e;main_menu_mount_footer(screen);
+    if(art_timer) {
+        if(!cover.pixels)qobuzart_request(&art_owner,0,release.items[0].artwork,220);
+        lv_timer_resume(art_timer);
+    }
+}
+static void unloaded(lv_event_t *e) {
+    (void)e;qobuzart_release(&art_owner,0);
+    if(art_timer)lv_timer_pause(art_timer);
+    main_menu_restore_footer(screen);
+}
 void online_album_open(gui_config_t *cfg,const discovery_results_t *results,unsigned page,
     online_track_cb_t track,lv_event_cb_t page_cb,lv_event_cb_t artist_cb) {
     if(!results || !results->count)return;
@@ -54,20 +81,26 @@ void online_album_open(gui_config_t *cfg,const discovery_results_t *results,unsi
         lv_obj_add_event_cb(screen,loaded,LV_EVENT_SCREEN_LOADED,NULL);
         lv_obj_add_event_cb(screen,unloaded,LV_EVENT_SCREEN_UNLOADED,NULL);
     }
+    art_drop();
     lv_obj_clean(list);lv_obj_scroll_to_y(list,0,LV_ANIM_OFF);
     lv_obj_t *head=lv_obj_create(list);lv_obj_remove_style_all(head);
     lv_obj_set_size(head,w,LV_SIZE_CONTENT);lv_obj_set_flex_flow(head,LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(head,LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(head,6,0);lv_obj_set_style_pad_top(head,cfg->padding+(56-icon_chevron_left.header.h)/2,0);
     lv_obj_set_style_pad_bottom(head,12,0);lv_obj_set_scrollable(head,false);lv_obj_set_clickable(head,false);
-    char meta[128];snprintf(meta,sizeof(meta),"Internet Archive / %d %s%s",release.count,release.count==1?"file":"files",release.truncated?" on this page":"");
+    char meta[128];snprintf(meta,sizeof(meta),"%s / %d %s%s",release.items[0].catalog?"Deezer catalog":"Internet Archive",release.count,release.items[0].catalog?(release.count==1?"track":"tracks"):(release.count==1?"file":"files"),release.truncated?" on this page":"");
     collection_header_t h;lv_event_cb_t callbacks[]={artist_cb,download_album_cb,downloads_cb};
     collection_header_build(head,w,release.items[0].album,release.items[0].artist,meta,
         &icon_download,&icon_artist,&icon_list_queue,callbacks,NULL,&h);
+    art=h.cover;
+    if(release.items[0].catalog && release.items[0].artwork[0]) {
+        qobuzart_set_root(cfg->sd_root_path);qobuzart_request(&art_owner,0,release.items[0].artwork,220);
+        art_timer=lv_timer_create(art_poll,100,NULL);
+    }
     /* Never imply that this page is an entire release when pagination remains. */
-    if(page!=1 || release.truncated) {
+    if(page!=1 || release.truncated || release.items[0].catalog) {
         lv_obj_add_state(h.buttons[1],LV_STATE_DISABLED);lv_obj_set_style_opa(h.buttons[1],LV_OPA_30,LV_STATE_DISABLED);
-        label(list,"Download individual files on paged releases",w,28,&font_ui_16,0xb3b3b3);
+        label(list,release.items[0].catalog?"Catalog only / audio download unavailable":"Download individual files on paged releases",w,28,&font_ui_16,0xb3b3b3);
     }
     for(int i=0;i<release.count;i++) {
         discovery_item_t *item=&release.items[i];
@@ -76,9 +109,10 @@ void online_album_open(gui_config_t *cfg,const discovery_results_t *results,unsi
         lv_obj_set_pos(label(row,number,32,28,&font_ui_18,0xb3b3b3),0,12);
         lv_obj_set_pos(label(row,item->title,w-56,30,&font_ui_20,0xffffff),42,8);
         char sub[180];snprintf(sub,sizeof(sub),"%s / %s / %.1f MB",item->artist,item->format,(double)item->bytes/1048576);
+        if(item->catalog)snprintf(sub,sizeof(sub),"%s / %u:%02u",item->artist,item->duration/60,item->duration%60);
         lv_obj_set_pos(label(row,sub,w-56,24,&font_ui_16,0xb3b3b3),42,40);
     }
-    if(page>1)button(list,"Previous files",w,52,page_cb,(void *)(intptr_t)-1);
-    if(release.truncated)button(list,"More files",w,52,page_cb,(void *)(intptr_t)1);
+    if(page>1)button(list,release.items[0].catalog?"Previous tracks":"Previous files",w,52,page_cb,(void *)(intptr_t)-1);
+    if(release.truncated)button(list,release.items[0].catalog?"More tracks":"More files",w,52,page_cb,(void *)(intptr_t)1);
     if(lv_screen_active()!=screen)switch_screen(screen);
 }

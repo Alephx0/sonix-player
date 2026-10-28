@@ -84,7 +84,7 @@ static const char *format_for(const char *filename) {
     return NULL;
 }
 bool discovery_item_valid(const discovery_item_t *it) {
-    if(!it || it->kind!=DISCOVERY_TRACK || !it->downloadable ||
+    if(!it || it->catalog!=0 || it->kind!=DISCOVERY_TRACK || !it->downloadable ||
        !identifier_ok(it->id) || !discovery_license_allowed(it->license) ||
        it->bytes<=0 || it->bytes>DISCOVERY_MAX_FILE_BYTES || !hash_ok(it->md5) || !it->filename[0])return false;
     const char *fmt=format_for(it->filename);

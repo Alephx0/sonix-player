@@ -336,9 +336,58 @@ def online_settings(s,card):
     s.metrics()
 
 
+def catalog_live(s,card):
+    def wait_label(text):
+        deadline=time.monotonic()+35
+        while time.monotonic()<deadline:
+            state=s.snapshot()
+            if any(n.get('text')==text and n['rect'][1]<650 for n in s.visible(state)):return state
+            time.sleep(.15)
+        raise AssertionError('Catalog label did not appear: '+text)
+    s.setup('playlist Night Drive');s.click_label('Night Walk');before=s.snapshot()
+    s.command('click',240,770);s.click_label('Sources');s.click_label('Catalog: Archive releases');s.click_label('Save')
+    s.capture('catalog-settings');s.snapshot('search-text Bad Bunny');s.click_label('Online')
+    wait_label('Deezer catalog');time.sleep(3);state=s.capture('catalog-live-tracks')
+    s.check(state['file']==before['file'] and state['status']==1,'live catalog search preserves local playback')
+    # Choose the first rendered track rather than depending on current search ranking.
+    heading=s.label(state,'Deezer catalog');rows=[n for n in s.visible(state) if n.get('text') and n['rect'][1]>heading['rect'][3] and n['rect'][1]<600]
+    title=rows[0]['text'];s.click_label(title);state=s.capture('catalog-track-details')
+    s.check(state['modal'],'catalog track opens shared bottom sheet')
+    s.label(state,'No audio download source is connected for this recording.')
+    s.check(not any(n.get('text')=='Download to microSD' for n in s.visible(state)),'metadata entry never offers an unsupported audio download')
+    s.click_label('Go to album');deadline=time.monotonic()+35
+    while time.monotonic()<deadline:
+        state=s.snapshot()
+        if any(n['type']=='image' and n['rect'][2]-n['rect'][0]==220 for n in s.visible(state)):break
+        time.sleep(.15)
+    time.sleep(3);state=s.capture('catalog-release')
+    covers=[n for n in s.visible(state) if n['type']=='image' and n['rect'][2]-n['rect'][0]==220]
+    s.check(len(covers)==1 and covers[0]['rect'][0]+covers[0]['rect'][2]==480,'live release uses shared centered collection artwork')
+    s.check(state['file']==before['file'] and state['priority']==before['priority'] and not state['now_playing_open'],'release browsing preserves playback queue and collapsed mini-player')
+    s.command('drag',235,600,235,315);state=s.capture('catalog-release-tracks')
+    s.check(any('audio download unavailable' in n.get('text','') for n in state['nodes']),'release identifies metadata-only capability')
+    # Direct track and album links route without changing the saved source preference.
+    s.snapshot('search-text https://www.deezer.com/en/track/3171002981');wait_label('0 local / 1 online');wait_label('NUEVAYoL')
+    direct=s.capture('catalog-direct-link')
+    fields=[n for n in s.visible(direct) if n['type']=='textarea']
+    s.check(len(fields)==1 and fields[0]['rect'][0]>=68 and fields[0]['rect'][2]<=411,'long URL text viewport stays between search and clear icons')
+    s.check(True,'direct Deezer track link resolves the requested recording')
+    s.click_label('NUEVAYoL');s.click_label('More by this artist');wait_label('Artist releases');time.sleep(1)
+    s.capture('catalog-artist-releases')
+    s.check(s.snapshot()['file']==before['file'],'artist release lookup preserves local audio')
+    s.command('click',240,770);s.click_label('Sources');s.click_label('Catalog: Deezer tracks');s.click_label('Save')
+    s.snapshot('search-text Bad Bunny');wait_label('Deezer catalog');time.sleep(2);s.capture('catalog-live-albums')
+    s.command('stop');s.command('start',3,'--card',card,'--preserve-config')
+    s.command('click',240,770);s.click_label('Sources');s.label(s.snapshot(),'Catalog: Deezer albums')
+    s.check(True,'catalog preference survives restart')
+    queue_file=card/'Downloads/.sonix-downloads.json'
+    s.check(not queue_file.exists() or not json.loads(queue_file.read_text()).get('jobs'),'catalog browsing never submits an audio download')
+    s.metrics()
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('repo',type=Path);p.add_argument('--baseline',type=Path);p.add_argument('--card',type=Path)
-    p.add_argument('--journey',choices=['collections','empty-liked','preview-online','online-release','online-live','online-settings'],default='collections')
+    p.add_argument('--journey',choices=['collections','empty-liked','preview-online','online-release','online-live','online-settings','catalog-live'],default='collections')
     a=p.parse_args();repo=a.repo.resolve();out=Path(tempfile.mkdtemp(prefix='ui-collections-',dir=repo/'artifacts'))
     s=Session(repo,out,a.baseline);started=False
     if a.journey=='online-release':s.env['SONIX_TEST_ONLINE_DELAY_MS']='4000'
@@ -350,6 +399,7 @@ def main():
         elif a.journey=='online-release':online_release(s,card)
         elif a.journey=='online-live':online_live(s,card)
         elif a.journey=='online-settings':online_settings(s,card)
+        elif a.journey=='catalog-live':catalog_live(s,card)
         else:
             s.command('click',400,770);s.click_label('Liked Songs')
             state=s.capture('liked-songs');_,play=s.collection_geometry(state)

@@ -55,3 +55,11 @@ admission, status filters, uninterrupted playback, restart and destination
 persistence. `tests/discovery/run.sh` additionally checks saved options, rate
 limiting, retry limits and stable filenames. See
 [SpotBye inspection and parity evidence](custom-firmware/spotbye-parity.md).
+
+
+`--journey catalog-live` exercises real Deezer metadata search, thumbnails, track
+details, shared album view, direct links, artist releases, saved provider selection
+and uninterrupted local playback. It never transfers provider audio.
+`CATALOG_LIVE=1 bash tests/discovery/run.sh` adds live catalog calls to deterministic
+URL/ID/ISRC, pagination, malformed/oversized response and metadata/download-boundary
+checks. Source audit: `custom-firmware/spotiflac-source-audit.md`.

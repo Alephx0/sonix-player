@@ -5,6 +5,7 @@ typedef struct {
     bool enabled;
     unsigned format;
     download_options_t transfers;
+    unsigned catalog; /* 0 Archive; 1 Deezer tracks; 2 Deezer albums */
 } discovery_preferences_t;
 discovery_preferences_t discovery_preferences_defaults(void);
 discovery_preferences_t discovery_preferences_load(void);

@@ -1,0 +1,87 @@
+{
+  "actions": [
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-zfxr0zdk/sd"
+    ],
+    [
+      "click",
+      "254",
+      "537"
+    ],
+    [
+      "shot",
+      "online-release"
+    ],
+    [
+      "drag",
+      "235",
+      "604",
+      "235",
+      "320"
+    ],
+    [
+      "click",
+      "254",
+      "601"
+    ],
+    [
+      "shot",
+      "online-release-details"
+    ],
+    [
+      "click",
+      "240",
+      "48"
+    ],
+    [
+      "shot",
+      "unified-search-local-first"
+    ],
+    [
+      "click",
+      "195",
+      "199"
+    ],
+    [
+      "shot",
+      "unified-search-local-only"
+    ],
+    [
+      "stop"
+    ]
+  ],
+  "checks": [
+    "online-release: native 480x800 render",
+    "online release reuses local collection artwork geometry",
+    "opening online release preserves audio and playback queue",
+    "online release retains mini-player preview",
+    "online-release-details: native 480x800 render",
+    "release track opens the shared details sheet",
+    "opening source details leaves audio unchanged",
+    "source sheet dismisses to release",
+    "local hits appear while the independent online worker is still pending",
+    "unified-search-local-first: native 480x800 render",
+    "a new local query is not blocked by the old online request",
+    "searches preserve playback and priority queue",
+    "unified-search-local-only: native 480x800 render",
+    "late network responses cannot contaminate Local results"
+  ],
+  "screenshots": [
+    "online-release.png",
+    "online-release-details.png",
+    "unified-search-local-first.png",
+    "unified-search-local-only.png"
+  ],
+  "metrics": {
+    "host_rss_kib": 42500,
+    "idle_cpu_percent_one_core": 9.0,
+    "sample_seconds": 1.0,
+    "lvgl": "9.6.0",
+    "note": "SDL software rendering on host; not a measurement of R1 RAM or timing"
+  },
+  "baseline": "No approved baseline supplied",
+  "result": "PASS"
+}

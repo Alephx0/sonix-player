@@ -123,3 +123,26 @@ inspection; live regression, provider tests and offline decode also passed.
 Detailed parity gaps, screenshots and reports are in
 [spotbye-parity.md](custom-firmware/spotbye-parity.md). This remains partial:
 SpotBye catalog/providers, tagging/template parity and hardware validation are open.
+
+
+## 2026-10-28: supplied source unlocks a native catalog adapter
+
+The accessible 1111Windows/SpotiFLAC fork is pinned at
+90f51a4da5bff0ec51183dd5e789a78e6f6a009d. Its metadata/link/download separation
+informed the new independently implemented native Deezer metadata adapter. The
+SpotBye gist is a binary link, not source; it does not tie that fork to the
+inspected executable. See `custom-firmware/spotiflac-source-audit.md`.
+
+Preserve stable service IDs/ISRC rather than treating a title match as recording
+identity. Catalog availability and full-audio download capability remain separate.
+Use the existing image worker and shared collection header. A rendered long URL
+revealed that textarea padding did not clip text beneath the search icon; the
+input now has an actual narrower viewport inside the same capsule. Missing artist
+metadata no longer produces a stray separator.
+
+Verification: 19 live native catalog checks and 14 local-first/Archive regression
+checks passed. Sanitized model/TLS/live-catalog tests and host/MIPS/ABI gates also
+passed. Captures and source evidence are linked from the source audit. Test lesson:
+a matching title can be stale while a new URL request is pending; wait for the
+one-result response before asserting direct-link behavior. The opt-in host probe
+now identifies textareas so geometry checks refer to the native input viewport.

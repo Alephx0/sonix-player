@@ -1,0 +1,182 @@
+{
+  "actions": [
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-1n04do43/sd"
+    ],
+    [
+      "click",
+      "254",
+      "537"
+    ],
+    [
+      "click",
+      "240",
+      "770"
+    ],
+    [
+      "click",
+      "420",
+      "199"
+    ],
+    [
+      "click",
+      "240",
+      "192"
+    ],
+    [
+      "click",
+      "90",
+      "592"
+    ],
+    [
+      "shot",
+      "catalog-settings"
+    ],
+    [
+      "click",
+      "315",
+      "199"
+    ],
+    [
+      "shot",
+      "catalog-live-tracks"
+    ],
+    [
+      "click",
+      "272",
+      "327"
+    ],
+    [
+      "shot",
+      "catalog-track-details"
+    ],
+    [
+      "click",
+      "240",
+      "510"
+    ],
+    [
+      "shot",
+      "catalog-release"
+    ],
+    [
+      "drag",
+      "235",
+      "600",
+      "235",
+      "315"
+    ],
+    [
+      "shot",
+      "catalog-release-tracks"
+    ],
+    [
+      "shot",
+      "catalog-direct-link"
+    ],
+    [
+      "click",
+      "272",
+      "327"
+    ],
+    [
+      "click",
+      "240",
+      "574"
+    ],
+    [
+      "shot",
+      "catalog-artist-releases"
+    ],
+    [
+      "click",
+      "240",
+      "770"
+    ],
+    [
+      "click",
+      "420",
+      "199"
+    ],
+    [
+      "click",
+      "240",
+      "192"
+    ],
+    [
+      "click",
+      "90",
+      "592"
+    ],
+    [
+      "shot",
+      "catalog-live-albums"
+    ],
+    [
+      "stop"
+    ],
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-1n04do43/sd",
+      "--preserve-config"
+    ],
+    [
+      "click",
+      "240",
+      "770"
+    ],
+    [
+      "click",
+      "420",
+      "199"
+    ],
+    [
+      "stop"
+    ]
+  ],
+  "checks": [
+    "catalog-settings: native 480x800 render",
+    "catalog-live-tracks: native 480x800 render",
+    "live catalog search preserves local playback",
+    "catalog-track-details: native 480x800 render",
+    "catalog track opens shared bottom sheet",
+    "metadata entry never offers an unsupported audio download",
+    "catalog-release: native 480x800 render",
+    "live release uses shared centered collection artwork",
+    "release browsing preserves playback queue and collapsed mini-player",
+    "catalog-release-tracks: native 480x800 render",
+    "release identifies metadata-only capability",
+    "catalog-direct-link: native 480x800 render",
+    "long URL text viewport stays between search and clear icons",
+    "direct Deezer track link resolves the requested recording",
+    "catalog-artist-releases: native 480x800 render",
+    "artist release lookup preserves local audio",
+    "catalog-live-albums: native 480x800 render",
+    "catalog preference survives restart",
+    "catalog browsing never submits an audio download"
+  ],
+  "screenshots": [
+    "catalog-settings.png",
+    "catalog-live-tracks.png",
+    "catalog-track-details.png",
+    "catalog-release.png",
+    "catalog-release-tracks.png",
+    "catalog-direct-link.png",
+    "catalog-artist-releases.png",
+    "catalog-live-albums.png"
+  ],
+  "metrics": {
+    "host_rss_kib": 39624,
+    "idle_cpu_percent_one_core": 4.0,
+    "sample_seconds": 1.0,
+    "lvgl": "9.6.0",
+    "note": "SDL software rendering on host; not a measurement of R1 RAM or timing"
+  },
+  "baseline": "No approved baseline supplied",
+  "result": "PASS"
+}

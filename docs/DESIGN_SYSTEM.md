@@ -51,3 +51,10 @@ category controls sit above independently scrollable settings; Save/Discard/Defa
 remain above the persistent mini-player. Values fit single 52 px rows. Queue
 status filters use five equal touch targets. Do not port desktop-only controls
 as inert switches or replace the local playback/navigation state.
+
+
+Catalog rows reuse the existing search cards with 58 px release thumbnails.
+Metadata-only albums use the same collection component and a disabled download
+action plus a brief availability explanation. Long search URLs must be clipped
+inside a viewport between the search and clear icons; textarea padding alone
+does not prevent horizontally scrolled text painting underneath sibling icons.

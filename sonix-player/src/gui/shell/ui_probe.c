@@ -43,7 +43,7 @@ static void walk(FILE *f, lv_obj_t *o, int parent, bool hidden) {
 		fputc(',', f);
 	fprintf(f, "{\"id\":%d,\"parent\":%d,\"hidden\":%s,\"clickable\":%s,\"rect\":[%d,%d,%d,%d],\"type\":", id, parent, hidden ? "true" : "false", lv_obj_is_clickable(o) ? "true" : "false", r.x1, r.y1, r.x2 + 1, r.y2 + 1);
 	bool label = lv_obj_check_type(o, &lv_label_class);
-	string(f, label ? "label" : lv_obj_check_type(o, &lv_image_class) ? "image" : "object");
+	string(f, label ? "label" : lv_obj_check_type(o, &lv_image_class) ? "image" : lv_obj_check_type(o, &lv_textarea_class) ? "textarea" : "object");
 	if (label) {
 		fputs(",\"text\":", f);
 		string(f, lv_label_get_text(o));

@@ -15,3 +15,10 @@ if [[ "${LIVE:-0}" == 1 ]]; then
     gcc "${flags[@]}" -DHOST_BUILD=1 tests/discovery/test_browse_live.c src/system/discovery/discovery.c src/system/net/http.c src/system/net/tls.c src/system/core/json.c -ldl -o "$build_dir/test_browse_live"
     "$build_dir/test_browse_live"
 fi
+
+gcc "${flags[@]}" tests/discovery/test_catalog.c src/system/discovery/catalog.c src/system/discovery/discovery.c src/system/core/json.c -o "$build_dir/test_catalog"
+"$build_dir/test_catalog"
+if [[ "${CATALOG_LIVE:-0}" == 1 ]]; then
+    gcc "${flags[@]}" -Wno-unused-variable -DCATALOG_LIVE=1 -DHOST_BUILD=1 tests/discovery/test_catalog.c src/system/discovery/catalog.c src/system/discovery/discovery.c src/system/net/http.c src/system/net/tls.c src/system/core/json.c -ldl -o "$build_dir/test_catalog_live"
+    "$build_dir/test_catalog_live"
+fi
