@@ -606,9 +606,23 @@ typedef enum {
 	LIBRARY_SEARCH_TRACK,
 	LIBRARY_SEARCH_ALBUM,
 	LIBRARY_SEARCH_ARTIST,
+	LIBRARY_SEARCH_PLAYLIST,
+	LIBRARY_SEARCH_LYRICS,
 } library_search_type_t;
 typedef void (*library_search_cb_t)(library_search_type_t type, const char *name, const char *path, void *user);
 int library_search(const char *query, int per_category, library_search_cb_t cb, void *user);
+typedef struct {
+	library_search_type_t type;
+	char name[256], path[512], excerpt[192];
+} library_instant_hit_t;
+typedef void (*library_instant_cb_t)(const library_instant_hit_t *hit, void *user);
+/* Worker-thread API: persisted word-prefix index, literal phrase matching,
+ * bounded results. Reads no audio/lyrics files while answering a query. */
+int library_search_instant(const char *query, int per_category, library_instant_cb_t cb, void *user);
+size_t library_search_fold(const char *text, char *out, size_t size);
+/* Scanner/worker only: stat known files and reindex only changed lyric sources. */
+void library_search_refresh_lyrics(void);
+int library_track_artists(const char *path, char names[][256], int max);
 
 // ---------------------------------------------------------------------------
 // Playlists
@@ -697,6 +711,8 @@ int library_playlist_rows(const char *name, library_playlist_row_t **rows_out);
 
 // The first row naming this path, gone.
 bool library_playlist_remove_path(const char *name, const char *path);
+// Membership deselection removes every occurrence in one database statement.
+bool library_playlist_remove_all_path(const char *name, const char *path);
 
 // Whether any row of the playlist names this path.
 bool library_playlist_contains(const char *name, const char *path);

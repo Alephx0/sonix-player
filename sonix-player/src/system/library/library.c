@@ -1,3 +1,4 @@
+#include "collections.h"
 #include "library.h"
 
 #include "src/system/library/audiobookdb.h"
@@ -24,6 +25,9 @@
 #include "src/system/decode/mp4.h"
 #include "src/system/decode/apedec.h"
 #include "src/system/library/metadata.h"
+#include "src/system/library/lyrics.h"
+#include "src/system/library/search_index.h"
+static void instant_refresh(void);
 #include "src/system/core/utils.h"
 
 // The schema.
@@ -854,6 +858,8 @@ static void foldcase_sql(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 	sqlite3_result_text(ctx, folded, -1, SQLITE_TRANSIENT);
 }
 
+size_t library_search_fold(const char *text, char *out, size_t size) { return fold_text(text,out,size); }
+
 // Whose an album is, as a short key: what tells apart two records with the same
 // name. The album artist, or the artist on a file that has none -- the scan
 // keeps whichever it found in MEDIA_TABLE.album_artist -- and the folder on a
@@ -1397,6 +1403,7 @@ static bool db_open_file(const char *db_path) {
 		exec_quiet(SCHEMA_COLUMNS[i]);
 	}
 	index_steps(SCHEMA_INDEXES, sizeof(SCHEMA_INDEXES) / sizeof(SCHEMA_INDEXES[0]), "index");
+	search_index_schema(db);
 
 	album_groups_fill();
 	album_keys_fill();
@@ -4567,9 +4574,22 @@ static bool is_video_file(const char *path, const char *name) {
 // Indexes one file: read the tags, write the row, commit every so often. Split
 // out of the walk, which has two phases with this sitting between them.
 static void scan_indexed(const char *path, const char *name, const song_metadata_t *tags, const struct stat *st) {
+	/* Read lyrics with the scanner, never while handling a keystroke. */
+	lyrics_t words={0};
+	char *text=calloc(1,16385);
+	if(text && lyrics_load(path,tags->title,&words)) {
+		size_t used=0;
+		for(int i=0;i<words.count && used<16384;i++) {
+			const char *line=words.lines[i].text;size_t n=strlen(line);
+			if(n+used+1>16384)break;
+			memcpy(text+used,line,n);used+=n;text[used++]='\n';text[used]=0;
+		}
+		lyrics_free(&words);
+	}
 	pthread_mutex_lock(&db_lock);
 	if (db) {
 		insert_track(path, name, tags, st);
+		search_index_put(db,LIBRARY_SEARCH_LYRICS,path,tags->title[0]?tags->title:name,path,text?text:"");
 		scan_found++;
 
 		if (scan_found % SCAN_COMMIT_EVERY == 0) {
@@ -4601,6 +4621,7 @@ static void scan_indexed(const char *path, const char *name, const song_metadata
 		}
 	}
 	pthread_mutex_unlock(&db_lock);
+	free(text);
 }
 
 // The audio files claimed by the CUE sheets of the directory being walked.
@@ -6644,6 +6665,7 @@ static void *scan_thread_func(void *arg) {
 		break;
 	}
 
+	if(!scan_cancel && !scan_db_failed) {instant_refresh(); library_search_refresh_lyrics();}
 	set_scan_folder("");
 	crumb_set(NULL); // the scan is over: a later crash must not blame its last file
 
@@ -7168,6 +7190,7 @@ bool library_playlist_drop(const char *name) {
 		bump_generation(GEN_PLAYLISTS);
 	}
 	pthread_mutex_unlock(&db_lock);
+	if (ok) collections_forget(COLLECTION_PLAYLIST, name);
 	return ok;
 }
 
@@ -7190,6 +7213,7 @@ bool library_playlist_rename(const char *name, const char *new_name) {
 		bump_generation(GEN_PLAYLISTS);
 	}
 	pthread_mutex_unlock(&db_lock);
+	if (ok) collections_rename(COLLECTION_PLAYLIST, name, new_name, new_name);
 	return ok;
 }
 
@@ -7543,6 +7567,31 @@ bool library_playlist_remove_path(const char *name, const char *path) {
 	char sql[PLAYLIST_TABLE_MAX * 2 + 160];
 	snprintf(sql, sizeof(sql), "DELETE FROM %s WHERE idx=(SELECT idx FROM %s WHERE path=? ORDER BY idx LIMIT 1)",
 			 quoted, quoted);
+
+	pthread_mutex_lock(&db_lock);
+	bool ok = false;
+	if (db && playlist_table_exists_locked(name)) {
+		sqlite3_stmt *stmt = NULL;
+		if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+			sqlite3_bind_text(stmt, 1, path, -1, SQLITE_TRANSIENT);
+			ok = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(db) > 0;
+			sqlite3_finalize(stmt);
+		}
+	}
+	if (ok) {
+		bump_generation(GEN_PLAYLISTS);
+	}
+	pthread_mutex_unlock(&db_lock);
+	return ok;
+}
+
+bool library_playlist_remove_all_path(const char *name, const char *path) {
+	char quoted[PLAYLIST_TABLE_MAX];
+	if (!path || !path[0] || !playlist_table(name, quoted, sizeof(quoted))) {
+		return false;
+	}
+	char sql[PLAYLIST_TABLE_MAX * 2 + 160];
+	snprintf(sql, sizeof(sql), "DELETE FROM %s WHERE path=?", quoted);
 
 	pthread_mutex_lock(&db_lock);
 	bool ok = false;
@@ -8134,4 +8183,131 @@ int library_search(const char *query, int per_category, library_search_cb_t cb, 
 	}
 	pthread_mutex_unlock(&db_lock);
 	return total;
+}
+
+
+int library_track_artists(const char *path, char names[][256], int max) {
+    if(!path||!names||max<1)return 0;
+    if(max>16)max=16;
+    int n=0;sqlite3_stmt *stmt=NULL;
+    pthread_mutex_lock(&db_lock);
+    if(db && sqlite3_prepare_v2(db,"SELECT artist FROM ARTIST_LINK WHERE path=?1 UNION SELECT artist FROM MEDIA_TABLE WHERE path=?1 AND NOT EXISTS(SELECT 1 FROM ARTIST_LINK WHERE path=?1) LIMIT ?2",-1,&stmt,NULL)==SQLITE_OK){
+        sqlite3_bind_text(stmt,1,path,-1,SQLITE_TRANSIENT);sqlite3_bind_int(stmt,2,max);
+        while(sqlite3_step(stmt)==SQLITE_ROW){const char *name=(const char*)sqlite3_column_text(stmt,0);
+            if(name&&*name)snprintf(names[n++],256,"%s",name);}
+        sqlite3_finalize(stmt);
+    }
+    pthread_mutex_unlock(&db_lock);return n;
+}
+
+/* Incremental dirty rows are written by schema triggers, including databases
+ * created before search existed. Each 32-row batch releases the DB lock. */
+static void instant_refresh(void) {
+    for(;;){
+        pthread_mutex_lock(&db_lock);
+        if(!db){pthread_mutex_unlock(&db_lock);return;}
+        sqlite3_exec(db,"SAVEPOINT search_batch",NULL,NULL,NULL);
+        sqlite3_stmt *s=NULL;int n=0;
+        if(sqlite3_prepare_v2(db,"SELECT m.path,m.name,m.album,m.album_key,m.artist FROM SEARCH_DIRTY q JOIN MEDIA_TABLE m ON m.path=q.path LIMIT 32",-1,&s,NULL)==SQLITE_OK){
+            while(sqlite3_step(s)==SQLITE_ROW){
+                char path[512],title[256],album[256],artist[256],key[300];
+                snprintf(path,sizeof(path),"%s",sqlite3_column_text(s,0));
+                snprintf(title,sizeof(title),"%s",sqlite3_column_text(s,1));
+                snprintf(album,sizeof(album),"%s",sqlite3_column_text(s,2));
+                snprintf(key,sizeof(key),"%s\x1f%s",album,sqlite3_column_text(s,3));
+                snprintf(artist,sizeof(artist),"%s",sqlite3_column_text(s,4));
+                search_index_put(db,LIBRARY_SEARCH_TRACK,path,title,path,title);
+                search_index_put(db,LIBRARY_SEARCH_ALBUM,path,key,path,album);
+                search_index_put(db,LIBRARY_SEARCH_ARTIST,path,artist,path,artist);
+                sqlite3_stmt *d=NULL;
+                if(sqlite3_prepare_v2(db,"DELETE FROM SEARCH_DIRTY WHERE path=?",-1,&d,NULL)==SQLITE_OK){sqlite3_bind_text(d,1,path,-1,SQLITE_TRANSIENT);sqlite3_step(d);sqlite3_finalize(d);}
+                n++;
+            }
+            sqlite3_finalize(s);
+        }
+        sqlite3_exec(db,"RELEASE search_batch",NULL,NULL,NULL);
+        pthread_mutex_unlock(&db_lock);
+        if(n<32)break;
+    }
+}
+
+int library_search_instant(const char *query,int per_category,library_instant_cb_t cb,void *user) {
+    if(!query||!*query||!cb)return 0;
+    instant_refresh();
+    pthread_mutex_lock(&db_lock);
+    /* Playlist schema names are small metadata, not song files. Synchronize
+     * only when the existing playlist generation changes, including rename. */
+    static unsigned playlist_generation;static sqlite3 *last_db;
+    unsigned current_generation=generation[GEN_PLAYLISTS];
+    if(db && (last_db!=db || playlist_generation!=current_generation)){
+        exec("DELETE FROM SEARCH_DOC WHERE kind=3");
+        sqlite3_stmt *s=NULL;
+        if(sqlite3_prepare_v2(db,"SELECT substr(name,5) FROM sqlite_master WHERE type='table' AND substr(name,1,4)='M3U_'",-1,&s,NULL)==SQLITE_OK){
+            while(sqlite3_step(s)==SQLITE_ROW){const char *name=(const char*)sqlite3_column_text(s,0);if(name)search_index_put(db,3,name,name,"",name);}
+            sqlite3_finalize(s);
+        }
+        playlist_generation=current_generation;last_db=db;
+    }
+    int n=search_index_query(db,query,per_category,cb,user);
+    pthread_mutex_unlock(&db_lock);return n;
+}
+
+
+/* The same basename/title .lrc/.txt candidates as lyrics_load, plus the audio
+ * stamp for embedded words. Only changed sources are opened; never invoked by
+ * a search keystroke. This also backfills lyrics in an older music database. */
+static void lyric_stamp(const char *path,const char *title,char out[256]) {
+    uint64_t hash=1469598103934665603ULL;
+    char base[768],dir[512],candidate[1024];
+    snprintf(base,sizeof(base),"%s",path);snprintf(dir,sizeof(dir),"%s",path);
+    char *slash=strrchr(dir,'/');if(slash)slash[1]=0;else dir[0]=0;
+    char *dot=strrchr(base,'.');if(dot && (!strrchr(base,'/') || dot>strrchr(base,'/'))) *dot=0;
+    for(int i=0;i<5;i++) {
+        if(i==0)snprintf(candidate,sizeof(candidate),"%s",path);
+        else if(i<3)snprintf(candidate,sizeof(candidate),"%s.%s",base,i==1?"lrc":"txt");
+        else snprintf(candidate,sizeof(candidate),"%s%s.%s",dir,title,i==3?"lrc":"txt");
+        struct stat st;uint64_t fields[3]={0};
+        if(!stat(candidate,&st)) {fields[0]=(uint64_t)st.st_size;fields[1]=(uint64_t)st.st_mtim.tv_sec;fields[2]=(uint64_t)st.st_mtim.tv_nsec;}
+        for(int j=0;j<3;j++){hash^=fields[j];hash*=1099511628211ULL;}
+    }
+    snprintf(out,256,"%llu",(unsigned long long)hash);
+}
+void library_search_refresh_lyrics(void) {
+    sqlite3_int64 last=0;
+    while(!scan_cancel) {
+        char path[512]="",title[256]="",old_stamp[256]="";sqlite3_stmt *stmt=NULL;
+        pthread_mutex_lock(&db_lock);
+        if(db && sqlite3_prepare_v2(db,"SELECT m.rowid,m.path,m.name,coalesce(s.stamp,'') FROM MEDIA_TABLE m LEFT JOIN SEARCH_LYRIC_STATE s ON s.path=m.path WHERE m.rowid>? ORDER BY m.rowid LIMIT 1",-1,&stmt,NULL)==SQLITE_OK) {
+            sqlite3_bind_int64(stmt,1,last);
+            if(sqlite3_step(stmt)==SQLITE_ROW) {
+                last=sqlite3_column_int64(stmt,0);
+                snprintf(path,sizeof(path),"%s",sqlite3_column_text(stmt,1));
+                snprintf(title,sizeof(title),"%s",sqlite3_column_text(stmt,2));
+                snprintf(old_stamp,sizeof(old_stamp),"%s",sqlite3_column_text(stmt,3));
+            }
+        }
+        sqlite3_finalize(stmt);pthread_mutex_unlock(&db_lock);
+        if(!path[0]) break;
+        char stamp[256];lyric_stamp(path,title,stamp);if(!strcmp(old_stamp,stamp))continue;
+        lyrics_t words={0};char *text=calloc(1,16385);if(!text)break;
+        if(lyrics_load(path,title,&words)) {
+            size_t used=0;
+            for(int i=0;i<words.count;i++) {
+                size_t n=strlen(words.lines[i].text);if(used+n+1>16384)break;
+                memcpy(text+used,words.lines[i].text,n);used+=n;text[used++]='\n';text[used]=0;
+            }
+        }
+        lyrics_free(&words);
+        pthread_mutex_lock(&db_lock);
+        if(db) {
+            sqlite3_exec(db,"SAVEPOINT lyric_update",NULL,NULL,NULL);
+            search_index_put(db,LIBRARY_SEARCH_LYRICS,path,title,path,text);
+            stmt=NULL;
+            if(sqlite3_prepare_v2(db,"INSERT OR REPLACE INTO SEARCH_LYRIC_STATE VALUES(?,?)",-1,&stmt,NULL)==SQLITE_OK) {
+                sqlite3_bind_text(stmt,1,path,-1,SQLITE_TRANSIENT);sqlite3_bind_text(stmt,2,stamp,-1,SQLITE_TRANSIENT);sqlite3_step(stmt);
+            }
+            sqlite3_finalize(stmt);sqlite3_exec(db,"RELEASE lyric_update",NULL,NULL,NULL);
+        }
+        pthread_mutex_unlock(&db_lock);free(text);
+    }
 }

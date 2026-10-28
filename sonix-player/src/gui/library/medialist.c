@@ -1370,6 +1370,46 @@ static row_t *row_of_button(panel_t *p, lv_obj_t *button) {
 	return NULL;
 }
 
+/* A track-row drag queues the track. The left screen edge remains Back;
+ * a horizontal drag in the body belongs to the row and never starts playback. */
+static lv_point_t track_swipe_origin;
+static lv_obj_t *track_swipe_button;
+static int track_swipe_index=-1;
+static bool track_swipe_taken;
+static void track_swipe_cb(lv_event_t *e) {
+    panel_t *p=lv_event_get_user_data(e);
+    lv_obj_t *button=lv_event_get_current_target(e);
+    lv_indev_t *indev=lv_indev_active();
+    if(!indev || !p->is_tracks || p->selecting || p->reordering) return;
+    lv_event_code_t code=lv_event_get_code(e);
+    lv_point_t point;lv_indev_get_point(indev,&point);
+    if(code==LV_EVENT_PRESSED) {
+        track_swipe_button=button;track_swipe_origin=point;track_swipe_taken=false;
+        row_t *row=row_of_button(p,button);track_swipe_index=row?row->index:-1;
+        if(point.x>32) lv_event_stop_bubbling(e);
+        return;
+    }
+    if(button!=track_swipe_button || track_swipe_origin.x<=32) return;
+    int dx=point.x-track_swipe_origin.x,dy=point.y-track_swipe_origin.y;
+    if(code==LV_EVENT_PRESSING && dx>35 && LV_ABS(dy)<35) {
+        track_swipe_taken=true;lv_event_stop_bubbling(e);
+        lv_obj_set_style_border_color(button,lv_color_hex(0x1ed760),0);
+        lv_obj_set_style_border_width(button,3,0);
+    }
+    if(code==LV_EVENT_RELEASED || code==LV_EVENT_PRESS_LOST) {
+        lv_obj_set_style_border_width(button,0,0);
+        if(track_swipe_taken) lv_event_stop_bubbling(e);
+        if(code==LV_EVENT_RELEASED && dx>75 && LV_ABS(dy)<35) {
+            const char *name=NULL,*path=NULL;
+            row_t *row=row_of_button(p,button);
+            if(row && row->index==track_swipe_index && row_at(p,row->index,&name,&path) && path && *path) {
+                if(playlist_priority_add(path)) {device_state_queue_changed();toast_success("added_to_the_queue");}
+                else toast_error("Could not add to queue");
+            }
+        }
+    }
+}
+
 static void row_long_pressed_cb(lv_event_t *e) {
 	if (player_sheet_drag_active() || switcher_back_drag_active()) {
 		return;
@@ -2569,6 +2609,7 @@ static library_filter_t filter_for(library_list_t kind) {
 }
 
 static void row_clicked_cb(lv_event_t *e) {
+    if(track_swipe_taken && lv_event_get_current_target(e)==track_swipe_button) return;
 	if (player_sheet_drag_active() || switcher_back_drag_active()) {
 		return; // a swipe across the list, not a tap
 	}
@@ -3831,6 +3872,10 @@ static void build_panel(panel_t *p, gui_config_t *cfg, bool is_tracks, int slot_
 		lv_obj_add_style(row->button, &theme_style_card_pressed, LV_STATE_PRESSED);
 		lv_obj_set_hidden(row->button, true);
 		lv_obj_set_event_bubble(row->button, true); // so the player sheet can be dragged in
+		lv_obj_add_event_cb(row->button,track_swipe_cb,LV_EVENT_PRESSED,p);
+        lv_obj_add_event_cb(row->button,track_swipe_cb,LV_EVENT_PRESSING,p);
+        lv_obj_add_event_cb(row->button,track_swipe_cb,LV_EVENT_RELEASED,p);
+        lv_obj_add_event_cb(row->button,track_swipe_cb,LV_EVENT_PRESS_LOST,p);
 		lv_obj_add_event_cb(row->button, row_clicked_cb, LV_EVENT_CLICKED, p);
 		lv_obj_add_event_cb(row->button, row_long_pressed_cb, LV_EVENT_LONG_PRESSED, p);
 

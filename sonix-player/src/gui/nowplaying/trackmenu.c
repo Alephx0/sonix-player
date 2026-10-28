@@ -82,6 +82,7 @@ typedef struct {
 	lv_obj_t *icon;
 	lv_obj_t *label;
 	lv_obj_t *check; // the tick on a chosen row while choosing
+	lv_obj_t *priority_mark;
 	lv_obj_t *grip;	 // the handle on a row that can be moved, while reordering
 	int vindex;		 // the row of the page it shows (see queue_vrow_y), or -1
 	int index;		 // its position in the queue, or -1 on a row of the history
@@ -95,6 +96,8 @@ static lv_obj_t *queue_body; // fixed-height canvas the pool rows sit on
 static lv_obj_t *queue_empty;
 static lv_obj_t *queue_history_header;
 static lv_obj_t *queue_now_header;
+static lv_obj_t *queue_priority_header, *queue_context_header;
+static int queue_priorities;
 static queue_row_t queue_rows[QUEUE_ROW_POOL];
 static int queue_total;	  // how many tracks the queue holds, from its first
 static int queue_current; // the track playing, as the rows were laid out for it
@@ -135,6 +138,7 @@ static int queue_chosen_count;
 static lv_obj_t *queue_select_btn;
 static lv_obj_t *queue_reorder_btn;
 static lv_obj_t *queue_remove_btn;
+static lv_obj_t *queue_up_btn;
 static lv_obj_t *queue_close_btn;
 
 // The row being carried, by its grip or, out of the history, by the row itself.
@@ -191,7 +195,12 @@ static int queue_shown(void) { return queue_total > 0 ? queue_total - queue_curr
 
 // Where queued track `index` (the track playing or one after it) sits on the
 // canvas. `queue_total` gives the end of the last row.
-static int queue_row_y(int index) { return queue_now_top() + QUEUE_HEADER_H + (index - queue_current) * QUEUE_ROW_PITCH; }
+static int queue_row_y(int index) {
+    int headers = 0;
+    if (index > queue_current && queue_priorities) headers++;
+    if (index > queue_current + queue_priorities && queue_total > queue_current + queue_priorities + 1) headers++;
+    return queue_now_top() + QUEUE_HEADER_H + (index - queue_current) * QUEUE_ROW_PITCH + headers * QUEUE_HEADER_H;
+}
 
 // Where row `vindex` of the page sits on the canvas.
 static int queue_vrow_y(int vindex) {
@@ -218,7 +227,9 @@ static int queue_vindex_at(int y) {
 		}
 		vindex = lo;
 	} else {
-		vindex = queue_hist_count + (y - queue_now_top() - QUEUE_HEADER_H) / QUEUE_ROW_PITCH;
+		int lo = queue_current, hi = queue_total - 1;
+        while (lo < hi) { int mid=(lo+hi+1)/2; if(queue_row_y(mid)<=y) lo=mid; else hi=mid-1; }
+        vindex = queue_hist_count + lo - queue_current;
 		if (vindex < queue_hist_count) {
 			vindex = queue_hist_count;
 		}
@@ -247,7 +258,7 @@ static void queue_row_paint_check(queue_row_t *row) {
 // shows of the mode the page is in.
 static void queue_row_paint_tools(queue_row_t *row) {
 	queue_row_paint_check(row);
-	bool grip = queue_mode == QUEUE_REORDER && row->index > queue_current && row->index < queue_total;
+	bool grip = queue_mode != QUEUE_SELECT && row->index > queue_current && row->index < queue_total;
 	lv_obj_set_hidden(row->grip, !grip);
 	bool carried = queue_drag.active && ((row->index >= 0 && row->index == queue_drag.from) || (row->hist >= 0 && queue_hist[row->hist].id == queue_drag.hist_id));
 	lv_opa_t opa = carried ? LV_OPA_40 : LV_OPA_COVER;
@@ -274,6 +285,7 @@ static void queue_mode_show(void) {
 	lv_obj_set_hidden(queue_select_btn, !idle);
 	lv_obj_set_hidden(queue_reorder_btn, !(idle || reorder));
 	lv_obj_set_hidden(queue_remove_btn, !select);
+	lv_obj_set_hidden(queue_up_btn, !select);
 	lv_obj_set_hidden(queue_close_btn, !select);
 
 	lv_obj_t *glyph = lv_obj_get_child(queue_reorder_btn, 0);
@@ -435,6 +447,7 @@ static void queue_row_bind(queue_row_t *row, int vindex) {
 		lv_obj_set_hidden(row->button, false);
 		lv_obj_set_y(row->button, queue_vrow_y(vindex));
 		lv_label_set_text(row->label, title);
+	lv_obj_set_hidden(row->priority_mark, row->index < 0 || !playlist_is_priority(row->index));
 		queue_row_paint_mark(row);
 		queue_row_paint_tools(row);
 		return;
@@ -466,6 +479,7 @@ static void queue_row_bind(queue_row_t *row, int vindex) {
 	lv_obj_set_hidden(row->button, false);
 	lv_obj_set_y(row->button, queue_row_y(index));
 	lv_label_set_text(row->label, title);
+	lv_obj_set_hidden(row->priority_mark, row->index < 0 || !playlist_is_priority(row->index));
 
 	queue_row_paint_mark(row);
 	queue_row_paint_tools(row);
@@ -607,6 +621,7 @@ static void queue_history_layout(void) {
 // at the next window update, every row.
 static void queue_layout(void) {
 	queue_total = playlist_count();
+	queue_priorities = playlist_priority_count();
 	if (queue_total < 0) {
 		queue_total = 0;
 	}
@@ -620,6 +635,16 @@ static void queue_layout(void) {
 	lv_obj_set_hidden(queue_history_header, queue_hist_count == 0);
 	lv_obj_set_hidden(queue_now_header, queue_total == 0);
 	lv_obj_set_y(queue_now_header, queue_now_top() + 10);
+    lv_obj_set_hidden(queue_priority_header, !queue_priorities);
+    lv_obj_set_hidden(queue_context_header, queue_total <= queue_current + queue_priorities + 1);
+    lv_obj_set_y(queue_priority_header, queue_row_y(queue_current+1)-QUEUE_HEADER_H+10);
+    lv_obj_set_y(queue_context_header, queue_row_y(queue_current+queue_priorities+1)-QUEUE_HEADER_H+10);
+    char context[300] = "Next from playback context";
+    if (playlist_album()[0]) {
+        char title[256]; library_album_title(playlist_album(),title,sizeof(title));
+        snprintf(context,sizeof(context),"Next from %.230s",title);
+    }
+    lv_label_set_text(queue_context_header,context);
 	lv_obj_align(queue_empty, LV_ALIGN_TOP_MID, 0, queue_now_top() + 72);
 
 	// Tall enough for Now playing to reach the top of the page however little
@@ -951,7 +976,7 @@ static void queue_drag_end(bool drop) {
 		if (!queue_history_path(queue_drag.hist_id, path, sizeof(path))) {
 			return;
 		}
-		playlist_insert_at(path, target);
+		playlist_priority_add(path);
 	}
 	if (playlist_revision() != revision) {
 		// Written down now, as a removal is: the mirror on disk is otherwise
@@ -1004,7 +1029,7 @@ static void queue_drag_follow(lv_point_t point) {
 	int upcoming = queue_now_top() + QUEUE_HEADER_H;
 	int target = -1;
 	if (y >= upcoming + QUEUE_ROW_PITCH / 2) {
-		target = queue_current + (y - upcoming + QUEUE_ROW_PITCH / 2) / QUEUE_ROW_PITCH;
+		target = queue_current + queue_vindex_at(y + QUEUE_ROW_PITCH / 2) - queue_hist_count;
 		if (target > queue_total) {
 			target = queue_total;
 		}
@@ -1024,7 +1049,8 @@ static void queue_drag_follow(lv_point_t point) {
 static void queue_drag_cb(lv_event_t *e) {
 	lv_event_code_t code = lv_event_get_code(e);
 	lv_obj_t *target = lv_event_get_current_target(e);
-	if (code == LV_EVENT_PRESSED && queue_mode == QUEUE_REORDER && !queue_drag.active) {
+	if (((code == LV_EVENT_PRESSED && queue_mode == QUEUE_REORDER) ||
+         (code == LV_EVENT_LONG_PRESSED && queue_mode == QUEUE_IDLE)) && !queue_drag.active) {
 		// A grip, taken hold of.
 		for (int i = 0; i < QUEUE_ROW_POOL; i++) {
 			queue_row_t *row = &queue_rows[i];
@@ -1076,8 +1102,25 @@ static bool queue_history_path(long long id, char *path, size_t size) {
 	return true;
 }
 
+static lv_point_t queue_swipe_start;
+static int queue_swipe_index = -1;
+static void queue_swipe_cb(lv_event_t *e) {
+    lv_indev_t *indev=lv_indev_active();
+    if(!indev || queue_drag.active || queue_mode!=QUEUE_IDLE || queue_swipe_index<=queue_current) return;
+    lv_point_t now; lv_indev_get_point(indev,&now);
+    if(now.x-queue_swipe_start.x < -75 && LV_ABS(now.y-queue_swipe_start.y)<35) {
+        queue_drop_guard=true;
+        lv_event_stop_bubbling(e);
+        if(lv_event_get_code(e)==LV_EVENT_RELEASED) {
+            int index=queue_swipe_index; queue_swipe_index=-1;
+            if(playlist_remove(&index,1)) { device_state_queue_changed(); queue_rebuild(); }
+        }
+    }
+}
 static void queue_row_pressed_cb(lv_event_t *e) {
-	(void)e;
+	queue_row_t *row=queue_row_of(lv_event_get_current_target(e));
+    queue_swipe_index=row?row->index:-1;
+    if(lv_indev_active()) lv_indev_get_point(lv_indev_active(),&queue_swipe_start);
 	queue_drop_guard = false;
 }
 
@@ -1130,6 +1173,26 @@ static void queue_remove_cb(lv_event_t *e) {
 	queue_scroll_to(scroll, LV_ANIM_OFF);
 	queue_window_update();
 	queue_mode_show();
+}
+
+// Move each selected run up one position within its own section.
+static void queue_up_cb(lv_event_t *e) {
+    (void)e;
+    if (queue_mode != QUEUE_SELECT || !queue_chosen_count) return;
+    bool changed = false;
+    for (int i = queue_current + 2; i < queue_total; i++) {
+        if (queue_chosen[i] && !queue_chosen[i - 1] &&
+            playlist_is_priority(i) == playlist_is_priority(i - 1) && playlist_move(i, i - 1)) {
+            queue_chosen[i - 1] = true;
+            queue_chosen[i] = false;
+            changed = true;
+        }
+    }
+    if (changed) device_state_queue_changed();
+    queue_mode_set(QUEUE_IDLE);
+    queue_layout();
+    queue_window_update();
+    queue_mode_show();
 }
 
 static void queue_close_cb(lv_event_t *e) {
@@ -1232,6 +1295,17 @@ static lv_obj_t *queue_header(const char *tag, int y) {
 	return label;
 }
 
+static void queue_clear_priority_cb(lv_event_t *e) {
+    (void)e; playlist_priority_clear(); device_state_queue_changed(); queue_rebuild();
+}
+static void queue_reshuffle_cb(lv_event_t *e) {
+    (void)e; playlist_reshuffle(); device_state_queue_changed(); queue_rebuild();
+}
+static void queue_control(lv_obj_t *parent,const char *text,int x,int width,lv_event_cb_t cb) {
+    lv_obj_t *b=lv_button_create(parent); lv_obj_set_pos(b,x,0);lv_obj_set_size(b,width,44);
+    lv_obj_add_style(b,&theme_style_card,0); lv_obj_add_event_cb(b,cb,LV_EVENT_CLICKED,NULL);
+    lv_obj_t *label=lv_label_create(b);lv_label_set_text(label,text);lv_obj_set_style_text_font(label,&font_ui_18,0);lv_obj_center(label);
+}
 static void build_queue_page(gui_config_t *cfg) {
 	lv_obj_add_style(queue_screen, &theme_style_screen, 0);
 	queue_title = settingsrow_title(queue_screen, cfg, "trackmenu_queue");
@@ -1240,8 +1314,15 @@ static void build_queue_page(gui_config_t *cfg) {
 	queue_select_btn = queue_corner_button(cfg, 1, &icon_select_mode, queue_select_cb);
 	queue_close_btn = queue_corner_button(cfg, 0, &icon_close, queue_close_cb);
 	queue_remove_btn = queue_corner_button(cfg, 1, &icon_trash, queue_remove_cb);
+	queue_up_btn = queue_corner_button(cfg, 2, &icon_arrow_down_up, queue_up_cb);
 
 	int content_top = settingsrow_content_top(cfg);
+    lv_obj_t *controls=lv_obj_create(queue_screen);lv_obj_remove_style_all(controls);
+    lv_obj_set_pos(controls,cfg->padding,content_top);lv_obj_set_size(controls,cfg->screen_width-2*cfg->padding,48);
+    int control_width=(cfg->screen_width-2*cfg->padding-12)/2;
+    queue_control(controls,"Clear queued",0,control_width,queue_clear_priority_cb);
+    queue_control(controls,"Reshuffle",control_width+12,control_width,queue_reshuffle_cb);
+    content_top += 52;
 	int width = cfg->screen_width - 2 * cfg->padding;
 	queue_view_h = cfg->screen_height - content_top;
 
@@ -1272,6 +1353,10 @@ static void build_queue_page(gui_config_t *cfg) {
 
 	queue_history_header = queue_header("queue_history", 0);
 	queue_now_header = queue_header("queue_now_playing", 0);
+    queue_priority_header=queue_header("Next in queue",0);
+    lv_obj_set_style_text_color(queue_priority_header,lv_color_hex(0x1ed760),0);
+    queue_context_header=queue_header("Next from playback context",0);
+    lv_obj_set_width(queue_context_header,width-8);lv_label_set_long_mode(queue_context_header,LV_LABEL_LONG_DOT);
 	for (int i = 0; i < QUEUE_SEP_POOL; i++) {
 		queue_sep_labels[i] = lv_label_create(queue_body);
 		lv_obj_add_style(queue_sep_labels[i], &theme_style_text_dim, 0);
@@ -1305,11 +1390,20 @@ static void build_queue_page(gui_config_t *cfg) {
 		lv_obj_set_hidden(row->button, true);
 		lv_obj_set_event_bubble(row->button, true);
 		lv_obj_add_event_cb(row->button, queue_row_pressed_cb, LV_EVENT_PRESSED, NULL);
+	lv_obj_add_event_cb(row->button,queue_swipe_cb,LV_EVENT_PRESSING,NULL);
+	lv_obj_add_event_cb(row->button,queue_swipe_cb,LV_EVENT_RELEASED,NULL);
 		lv_obj_add_event_cb(row->button, queue_row_clicked_cb, LV_EVENT_CLICKED, NULL);
 		lv_obj_add_event_cb(row->button, queue_row_long_cb, LV_EVENT_LONG_PRESSED, NULL);
 		lv_obj_add_event_cb(row->button, queue_drag_cb, LV_EVENT_PRESSING, NULL);
 		lv_obj_add_event_cb(row->button, queue_drag_cb, LV_EVENT_RELEASED, NULL);
 		lv_obj_add_event_cb(row->button, queue_drag_cb, LV_EVENT_PRESS_LOST, NULL);
+		row->priority_mark=lv_image_create(row->button);
+        lv_image_set_src(row->priority_mark,&icon_list_music);
+        lv_obj_set_size(row->priority_mark,24,24);
+        lv_image_set_inner_align(row->priority_mark,LV_IMAGE_ALIGN_CONTAIN);
+        lv_obj_set_style_image_recolor(row->priority_mark,lv_color_hex(0x1ed760),0);
+        lv_obj_set_style_image_recolor_opa(row->priority_mark,LV_OPA_COVER,0);
+        lv_obj_set_hidden(row->priority_mark,true);
 		lv_obj_set_flex_flow(row->button, LV_FLEX_FLOW_ROW);
 		lv_obj_set_flex_align(row->button, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -1349,6 +1443,7 @@ static void build_queue_page(gui_config_t *cfg) {
 		lv_obj_set_style_image_recolor_opa(grip_icon, LV_OPA_COVER, 0);
 		lv_obj_center(grip_icon);
 		lv_obj_add_event_cb(row->grip, queue_drag_cb, LV_EVENT_PRESSED, NULL);
+	lv_obj_add_event_cb(row->grip,queue_drag_cb,LV_EVENT_LONG_PRESSED,NULL);
 		lv_obj_add_event_cb(row->grip, queue_drag_cb, LV_EVENT_PRESSING, NULL);
 		lv_obj_add_event_cb(row->grip, queue_drag_cb, LV_EVENT_RELEASED, NULL);
 		lv_obj_add_event_cb(row->grip, queue_drag_cb, LV_EVENT_PRESS_LOST, NULL);

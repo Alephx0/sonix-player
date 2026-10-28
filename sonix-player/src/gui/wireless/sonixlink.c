@@ -82,6 +82,7 @@ static int mode_to_wire(playback_mode_t mode) {
 	switch (mode) {
 	case PLAYBACK_MODE_REPEAT_ALL:
 		return SONIXLINK_MODE_REPEAT_ALL;
+	case PLAYBACK_MODE_SHUFFLE_REPEAT_ONE:
 	case PLAYBACK_MODE_REPEAT_ONE:
 		return SONIXLINK_MODE_REPEAT_ONE;
 	case PLAYBACK_MODE_SHUFFLE:

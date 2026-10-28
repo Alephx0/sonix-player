@@ -18,6 +18,7 @@ typedef enum {
 	// ever is random exactly once. Added last so the numbers the earlier modes
 	// are saved under do not move.
 	PLAYBACK_MODE_SHUFFLE_REPEAT,
+	PLAYBACK_MODE_SHUFFLE_REPEAT_ONE,
 } playback_mode_t;
 
 // Builds the queue from every playable file in `folder`, ordered the same way
@@ -54,9 +55,9 @@ void playlist_load_paths_ordered(const char *const *list, int count, int start_i
 // Returns false only when the track could not be stored (out of memory).
 bool playlist_insert_next(const char *path);
 
-// "Add to queue" from the library, the search and the browser, where the
-// user's setting puts it (Music settings > Playback options, [player]
-// queue_add_end): right after the track playing, as playlist_insert_next(), or
+// "Add to queue" from the library, search and browser. The default appends
+// to the independent manual priority FIFO. The legacy [player] queue_add_end
+// setting instead appends to the playback context,
 // at the end of the queue, after everything already in it. Several added one
 // after another keep the order they were added in either way. Returns false
 // only when the track could not be stored (out of memory).
@@ -235,7 +236,7 @@ bool playlist_advance_auto(char *out, size_t out_size);
 bool playlist_peek_auto(char *out, size_t out_size);
 
 // User-initiated next/prev, walking the playback order. Copy the new track's
-// path into `out`; return false only when the queue is empty.
+// path into `out`; return false when no next/previous entry is available.
 bool playlist_next(char *out, size_t out_size);
 bool playlist_prev(char *out, size_t out_size);
 
@@ -244,5 +245,24 @@ playback_mode_t playlist_get_mode(void);
 // Advances to the next mode (NORMAL -> REPEAT_ALL -> REPEAT_ONE -> SHUFFLE ->
 // NORMAL) and returns the new mode.
 playback_mode_t playlist_cycle_mode(void);
+
+/* Independent context ordering and repeat controls. Priority entries never
+ * participate in context shuffles or repeat-all rounds. */
+bool playlist_shuffle_enabled(void);
+void playlist_set_shuffle(bool enabled);
+int playlist_repeat_mode(void); /* 0 off, 1 context, 2 current */
+void playlist_set_repeat(int repeat);
+void playlist_reshuffle(void);
+bool playlist_priority_add(const char *path);
+int playlist_priority_count(void);
+bool playlist_is_priority(int index);
+void playlist_priority_clear(void);
+bool playlist_history_available(void);
+/* Context-only access for the existing database mirror. */
+int playlist_context_count(void);
+int playlist_context_index(void);
+bool playlist_context_path_at(int index, char *out, size_t size);
+void playlist_session_save(void);
+void playlist_session_restore(void);
 
 #endif // PLAYLIST_H

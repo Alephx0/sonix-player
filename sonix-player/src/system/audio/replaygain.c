@@ -47,7 +47,7 @@ void replaygain_load(const song_metadata_t *meta) {
 
 	if (mode == REPLAYGAIN_TRACK_WHEN_SHUFFLED) {
 		playback_mode_t playback_mode = (playback_mode_t)config_get_int("player", "playback_mode", 0);
-		if ( playback_mode == PLAYBACK_MODE_SHUFFLE || playback_mode == PLAYBACK_MODE_SHUFFLE_REPEAT ) {
+		if ( playback_mode == PLAYBACK_MODE_SHUFFLE || playback_mode == PLAYBACK_MODE_SHUFFLE_REPEAT || playback_mode == PLAYBACK_MODE_SHUFFLE_REPEAT_ONE ) {
 			mode = REPLAYGAIN_TRACK;
 		} else {
 			mode = REPLAYGAIN_ALBUM;

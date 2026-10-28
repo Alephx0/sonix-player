@@ -131,3 +131,14 @@ The host's SD root now follows `SONIX_SD_ROOT` rather than target mount probing.
 
 No decoder, DSP algorithm or hardware driver was replaced. Mornye/SpotBye supplied
 design observations only; their runtimes and application code were not copied.
+
+
+## Offline playback and organization
+
+The new native modules and their storage/resource limits are documented in
+[offline-player.md](offline-player.md). `playlist.c` owns separate priority,
+context and playback-history state; all touchscreen and physical transport
+routes still use `device_state.c`. `collectionview.c` edits the existing playlist
+library while `collections.c` stores saved/pinned metadata. `search_index.c`
+adds bounded word posting lists to the same SQLite music index. Search workers
+return data for the LVGL thread to render; they never manipulate widgets.

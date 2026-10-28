@@ -19,15 +19,21 @@ No row marked preserved source implies all of its behavior was tested.
 | Mornye desktop/core/extensions investigation | Implemented | Source/licence/capability report; no Flutter/QuickJS runtime port |
 | Three primary tabs and secondary Tools/Settings | Host-tested | Actual 480×800 simulator captures; all six former destinations routed through Tools |
 | Home recent listening, recent albums, favourites/playlists shortcuts | Partial | Six history entries, four thumbnail cards and fixed shortcuts implemented; empty/small-library screenshots; populated history not stress-tested |
-| Configurable Home shortcuts/personalized or pinned collections | Partial | Existing customizable classic library remains; new Home configuration and pins absent |
+| Configurable Home shortcuts/personalized or pinned collections | Partial | Existing customizable classic library remains; new Home configuration absent; four pins now implemented in Your Library |
 | Unified Local / Online / All search and native keyboard | Host-tested | Local artist hit plus live release search; keyboard and results captured |
 | Search suggestions, ranking, pagination | Partial; host-tested | Paged literal release query, 24 candidates/page, stable identifier order, Previous/Next; no suggestions or relevance ranking |
 | Online artists, tracks, albums, playlists, podcasts | Partial; host-tested | Creator release lists, title/creator search and paged track variants; no canonical artist profiles/biographies or global track/playlist API; podcasts stay in existing service screens |
 | Album detail / format selection / source download action | Host-tested | Live release audio variants and format/size labels; no new artwork-rich detail page |
 | Local library sorting/filtering, playlists and favourites | Implemented/unverified | Routes reuse existing pages; exhaustive editing/sorting regression pending |
 | Persistent mini-player | Partial | Artwork/title/artist/state/transport/progress implemented on primary tabs; existing navigation owns legacy pages; actual audio-output state testing pending |
-| New Spotify-inspired full-screen Now Playing | Implemented; host layout tested | Fourth Sonix layout with inset centered artwork, missing-art card, heading and mint accent; original transport, lyrics/queue and favourite actions reused; physical playback testing pending |
+| New Spotify-inspired full-screen Now Playing | Implemented; host layout tested | Fourth Sonix layout, expandable artwork, green accent, separate shuffle/repeat, artist chooser, playlist membership and inline/full lyrics; see offline evidence; physical playback testing pending |
 | Now Playing lyrics/queue/favourite/quality/shuffle/repeat | Implemented/unverified | Existing code and actions retained; simulator opens player; comprehensive behavioral verification pending |
+| Priority/context playback queues and history | Host-tested | FIFO, independent shuffle/repeat, retained manual entries across context changes, Previous history; native test and touch evidence in offline-player.md |
+| Queue gestures, selection and persistence | Host-tested with limits | Right-add, left-remove, grip drag, bulk remove/move-up, Clear priority and transactional session state; standalone boot restore and changed-middle context identity remain limitations |
+| Multi-playlist membership and saved/followed collections | Host-tested | Independent likes/album saves, create playlist, four pins, rename/delete metadata, persistent sort/grid; custom covers and podcast pin wiring pending |
+| Instant offline metadata/lyric search | Host-tested with bounds | 180 ms debounce, five groups, accent/case folding and excerpts; changed lyric stamps indexed; bounded candidates, no fuzzy matching |
+| Full offline organization specification | Partial | Most played and existing recents available; configurable smart playlists and hybrid Downloaded filter absent |
+| Figma reference matching | Blocked | File unavailable to inspect; written specification used; exact design fidelity unverified |
 | Remote artwork cache and embedded artwork/tag enrichment | Partial | Local thumbnail loader reused, with cached absence invalidated when folder artwork is added; source metadata sidecar implemented; no remote-art cache or embedded retagging |
 | Native replaceable provider capability interface | Partial | Bounded native API and explicit capabilities implemented; one adapter, no runtime registry or multiple-provider selection |
 | Provider settings, quality/fallback/network configuration | Partial; host-tested | Sources page exposes capabilities, persisted search enablement and MP3/FLAC preference, plus pause-all; no alternate provider/fallback order |

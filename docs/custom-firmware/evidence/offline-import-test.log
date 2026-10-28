@@ -1,0 +1,11 @@
+Synthetic UI fixture: /tmp/sonix-library-gv7wnb08/art/cover.png
+cover: 15529344 KB free, decode budget 65536 KB
+cover: decoded png to 240x240 (scaled)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+config: /tmp/sonix-library-gv7wnb08/settings.ini not there yet, starting from defaults
+cover: thumbnail cache in /tmp/sonix-library-gv7wnb08/.local/thumbnails
+library: /tmp/sonix-library-gv7wnb08/library.db open, 0 tracks indexed
+library: /tmp/sonix-library-gv7wnb08/library.db open, 2 tracks indexed
+PASS library import: empty index, no duplicates, existing tracks retained, settings unchanged, persistent index, bounded newest-first history, new folder artwork invalidates cached absence

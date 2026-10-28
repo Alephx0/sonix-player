@@ -17,6 +17,7 @@
 #include <strings.h>
 #include <sys/stat.h>
 #include <time.h>
+#include "src/system/db/sqlite3.h"
 
 // The queue is only ever touched from the LVGL/UI thread (browser selection,
 // the progress poll timer, and the player control buttons all run there), so
@@ -147,7 +148,7 @@ static bool ordered_queue = false;
 // shuffled modes are shuffling here: they are dealt the same, and differ only
 // in what happens when the deal runs out.
 static bool shuffling(void) {
-	return (mode == PLAYBACK_MODE_SHUFFLE || mode == PLAYBACK_MODE_SHUFFLE_REPEAT) && !ordered_queue;
+	return (mode == PLAYBACK_MODE_SHUFFLE || mode == PLAYBACK_MODE_SHUFFLE_REPEAT || mode == PLAYBACK_MODE_SHUFFLE_REPEAT_ONE) && !ordered_queue;
 }
 
 // Bumped by everything that changes the entries or the order. The on-disk
@@ -161,6 +162,60 @@ static unsigned revision = 0;
 static size_t chain_from;  // the pos the chain was anchored at
 static size_t chain_slot;  // order-index of the last track added
 static bool chain_valid;
+
+#define PRIORITY_MAX 64
+#define HISTORY_MAX 128
+static char *priority[PRIORITY_MAX];
+static int priority_count;
+static char active_override[512];
+static bool active_priority;
+static char *played[HISTORY_MAX], *future[HISTORY_MAX];
+static int played_count, future_count;
+static void paths_clear(char **list, int *count) {
+    while (*count) free(list[--*count]);
+}
+static void remember_current(void) {
+    char path[512];
+    if (!playlist_current_path(path, sizeof(path))) return;
+    char *copy = strdup(path);
+    if (!copy) return;
+    if (played_count == HISTORY_MAX) {
+        free(played[0]);
+        memmove(played, played + 1, (--played_count) * sizeof(*played));
+    }
+    played[played_count++] = copy;
+}
+int playlist_priority_count(void) { return priority_count; }
+bool playlist_history_available(void) { return played_count > 0; }
+bool playlist_is_priority(int index) {
+    int current = playlist_current_index();
+    return (index == current && active_priority) ||
+        (index > current && index <= current + priority_count);
+}
+bool playlist_priority_add(const char *path) {
+    if (!path || !*path || strlen(path) >= sizeof(active_override) || priority_count == PRIORITY_MAX) return false;
+    char *copy = strdup(path);
+    if (!copy) return false;
+    priority[priority_count++] = copy;
+    revision++;
+    return true;
+}
+void playlist_priority_clear(void) {
+    paths_clear(priority, &priority_count);
+    revision++;
+}
+static bool take_priority(int index, char *out, size_t size) {
+    if (index < 0 || index >= priority_count) return false;
+    remember_current();
+    snprintf(active_override, sizeof(active_override), "%s", priority[index]);
+    free(priority[index]);
+    memmove(priority + index, priority + index + 1, (--priority_count - index) * sizeof(*priority));
+    active_priority = true;
+    revision++;
+    if (out && size) snprintf(out, size, "%s", active_override);
+    return true;
+}
+
 
 // The album this queue is, when it is one. See playlist.h.
 static char queue_album[256];
@@ -303,7 +358,9 @@ static void sort_folder(const char *folder) {
 	free(places);
 }
 
-void playlist_clear(void) {
+static void context_clear(void) {
+	active_override[0] = 0; active_priority = false;
+	paths_clear(future, &future_count);
 	for (size_t i = 0; i < appended_count(); i++) {
 		free(paths ? paths[i] : NULL);
 	}
@@ -325,6 +382,8 @@ void playlist_clear(void) {
 	persist_album();
 	revision++;
 }
+
+void playlist_clear(void) { context_clear(); playlist_priority_clear(); paths_clear(played,&played_count); }
 
 static bool push_path(const char *path) {
 	size_t held = appended_count(); // how many are already in `paths`
@@ -539,7 +598,8 @@ static size_t load_folder_cues(const char *folder, char claimed[][512], size_t c
 }
 
 void playlist_load_folder(const char *folder, const char *selected_filename) {
-	playlist_clear();
+    remember_current();
+	context_clear();
 
 	char claimed[PLAYLIST_CUE_CLAIM_MAX][512];
 	size_t claims = load_folder_cues(folder, claimed, PLAYLIST_CUE_CLAIM_MAX);
@@ -595,7 +655,17 @@ void playlist_load_folder(const char *folder, const char *selected_filename) {
 }
 
 void playlist_load_paths(const char *const *list, int count, int start_index) {
-	playlist_clear();
+    if (!source_ix && !ordered_queue && list && count > 0 && (size_t)count == entry_count && start_index >= 0 && start_index < count) {
+        bool same=true;
+        for(int i=0;i<count;i++) if(!list[i] || strcmp(list[i],paths[i])) {same=false;break;}
+        if(same) {
+            remember_current(); paths_clear(future,&future_count); active_override[0]=0;active_priority=false;
+            for(size_t i=0;i<entry_count;i++) if(order[i]==(size_t)start_index) {pos=i;break;}
+            return;
+        }
+    }
+    remember_current();
+	context_clear();
 
 	for (int i = 0; i < count; i++) {
 		if (list[i] && list[i][0]) {
@@ -746,7 +816,7 @@ void playlist_set_enqueue_at_end(bool at_end) {
 
 bool playlist_enqueue(const char *path) {
 	if (!playlist_enqueue_at_end()) {
-		return playlist_insert_next(path);
+		return playlist_priority_add(path);
 	}
 	// A slot past the last appends: the end of the queue in playing order,
 	// which with shuffle on is the end of the order dealt. Ahead of playback
@@ -825,7 +895,7 @@ static bool rebuild_as_paths(uint8_t *gone) {
 	char album[sizeof(queue_album)];
 	snprintf(album, sizeof(album), "%s", queue_album);
 
-	playlist_clear();
+	context_clear();
 	size_t kept = 0;
 	for (size_t i = 0; i < total; i++) {
 		kept_at[i] = (size_t)-1;
@@ -867,7 +937,32 @@ static bool rebuild_as_paths(uint8_t *gone) {
 	return true;
 }
 
+static bool playlist_context_remove(const int *indices, int count);
+
 bool playlist_remove(const int *indices, int count) {
+    if (!indices || count <= 0) return false;
+    int original_priority = priority_count;
+    bool selected[PRIORITY_MAX] = {0};
+    int *context = malloc((size_t)count * sizeof(int));
+    if (!context) return false;
+    int current = playlist_current_index();
+    for (int i = 0; i < count; i++) {
+        int slot = indices[i] - current - 1;
+        if (slot >= 0 && slot < original_priority) { selected[slot] = true; context[i] = -1; }
+        else context[i] = indices[i] > current ? indices[i]-original_priority : indices[i];
+    }
+    bool removed_priority = false;
+    for (int i = original_priority-1; i >= 0; i--) if (selected[i]) {
+        free(priority[i]); memmove(priority+i, priority+i+1, (--priority_count-i)*sizeof(*priority));
+        removed_priority = true;
+    }
+    if (removed_priority) revision++;
+    bool removed_context = playlist_context_remove(context, count);
+    free(context);
+    return removed_priority || removed_context;
+}
+
+static bool playlist_context_remove(const int *indices, int count) {
 	if (!indices || count <= 0 || !order || entry_count == 0) {
 		return false;
 	}
@@ -896,6 +991,19 @@ bool playlist_remove(const int *indices, int count) {
 }
 
 bool playlist_move(int from, int to) {
+    int current = playlist_current_index();
+    bool a = from > current && from <= current+priority_count;
+    bool b = to > current && to <= current+priority_count;
+    if (a || b) {
+        if (!a || !b || from == to) return false;
+        from -= current+1; to -= current+1;
+        char *path = priority[from];
+        if (from < to) memmove(priority+from, priority+from+1, (to-from)*sizeof(*priority));
+        else memmove(priority+to+1, priority+to, (from-to)*sizeof(*priority));
+        priority[to] = path; revision++; return true;
+    }
+    if (from > current) from -= priority_count;
+    if (to > current) to -= priority_count;
 	if (!order || from < 0 || to < 0 || (size_t)from >= entry_count || (size_t)to >= entry_count || from == to) {
 		return false;
 	}
@@ -967,7 +1075,17 @@ bool playlist_load_index(library_index_t *ix, int start) {
 		return false;
 	}
 
-	playlist_clear();
+    if (source_ix && !ordered_queue && !library_index_stale(source_ix) && (size_t)count == ix_count && entry_count == ix_count) {
+        library_index_spec_t a={0}, b={0}; library_index_describe(source_ix,&a);library_index_describe(ix,&b);
+        if(a.valid && b.valid && a.kind==b.kind && a.filter==b.filter && a.order==b.order && a.desc==b.desc && !strcmp(a.value,b.value)) {
+            remember_current(); paths_clear(future,&future_count);active_override[0]=0;active_priority=false;
+            size_t wanted=start>=0 && start<count?(size_t)start:0;
+            for(size_t i=0;i<entry_count;i++) if(order[i]==wanted) {pos=i;break;}
+            library_index_close(ix);return true;
+        }
+    }
+    remember_current();
+	context_clear();
 	source_ix = ix; // ours now
 	ix_count = (size_t)count;
 	entry_count = ix_count;
@@ -981,7 +1099,7 @@ bool playlist_load_index(library_index_t *ix, int start) {
 		order_shuffle_from((size_t)start);
 	}
 	if (!order) {
-		playlist_clear();
+		context_clear();
 		return false;
 	}
 	revision++;
@@ -1051,6 +1169,7 @@ bool playlist_library_spec(library_index_spec_t *out) {
 }
 
 bool playlist_locate(const char *path) {
+    if (path && active_override[0] && !strcmp(path, active_override)) return true;
 	if (!path || !path[0] || !order) {
 		return false;
 	}
@@ -1093,9 +1212,11 @@ bool playlist_locate(const char *path) {
 // reading (everything is in playback order: index i = i-th slot of `order`)
 // ---------------------------------------------------------------------------
 
-int playlist_count(void) { return (int)entry_count; }
+int playlist_context_count(void) { return (int)entry_count; }
+int playlist_context_index(void) { return (int)playlist_current_entry(); }
+int playlist_count(void) { return (int)entry_count + priority_count + (entry_count == 0 && active_override[0] ? 1 : 0); }
 
-int playlist_current_index(void) { return entry_count ? (int)pos : -1; }
+int playlist_current_index(void) { return entry_count || active_override[0] ? (int)pos : -1; }
 
 // A queue built on row ids goes stale when the table under it is rewritten --
 // a rescan, a card taken out and put back. Left alone, next and prev would
@@ -1130,7 +1251,7 @@ static void refresh_stale_source(void) {
 		// The list this queue was is not there any more. Better an empty queue
 		// than one that answers with somebody else's tracks.
 		library_index_close(fresh);
-		playlist_clear();
+		context_clear();
 		return;
 	}
 
@@ -1163,7 +1284,7 @@ static void refresh_stale_source(void) {
 	revision++;
 }
 
-bool playlist_path_at(int index, char *out, size_t out_size) {
+static bool context_order_path_at(int index, char *out, size_t out_size) {
 	refresh_stale_source();
 	if (index < 0 || (size_t)index >= entry_count || !out || !order)
 		return false;
@@ -1175,32 +1296,46 @@ bool playlist_path_at(int index, char *out, size_t out_size) {
 	return true;
 }
 
-bool playlist_set_current(int index) {
-	if (index < 0 || (size_t)index >= entry_count)
-		return false;
-	pos = (size_t)index;
-	return true;
+bool playlist_context_path_at(int index, char *out, size_t size) {
+    if (index < 0 || !out || !size) return false;
+    const char *path = entry_path((size_t)index);
+    if (!path) return false;
+    snprintf(out, size, "%s", path); return true;
 }
-
+bool playlist_path_at(int index, char *out, size_t size) {
+    if (!out || !size || index < 0) return false;
+    int current = playlist_current_index();
+    if (index == current && active_override[0]) {
+        snprintf(out, size, "%s", active_override); return true;
+    }
+    if (index > current && index <= current + priority_count) {
+        snprintf(out, size, "%s", priority[index-current-1]); return true;
+    }
+    return context_order_path_at(index > current ? index-priority_count : index, out, size);
+}
+bool playlist_set_current(int index) {
+    int current = playlist_current_index();
+    if (index > current && index <= current + priority_count) return take_priority(index-current-1, NULL, 0);
+    int at = index > current ? index-priority_count : index;
+    if (at < 0 || (size_t)at >= entry_count) return false;
+    remember_current(); paths_clear(future, &future_count);
+    active_override[0] = 0; active_priority = false;
+    pos = (size_t)at;
+    return true;
+}
 bool playlist_current_path(char *out, size_t out_size) {
-	refresh_stale_source();
-	if (entry_count == 0 || !out || !order)
-		return false;
-	const char *path = entry_path(order[pos]);
-	if (!path) {
-		return false;
-	}
-	snprintf(out, out_size, "%s", path);
-	return true;
+    if (!out || !out_size) return false;
+    if (active_override[0]) { snprintf(out, out_size, "%s", active_override); return true; }
+    return context_order_path_at((int)pos, out, out_size);
 }
 
 // ---------------------------------------------------------------------------
 // advancing
 // ---------------------------------------------------------------------------
 
-bool playlist_at_end(void) { return entry_count == 0 || pos + 1 >= entry_count; }
+bool playlist_at_end(void) { return !priority_count && !future_count && (entry_count == 0 || pos + 1 >= entry_count); }
 
-bool playlist_advance_auto(char *out, size_t out_size) {
+static bool context_advance_auto(char *out, size_t out_size) {
 	if (entry_count == 0)
 		return false;
 
@@ -1218,6 +1353,7 @@ bool playlist_advance_auto(char *out, size_t out_size) {
 
 	switch (mode) {
 	case PLAYBACK_MODE_REPEAT_ONE:
+	case PLAYBACK_MODE_SHUFFLE_REPEAT_ONE:
 		break; // replay the same track
 	case PLAYBACK_MODE_REPEAT_ALL:
 		pos = (pos + 1) % entry_count;
@@ -1253,6 +1389,10 @@ bool playlist_advance_auto(char *out, size_t out_size) {
 }
 
 bool playlist_peek_auto(char *out, size_t out_size) {
+    if (!out || !out_size) return false;
+    if (!ordered_queue && playlist_repeat_mode() == 2) return playlist_current_path(out, out_size);
+    if (future_count) { snprintf(out, out_size, "%s", future[future_count-1]); return true; }
+    if (priority_count) { snprintf(out, out_size, "%s", priority[0]); return true; }
 	if (entry_count == 0 || !out) {
 		return false;
 	}
@@ -1283,35 +1423,52 @@ bool playlist_peek_auto(char *out, size_t out_size) {
 			break;
 		}
 	}
-	return playlist_path_at((int)next, out, out_size);
+	return context_order_path_at((int)next, out, out_size);
 }
 
-bool playlist_next(char *out, size_t out_size) {
-	if (entry_count == 0)
-		return false;
-	// Pressing next past the end of a shuffled deal asks for more, so it deals
-	// again -- unlike a track ending there, which stops (or comes round, in
-	// shuffle-repeat). A button pressed on purpose is not the end of a queue.
-	if (shuffling() && pos + 1 >= entry_count) {
-		// Pressing next past the end of a deal asks for more, so a new one is
-		// dealt and played from its start.
-		order_shuffle_round();
-	} else {
-		pos = (pos + 1) % entry_count;
-	}
-	return playlist_current_path(out, out_size);
+static bool advance(bool automatic, char *out, size_t size) {
+    if (!out || !size) return false;
+    if (automatic && !ordered_queue && playlist_repeat_mode() == 2)
+        return playlist_current_path(out, size);
+    if (future_count) {
+        remember_current();
+        snprintf(active_override, sizeof(active_override), "%s", future[--future_count]);
+        free(future[future_count]); active_priority = false;
+        snprintf(out, size, "%s", active_override); return true;
+    }
+    if (priority_count) return take_priority(0, out, size);
+    if (!entry_count || (pos + 1 >= entry_count && (ordered_queue || playlist_repeat_mode() != 1))) return false;
+    remember_current(); active_override[0] = 0; active_priority = false;
+    if (!automatic && playlist_repeat_mode() == 2) {
+        if (pos + 1 >= entry_count) return false;
+        pos++; return playlist_current_path(out, size);
+    }
+    return context_advance_auto(out, size);
 }
-
-bool playlist_prev(char *out, size_t out_size) {
-	if (entry_count == 0)
-		return false;
-	pos = (pos + entry_count - 1) % entry_count;
-	return playlist_current_path(out, out_size);
+bool playlist_advance_auto(char *out, size_t size) { return advance(true, out, size); }
+bool playlist_next(char *out, size_t size) { return advance(false, out, size); }
+bool playlist_prev(char *out, size_t size) {
+    if (!out || !size) return false;
+    if (!played_count) return playlist_current_path(out, size);
+    char current[512];
+    if (playlist_current_path(current, sizeof(current))) {
+        char *copy = strdup(current);
+        if (!copy || future_count == HISTORY_MAX) { free(copy); return false; }
+        future[future_count++] = copy;
+    }
+    snprintf(active_override, sizeof(active_override), "%s", played[--played_count]);
+    free(played[played_count]); active_priority = false;
+    snprintf(out, size, "%s", active_override);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
 // modes
 // ---------------------------------------------------------------------------
+
+static int order_compare(const void *a, const void *b) {
+    size_t x=*(const size_t *)a, y=*(const size_t *)b; return (x>y)-(x<y);
+}
 
 static void apply_mode_change(playback_mode_t old_mode) {
 	if (entry_count == 0 || mode == old_mode) {
@@ -1322,8 +1479,8 @@ static void apply_mode_change(playback_mode_t old_mode) {
 		return; // the queue carries its own order; a mode change cannot touch it
 	}
 
-	bool shuffling = mode == PLAYBACK_MODE_SHUFFLE || mode == PLAYBACK_MODE_SHUFFLE_REPEAT;
-	bool was_shuffling = old_mode == PLAYBACK_MODE_SHUFFLE || old_mode == PLAYBACK_MODE_SHUFFLE_REPEAT;
+	bool shuffling = mode == PLAYBACK_MODE_SHUFFLE || mode == PLAYBACK_MODE_SHUFFLE_REPEAT || mode == PLAYBACK_MODE_SHUFFLE_REPEAT_ONE;
+	bool was_shuffling = old_mode == PLAYBACK_MODE_SHUFFLE || old_mode == PLAYBACK_MODE_SHUFFLE_REPEAT || old_mode == PLAYBACK_MODE_SHUFFLE_REPEAT_ONE;
 
 	if (shuffling && !was_shuffling) {
 		// Deal the random order now, so the queue page can show exactly what is
@@ -1333,8 +1490,9 @@ static void apply_mode_change(playback_mode_t old_mode) {
 		order_shuffle_upcoming();
 	} else if (was_shuffling && !shuffling) {
 		// Back to the listed order, without moving off the playing track.
-		size_t current_entry = order ? order[pos] : 0;
-		order_identity(current_entry);
+		/* Restore only unplayed entries to source order, retaining history. */
+        if (order && pos+1 < entry_count) qsort(order+pos+1,entry_count-pos-1,sizeof(*order),order_compare);
+        revision++;
 	}
 	// Between the two shuffled modes nothing is re-dealt: the difference is
 	// only what happens at the end of the deal.
@@ -1355,6 +1513,27 @@ void playlist_set_mode(playback_mode_t new_mode) {
 }
 
 playback_mode_t playlist_get_mode(void) { return mode; }
+int playlist_repeat_mode(void) {
+    if (mode == PLAYBACK_MODE_REPEAT_ONE || mode == PLAYBACK_MODE_SHUFFLE_REPEAT_ONE) return 2;
+    return mode == PLAYBACK_MODE_REPEAT_ALL || mode == PLAYBACK_MODE_SHUFFLE_REPEAT ? 1 : 0;
+}
+bool playlist_shuffle_enabled(void) { return shuffling(); }
+void playlist_set_shuffle(bool enabled) {
+    int repeat = playlist_repeat_mode();
+    playlist_set_mode(enabled ? (repeat == 2 ? PLAYBACK_MODE_SHUFFLE_REPEAT_ONE : repeat == 1 ? PLAYBACK_MODE_SHUFFLE_REPEAT : PLAYBACK_MODE_SHUFFLE) :
+        (repeat == 2 ? PLAYBACK_MODE_REPEAT_ONE : repeat == 1 ? PLAYBACK_MODE_REPEAT_ALL : PLAYBACK_MODE_NORMAL));
+}
+void playlist_set_repeat(int repeat) {
+    if (repeat < 0 || repeat > 2) return;
+    bool shuffle = shuffling();
+    playlist_set_mode(shuffle ? (repeat == 2 ? PLAYBACK_MODE_SHUFFLE_REPEAT_ONE : repeat == 1 ? PLAYBACK_MODE_SHUFFLE_REPEAT : PLAYBACK_MODE_SHUFFLE) :
+        (repeat == 2 ? PLAYBACK_MODE_REPEAT_ONE : repeat == 1 ? PLAYBACK_MODE_REPEAT_ALL : PLAYBACK_MODE_NORMAL));
+}
+void playlist_reshuffle(void) {
+    if (!shuffling()) playlist_set_shuffle(true);
+    else order_shuffle_upcoming();
+}
+
 
 playback_mode_t playlist_cycle_mode(void) {
 	playback_mode_t old = mode;
@@ -1678,4 +1857,147 @@ bool playlist_next_folder(const char *root, const char *folder, char *out, size_
 
 	fprintf(stderr, "playlist: %d folders after '%s' and none of them holds a track\n", FOLDER_WALK_MAX, folder);
 	return false;
+}
+
+
+/* A transactional sidecar holds the context permutation and the independent
+ * priority/history collections. The existing library database still owns the
+ * compact context query (or path list); this file never duplicates metadata. */
+static sqlite3 *session_open(void) {
+    const char *root = playlist_card_root();
+    if (!root || !*root) return NULL;
+    char dir[768], file[800];
+    if (snprintf(dir, sizeof(dir), "%s/.local", root) >= (int)sizeof(dir)) return NULL;
+    struct stat st;
+    if (lstat(dir, &st) == 0) { if (!S_ISDIR(st.st_mode)) return NULL; }
+    else if (mkdir(dir, 0755) != 0) return NULL;
+    snprintf(file, sizeof(file), "%s/playback-session.db", dir);
+    sqlite3 *db = NULL;
+    if (sqlite3_open_v2(file, &db, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_NOFOLLOW, NULL) != SQLITE_OK) {
+        sqlite3_close(db); return NULL;
+    }
+    sqlite3_busy_timeout(db, 100);
+    if (sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS state(k TEXT PRIMARY KEY,v TEXT);"
+        "CREATE TABLE IF NOT EXISTS sequence(kind INTEGER,slot INTEGER,value TEXT,PRIMARY KEY(kind,slot));", NULL,NULL,NULL) != SQLITE_OK) {
+        sqlite3_close(db); return NULL;
+    }
+    return db;
+}
+static bool session_text(sqlite3 *db, const char *key, const char *value) {
+    sqlite3_stmt *st = NULL;
+    bool ok = sqlite3_prepare_v2(db,"INSERT OR REPLACE INTO state VALUES(?,?)",-1,&st,NULL) == SQLITE_OK;
+    if (ok) {
+        sqlite3_bind_text(st,1,key,-1,SQLITE_STATIC); sqlite3_bind_text(st,2,value,-1,SQLITE_TRANSIENT);
+        ok = sqlite3_step(st) == SQLITE_DONE;
+    }
+    sqlite3_finalize(st); return ok;
+}
+static bool session_read(sqlite3 *db, const char *key, char *out, size_t size) {
+    sqlite3_stmt *st = NULL; bool ok = false;
+    if (sqlite3_prepare_v2(db,"SELECT v FROM state WHERE k=?",-1,&st,NULL) == SQLITE_OK) {
+        sqlite3_bind_text(st,1,key,-1,SQLITE_STATIC);
+        if (sqlite3_step(st) == SQLITE_ROW && sqlite3_column_bytes(st,0) < (int)size) {
+            const char *value = (const char *)sqlite3_column_text(st,0);
+            if (value) { snprintf(out,size,"%s",value); ok = true; }
+        }
+    }
+    sqlite3_finalize(st); return ok;
+}
+void playlist_session_save(void) {
+    static uint64_t saved_order_hash;
+    static char saved_root[512];
+    uint64_t hash=1469598103934665603ULL;
+    for(size_t i=0;order && i<entry_count;i++) {hash^=(uint64_t)order[i];hash*=1099511628211ULL;}
+    hash^=entry_count;
+    bool rewrite_order=hash!=saved_order_hash || strcmp(saved_root,playlist_card_root());
+    if (!config_get_int("player", "remember_track", 0)) return;
+    sqlite3 *db = session_open(); if (!db) return;
+    sqlite3_stmt *count_stmt = NULL;
+    if (!rewrite_order) {
+        rewrite_order = true;
+        if (sqlite3_prepare_v2(db,"SELECT count(*) FROM sequence WHERE kind=0",-1,&count_stmt,NULL)==SQLITE_OK &&
+            sqlite3_step(count_stmt)==SQLITE_ROW)
+            rewrite_order = (size_t)sqlite3_column_int64(count_stmt,0) != entry_count;
+        sqlite3_finalize(count_stmt);
+    }
+    bool ok = sqlite3_exec(db,"BEGIN IMMEDIATE; DELETE FROM state; DELETE FROM sequence WHERE kind<>0;",NULL,NULL,NULL) == SQLITE_OK;
+    if(rewrite_order) ok=ok && sqlite3_exec(db,"DELETE FROM sequence WHERE kind=0",NULL,NULL,NULL)==SQLITE_OK;
+    char value[512], first[512] = "", last[512] = "";
+    playlist_context_path_at(0, first, sizeof(first));
+    if (entry_count) playlist_context_path_at((int)entry_count-1, last, sizeof(last));
+    snprintf(value,sizeof(value),"%zu",entry_count); ok = ok && session_text(db,"count",value);
+    snprintf(value,sizeof(value),"%zu",pos); ok = ok && session_text(db,"position",value);
+    ok = ok && session_text(db,"first",first) && session_text(db,"last",last);
+    ok = ok && session_text(db,"active",active_override) && session_text(db,"priority",active_priority?"1":"0");
+    sqlite3_stmt *st = NULL;
+    ok = ok && sqlite3_prepare_v2(db,"INSERT INTO sequence VALUES(?,?,?)",-1,&st,NULL) == SQLITE_OK;
+    for (int kind=rewrite_order?0:1; ok && kind<4; kind++) {
+        size_t count = kind==0 ? entry_count : (size_t)(kind==1 ? priority_count : kind==2 ? played_count : future_count);
+        for (size_t i=0; ok && i<count; i++) {
+            const char *path;
+            if (kind==0) { snprintf(value,sizeof(value),"%zu",order[i]); path=value; }
+            else path = kind==1 ? priority[i] : kind==2 ? played[i] : future[i];
+            sqlite3_bind_int(st,1,kind); sqlite3_bind_int64(st,2,(sqlite3_int64)i);
+            sqlite3_bind_text(st,3,path,-1,SQLITE_TRANSIENT);
+            ok = sqlite3_step(st) == SQLITE_DONE; sqlite3_reset(st); sqlite3_clear_bindings(st);
+        }
+    }
+    sqlite3_finalize(st);
+    int committed=sqlite3_exec(db, ok ? "COMMIT" : "ROLLBACK",NULL,NULL,NULL);
+    if(ok && committed==SQLITE_OK) {saved_order_hash=hash;snprintf(saved_root,sizeof(saved_root),"%s",playlist_card_root());}
+    sqlite3_close(db);
+}
+void playlist_session_restore(void) {
+    if (!config_get_int("player", "remember_track", 0)) return;
+    sqlite3 *db = session_open(); if (!db) return;
+    char value[512], actual[512] = "", active[512] = "";
+    bool ok = session_read(db,"count",value,sizeof(value)) && strtoull(value,NULL,10)==entry_count;
+    size_t restored_pos=0;
+    ok = ok && session_read(db,"position",value,sizeof(value));
+    if(ok) restored_pos=(size_t)strtoull(value,NULL,10);
+    ok = ok && (entry_count==0 || restored_pos<entry_count);
+    playlist_context_path_at(0,actual,sizeof(actual));
+    ok = ok && session_read(db,"first",value,sizeof(value)) && !strcmp(actual,value);
+    actual[0]=0; if(entry_count) playlist_context_path_at((int)entry_count-1,actual,sizeof(actual));
+    ok = ok && session_read(db,"last",value,sizeof(value)) && !strcmp(actual,value);
+    ok = ok && session_read(db,"active",active,sizeof(active));
+    bool was_priority = session_read(db,"priority",value,sizeof(value)) && !strcmp(value,"1");
+    size_t *restored = entry_count ? malloc(entry_count*sizeof(*restored)) : NULL;
+    uint8_t *seen = entry_count ? calloc(entry_count,1) : NULL;
+    if(entry_count && (!restored || !seen)) ok=false;
+    char *lists[3][HISTORY_MAX]={{0}}; int counts[3]={0}; size_t order_count=0;
+    sqlite3_stmt *st=NULL;
+    ok = ok && sqlite3_prepare_v2(db,"SELECT kind,slot,value FROM sequence ORDER BY kind,slot",-1,&st,NULL)==SQLITE_OK;
+    int rc=SQLITE_DONE;
+    while(ok && (rc=sqlite3_step(st))==SQLITE_ROW) {
+        int kind=sqlite3_column_int(st,0), slot=sqlite3_column_int(st,1);
+        const char *path=(const char *)sqlite3_column_text(st,2);
+        if(!path || sqlite3_column_bytes(st,2)>=512 || kind<0 || kind>3) {ok=false;break;}
+        if(kind==0) {
+            char *end; unsigned long long number=strtoull(path,&end,10);
+            if(*end || slot<0 || (size_t)slot!=order_count || number>=entry_count || seen[number]) {ok=false;break;}
+            seen[number]=1; restored[order_count++]=(size_t)number;
+        } else {
+            int k=kind-1, limit=k==0?PRIORITY_MAX:HISTORY_MAX;
+            if(slot!=counts[k] || counts[k]>=limit || !*path) {ok=false;break;}
+            lists[k][counts[k]]=strdup(path);
+            if(!lists[k][counts[k]]) {ok=false;break;}
+            counts[k]++;
+        }
+    }
+    ok=ok && rc==SQLITE_DONE && order_count==entry_count;
+    sqlite3_finalize(st); sqlite3_close(db); free(seen);
+    if(ok) {
+        free(order); order=restored; restored=NULL; pos=restored_pos;
+        paths_clear(priority,&priority_count); paths_clear(played,&played_count); paths_clear(future,&future_count);
+        for(int k=0;k<3;k++) {
+            char **dest=k==0?priority:k==1?played:future;
+            for(int i=0;i<counts[k];i++) {dest[i]=lists[k][i];lists[k][i]=NULL;}
+        }
+        priority_count=counts[0];played_count=counts[1];future_count=counts[2];
+        snprintf(active_override,sizeof(active_override),"%s",active);active_priority=was_priority;
+        revision++;
+    }
+    free(restored);
+    for(int k=0;k<3;k++) for(int i=0;i<counts[k];i++) free(lists[k][i]);
 }

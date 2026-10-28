@@ -1,4 +1,5 @@
-﻿#include "main_menu.h"
+#include "src/gui/shell/toast.h"
+#include "main_menu.h"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -33,6 +34,8 @@
 #include "src/system/library/library.h"
 #include "src/system/net/wifi.h"
 #include "src/system/playback/device_state.h"
+#include "src/system/playback/playlist.h"
+#include "src/gui/library/collectionview.h"
 
 /* Original Sonix branding and native widgets. Legacy pages retain their own
  * layouts, history and transport owners. Primary pages and the keyboard are
@@ -61,7 +64,7 @@ enum { OPEN_FAVOURITES, OPEN_ALBUMS, OPEN_ARTISTS, OPEN_TRACKS, OPEN_PLAYLISTS,
 #define NAV_H 74
 #define MINI_H 76
 #define HEADER_H 74
-#define LOCAL_HITS 18
+#define LOCAL_HITS 30
 
 static lv_color_t ink(void) { return theme()->text_primary; }
 static lv_color_t quiet(void) { return theme()->text_secondary; }
@@ -333,19 +336,16 @@ static void home_build(void) {
 
 static void library_build(void) {
     lv_obj_t *p = page[LIBRARY];
-    section(p, "Saved for you");
-    route(p, "Liked songs", "Your favourites, available offline", &icon_star_filled, OPEN_FAVOURITES);
-    route(p, tr("playlists"), "Create, arrange and import collections", &icon_list_music, OPEN_PLAYLISTS);
-    route(p, "Downloads", "Transfer queue and downloaded tracks", &icon_download, OPEN_DOWNLOADS);
-    route(p, tr("albums"), "Browse your records", &icon_album, OPEN_ALBUMS);
-    route(p, tr("artists"), "The people behind your music", &icon_artist, OPEN_ARTISTS);
-    route(p, tr("music_all_tracks"), "Sort and filter your whole collection", &icon_music2, OPEN_TRACKS);
-    route(p, "All library views", "Genres, years, album artists and custom tiles", &icon_folder, OPEN_CLASSIC_LIBRARY);
+    lv_obj_set_flex_flow(p,LV_FLEX_FLOW_COLUMN);
+    route(p,"Downloads","Transfers and local downloaded files",&icon_download,OPEN_DOWNLOADS);
+    lv_obj_t *collections=box(p,cfg->screen_width-2*PAD,body_height()-112,false);
+    collectionview_build(collections,cfg);
+    route(p,"All library views","Tracks, genres, years, album artists and folders",&icon_folder,OPEN_CLASSIC_LIBRARY);
 }
 
 /* The worker writes separate storage. Displayed buttons keep stable data
  * until it finishes, then the GUI thread alone rebuilds their bounded list. */
-typedef struct { library_search_type_t type; char name[256], path[512]; } local_hit_t;
+typedef library_instant_hit_t local_hit_t;
 typedef struct {
     discovery_results_t online;
     local_hit_t local[LOCAL_HITS];
@@ -363,21 +363,22 @@ static char request_text[256];
 static lv_obj_t *search_field, *search_results, *search_status, *filter_buttons[3], *search_keyboard_parent;
 static keyboard_t *search_keyboard;
 static int search_filter;
+static bool request_instant, instant_pending;
+static uint32_t instant_changed;
+static unsigned search_epoch, request_epoch;
 
-static void local_collect(library_search_type_t type, const char *name, const char *path, void *user) {
+static void local_collect(const library_instant_hit_t *item, void *user) {
     search_result_t *r = user;
     if (r->local_count >= LOCAL_HITS) return;
     local_hit_t *hit = &r->local[r->local_count++];
-    hit->type = type;
-    snprintf(hit->name, sizeof(hit->name), "%s", name ? name : "");
-    snprintf(hit->path, sizeof(hit->path), "%s", path ? path : "");
+    *hit = *item;
 }
 
 static void *search_worker(void *unused) {
     (void)unused;
     memset(&pending, 0, sizeof(pending));
     if (!request_album && !request_artist && request_page == 1 && request_filter != FILTER_ONLINE)
-        library_search(request_text, LOCAL_HITS / 3, local_collect, &pending);
+        library_search_instant(request_text, LOCAL_HITS / 5, local_collect, &pending);
     if (request_album)
         discovery_album_page(request_text, request_page, &pending.online, pending.error, sizeof(pending.error));
     else if (request_filter != FILTER_LOCAL)
@@ -416,6 +417,9 @@ static void start_search_page(const char *query, bool album, bool artist, unsign
     request_artist = artist;
     request_page = page_number;
     request_filter = filter;
+    request_instant = false;
+    request_epoch = ++search_epoch;
+    instant_pending = false;
     if (!album) {
         snprintf(browse_query, sizeof(browse_query), "%s", text);
         browse_artist = artist;
@@ -437,6 +441,32 @@ static void start_search_page(const char *query, bool album, bool artist, unsign
 
 static void start_search(const char *query, bool album) { start_search_page(query, album, false, 1); }
 
+static void instant_changed_cb(lv_event_t *e) {
+    (void)e;
+    search_epoch++;
+    instant_changed=lv_tick_get();
+    instant_pending=search_filter!=FILTER_ONLINE;
+}
+
+static void start_instant(void) {
+    const char *query=lv_textarea_get_text(search_field);
+    instant_pending=false;
+    if(!query[0]) {
+        lv_obj_clean(search_results);
+        lv_label_set_text(search_status,"Search songs, artists, albums, playlists and lyrics");
+        return;
+    }
+    snprintf(request_text,sizeof(request_text),"%s",query);
+    request_album=request_artist=false;request_page=1;request_filter=FILTER_LOCAL;
+    request_instant=true;request_epoch=search_epoch;
+    search_busy=true;search_ready=false;
+    pthread_attr_t attr;pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
+    pthread_attr_setstacksize(&attr,256*1024);
+    pthread_t thread;int rc=pthread_create(&thread,&attr,search_worker,NULL);pthread_attr_destroy(&attr);
+    if(rc){search_busy=false;lv_label_set_text(search_status,"Could not start search");}
+}
+
 static void page_cb(lv_event_t *e) {
     if (!tapped() || search_busy) return;
     int direction = (int)(intptr_t)lv_event_get_user_data(e);
@@ -455,7 +485,7 @@ static void artist_cb(lv_event_t *e) {
 }
 
 static void submit_cb(lv_event_t *e) { (void)e; start_search(lv_textarea_get_text(search_field), false); }
-static void field_cb(lv_event_t *e) { (void)e; if (!search_busy) search_keyboard_visible(true); }
+static void field_cb(lv_event_t *e) { (void)e; search_keyboard_visible(true); }
 
 static void filter_cb(lv_event_t *e) {
     if (!tapped() || search_busy) return;
@@ -467,18 +497,51 @@ static void filter_cb(lv_event_t *e) {
     if (lv_textarea_get_text(search_field)[0]) submit_cb(NULL);
 }
 
+static lv_point_t local_swipe_origin;
+static lv_obj_t *local_swipe_row;
+static bool local_swipe_taken;
 static void local_hit_cb(lv_event_t *e) {
+    if (local_swipe_taken && lv_event_get_current_target(e) == local_swipe_row) return;
     local_hit_t *hit = lv_event_get_user_data(e);
     if (!tapped()) return;
     if (!gui_card_available()) { gui_notify_no_card(); return; }
-    if (hit->type == LIBRARY_SEARCH_TRACK) {
+    if (hit->type == LIBRARY_SEARCH_TRACK || hit->type == LIBRARY_SEARCH_LYRICS) {
         player_play_file(hit->path);
         player_sheet_open(true);
     } else if (hit->type == LIBRARY_SEARCH_ALBUM) {
         char title[256];
         library_album_title(hit->name, title, sizeof(title));
         medialist_open(title, LIBRARY_LIST_TRACKS, LIBRARY_FILTER_ALBUM, hit->name);
-    } else medialist_open_artist(hit->name);
+    } else if(hit->type==LIBRARY_SEARCH_PLAYLIST) medialist_open(hit->name,LIBRARY_LIST_PLAYLIST,LIBRARY_FILTER_NONE,hit->name);
+    else medialist_open_artist(hit->name);
+}
+
+static void local_queue_cb(lv_event_t *e) {
+    local_hit_t *hit = lv_event_get_user_data(e);
+    if (!hit->path[0] || (hit->type != LIBRARY_SEARCH_TRACK && hit->type != LIBRARY_SEARCH_LYRICS)) return;
+    lv_indev_t *input = lv_indev_active();
+    if (!input) return;
+    lv_obj_t *row = lv_event_get_current_target(e);
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_point_t point; lv_indev_get_point(input, &point);
+    if (code == LV_EVENT_PRESSED) {
+        local_swipe_row = row; local_swipe_origin = point; local_swipe_taken = false;
+        return;
+    }
+    if (local_swipe_row != row || local_swipe_origin.x <= 32) return;
+    int dx = point.x - local_swipe_origin.x, dy = point.y - local_swipe_origin.y;
+    if (code == LV_EVENT_PRESSING && dx > 35 && abs(dy) < 35) {
+        local_swipe_taken = true;
+        lv_obj_set_style_border_width(row, 3, 0);
+        lv_obj_set_style_border_color(row, lv_color_hex(0x1ed760), 0);
+        lv_event_stop_bubbling(e);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        lv_obj_set_style_border_width(row, 0, 0);
+        if (local_swipe_taken) lv_event_stop_bubbling(e);
+        if (code == LV_EVENT_RELEASED && dx > 75 && abs(dy) < 35 && playlist_priority_add(hit->path)) {
+            device_state_queue_changed(); toast_glyph(&icon_list_music, "added_to_the_queue");
+        }
+    }
 }
 
 static void online_hit_cb(lv_event_t *e) {
@@ -519,8 +582,8 @@ static void search_draw(void) {
             shown.online.items[front++] = item;
         }
     }
-    const char *groups[] = {"Local tracks", "Local albums", "Local artists"};
-    for (int kind = 0; kind < 3; kind++) {
+    const char *groups[] = {"Songs", "Albums", "Artists", "Playlists", "Lyrics"};
+    for (int kind = 0; kind < 5; kind++) {
         bool heading_drawn = false;
         for (int i = 0; i < shown.local_count; i++) {
             local_hit_t *hit = &shown.local[i];
@@ -529,7 +592,16 @@ static void search_draw(void) {
             char name[256];
             if (kind == LIBRARY_SEARCH_ALBUM) library_album_title(hit->name, name, sizeof(name));
             else snprintf(name, sizeof(name), "%s", hit->name);
-            button(search_results, name, cfg->screen_width - 2 * PAD, 62, local_hit_cb, hit);
+            lv_obj_t *row=button(search_results, name, cfg->screen_width - 2 * PAD, hit->excerpt[0]?92:62, local_hit_cb, hit);
+            if(hit->excerpt[0]) {
+                lv_obj_align(lv_obj_get_child(row,0),LV_ALIGN_TOP_LEFT,14,7);
+                lv_obj_t *excerpt=label(row,hit->excerpt,&font_ui_16,cfg->screen_width-76,true);
+                lv_obj_set_height(excerpt,25);lv_obj_set_pos(excerpt,14,51);
+            }
+            lv_obj_add_event_cb(row,local_queue_cb,LV_EVENT_PRESSED,hit);
+            lv_obj_add_event_cb(row,local_queue_cb,LV_EVENT_PRESSING,hit);
+            lv_obj_add_event_cb(row,local_queue_cb,LV_EVENT_RELEASED,hit);
+            lv_obj_add_event_cb(row,local_queue_cb,LV_EVENT_PRESS_LOST,hit);
         }
     }
     if (request_album) {
@@ -561,7 +633,8 @@ static void search_draw(void) {
         lv_label_set_long_mode(err, LV_LABEL_LONG_WRAP);
     }
     char status[128];
-    snprintf(status, sizeof(status), "%d local / %d online / Page %u", shown.local_count, shown.online.count, request_page);
+    if(request_instant)snprintf(status,sizeof(status),"%d local results%s",shown.local_count,search_filter==FILTER_ALL?" / Search key also checks online":"");
+    else snprintf(status, sizeof(status), "%d local / %d online / Page %u", shown.local_count, shown.online.count, request_page);
     lv_label_set_text(search_status, status);
     if (!shown.local_count && !shown.online.count && !shown.error[0])
         label(search_results, shown.online.truncated ? "No eligible releases on this page. Try the next page." :
@@ -593,6 +666,7 @@ static void search_build(void) {
     lv_obj_set_style_text_font(search_field, &font_ui_20, 0);
     keyboard_style_caret(search_field);
     lv_obj_add_event_cb(search_field, field_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(search_field, instant_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     const char *names[] = {"All", "Local", "Online"};
     for (int i = 0; i < 3; i++) {
         filter_buttons[i] = button(p, names[i], 110, 46, filter_cb, (void *)(intptr_t)i);
@@ -785,8 +859,9 @@ static void poll_cb(lv_timer_t *timer) {
         pthread_mutex_lock(&search_lock);
         bool ready = search_ready;
         pthread_mutex_unlock(&search_lock);
-        if (ready) { search_draw(); search_busy = false; }
+        if (ready) { if(request_epoch==search_epoch)search_draw(); search_busy = false; }
     }
+    if(!search_busy && instant_pending && lv_tick_elaps(instant_changed)>=180)start_instant();
     if (lv_screen_active() != main_menu_screen || player_sheet_is_open()) return;
     mini_update();
     if (selected == HOME) home_art_update();
@@ -798,6 +873,7 @@ static void nav_cb(lv_event_t *e) { if (tapped()) show_page((int)(intptr_t)lv_ev
 static void show_page(int tab) {
     if (tab < HOME || tab > PROVIDERS) return;
     selected = tab;
+    if(tab<=LIBRARY) {config_set_int("ui","last_tab",tab);config_save();}
     if (tab != HOME) home_art_drop();
     if (search_keyboard) search_keyboard_visible(false);
     if (!page[tab]) {
@@ -819,6 +895,7 @@ static void show_page(int tab) {
     }
     if (tab == HOME && (home_revision != library_revision(LIBRARY_LIST_TRACKS) || home_history != library_history_revision())) home_build();
     if (tab == DOWNLOADS) downloads_update();
+    if(tab==LIBRARY) collectionview_refresh();
 }
 
 static void screen_cb(lv_event_t *e) {
@@ -894,6 +971,7 @@ void main_menu_init(gui_config_t *config) {
     }
     lv_obj_add_event_cb(main_menu_screen, screen_cb, LV_EVENT_SCREEN_LOADED, NULL);
     lv_obj_add_event_cb(main_menu_screen, screen_cb, LV_EVENT_SCREEN_UNLOADED, NULL);
-    show_page(HOME);
-    lv_timer_create(poll_cb, 750, NULL);
+    int last=(int)config_get_int("ui","last_tab",HOME);
+    show_page(last>=HOME && last<=LIBRARY?last:HOME);
+    lv_timer_create(poll_cb, 100, NULL);
 }

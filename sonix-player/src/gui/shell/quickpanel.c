@@ -253,6 +253,7 @@ static void refresh_repeat_icon(void) {
 	lv_color_t color;
 
 	switch (playlist_get_mode()) {
+	case PLAYBACK_MODE_SHUFFLE_REPEAT_ONE:
 	case PLAYBACK_MODE_REPEAT_ONE:
 		glyph = &icon_repeat_one;
 		color = active;

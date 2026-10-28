@@ -1,4 +1,5 @@
 #include "playlists.h"
+#include "collections.h"
 
 #include "src/system/decode/decode.h"
 #include "src/system/library/cue.h"
@@ -33,6 +34,7 @@ static char card_root[512];
 static bool migration_tried;
 
 void playlists_init(const char *sd_root) {
+	collections_init(sd_root);
 	migration_tried = false;
 	if (!sd_root || !sd_root[0]) {
 		dir_path[0] = '\0';

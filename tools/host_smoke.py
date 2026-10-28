@@ -198,7 +198,7 @@ def run(repo, label, online=False, layout=None, card_root=None, cycles=0, downlo
                         click(x, 760, .15)
                 metrics['navigation_cycles'] = cycles
                 click(400, 760)
-                click(140, 375)
+                click(140, 157)
                 shot('downloads')
                 # A fixture from test_live_download.py, if present, was restored
                 # paused. Validate its existing bytes, then open Now Playing.

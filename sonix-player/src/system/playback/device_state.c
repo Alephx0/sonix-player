@@ -354,8 +354,9 @@ static void queue_save_query_form(const library_index_spec_t *spec) {
 }
 
 static void queue_persist(void) {
-	int count = playlist_count();
-	int current = playlist_current_index();
+	playlist_session_save();
+	int count = playlist_context_count();
+	int current = playlist_context_index();
 	if (count <= 0 || current < 0) {
 		return;
 	}
@@ -393,7 +394,7 @@ static void queue_persist(void) {
 	bool from_stream = false;
 	for (int i = 0; i < count; i++) {
 		char path[512];
-		if (!playlist_path_at(i, path, sizeof(path))) {
+		if (!playlist_context_path_at(i, path, sizeof(path))) {
 			continue;
 		}
 		// A streaming queue is not saved: the files are transient (the caches
@@ -707,6 +708,8 @@ void device_state_restore_index(library_index_t *ix, int start_index, const char
 		}
 	}
 
+	playlist_session_restore();
+
 	// Prefer the remembered track over the saved position: the two agree unless
 	// the library was rescanned since, and then the track is what the user last
 	// saw while the position is a number about a list that has moved.
@@ -755,6 +758,8 @@ void device_state_restore_list(const char *const *list, int count, int start_ind
 	// folder queue before the reboot has to stay one, or it would never be
 	// refreshed from the disk again.
 	playlist_set_custom(custom);
+
+	playlist_session_restore();
 
 	// Prefer the remembered track over the saved index: the two agree unless
 	// the position row was written after the list, and the track is what the
@@ -1322,7 +1327,7 @@ bool device_state_advance_auto(char *out_path, size_t out_size) {
 	// the album would play through and start again -- exactly what the option is
 	// meant to stop. Repeat-one still wins here: it is an explicit instruction
 	// to stay on this track, not a queue that reached its end.
-	if (playlist_at_end() && playlist_get_mode() != PLAYBACK_MODE_REPEAT_ONE && chain_beside(true)) {
+	if (playlist_at_end() && playlist_repeat_mode() != 2 && chain_beside(true)) {
 		if (out_path && out_size > 0) {
 			playlist_current_path(out_path, out_size);
 		}
@@ -1364,7 +1369,7 @@ void device_state_read_ahead(double position, double total) {
 	if (audiobook_is_playing() && !audiobook_has_next_part()) {
 		return;
 	}
-	if (playlist_at_end() && playlist_get_mode() != PLAYBACK_MODE_REPEAT_ONE) {
+	if (playlist_at_end() && playlist_repeat_mode() != 2) {
 		return;
 	}
 
@@ -1448,13 +1453,20 @@ bool device_state_next(char *out_path, size_t out_size) {
 }
 
 bool device_state_prev(char *out_path, size_t out_size) {
+    double elapsed = 0, length = 0;
+    audio_get_progress(&elapsed, &length);
+    if (elapsed > 3.0) {
+        audio_seek(0);
+        if (out_path && out_size) snprintf(out_path, out_size, "%s", current_metadata_file);
+        return true;
+    }
 	char path[512];
 	playlist_resync_to_current();
 
 	// And the mirror of it: from the first track of a record, back is the END
 	// of the record before, not the end of this one. Nothing automatic ever
 	// goes this way, so this direction exists only for the key.
-	if (playlist_current_index() <= 0 && chain_beside(false)) {
+	if (!playlist_history_available() && playlist_current_index() <= 0 && chain_beside(false)) {
 		if (out_path && out_size > 0) {
 			playlist_current_path(out_path, out_size);
 		}

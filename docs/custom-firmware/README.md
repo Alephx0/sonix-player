@@ -1,13 +1,17 @@
 # R1 native discovery development fork
 
 This is an implemented, testable development branch, **not a production firmware
-release**. It adds a native LVGL shell and an authorized download path to Sonix.
+release**. It adds a native LVGL shell, offline queue/library systems and an authorized download path to Sonix.
 The latest-board kernel/radio compatibility and physical-device acceptance
 criteria remain blocked. No device has been flashed and no `r1.upt` is supplied.
 
 Baseline: `Jepl4r/sonix-player@fe94fe796d93c6efa50d1107a734864c9c6a03d5`.
 Fork: [Alephx0/sonix-player](https://github.com/Alephx0/sonix-player), branch
 `feature/r1-discovery`. Original Sonix code and licensing remain in place.
+
+The latest offline integration adds separate priority/context queues, playlist
+membership, saved/pinned collections and indexed lyric search. See the
+[offline player guide](offline-player.md) for controls, evidence and remaining scope.
 
 ## Implemented workflow
 
@@ -24,7 +28,7 @@ Fork: [Alephx0/sonix-player](https://github.com/Alephx0/sonix-player), branch
 
 Search > Sources exposes provider capabilities, an online-search toggle, a
 persisted preferred-format order and a pause-all-transfers action. The new Sonix
-Now Playing layout uses inset centered artwork and mint transport accents;
+Now Playing layout uses inset centered artwork and green transport accents;
 it is the default for a fresh 480×800 configuration. Existing saved layout choices
 are respected, and Music settings offers all four arrangements.
 
@@ -35,6 +39,7 @@ This fork does not implement a Spotify service client.
 
 ## Evidence and guides
 
+- [Offline player features, controls and evidence](offline-player.md)
 - [Architecture and interfaces](architecture.md)
 - [Build, test and maintenance commands](development.md)
 - [Test results and performance limits](test-report.md)
@@ -74,7 +79,7 @@ in [its test output](evidence/touch-download-test.log).
 The feature matrix is the authoritative scope ledger. In particular, online
 artist profiles/biographies, independent track/playlist search, remote artwork caching,
 streaming previews, multiple-provider selection/fallback, configurable Home
-shortcuts, pinned collections and translations of new strings
+shortcuts and translations of new strings
 are incomplete. SpotBye dynamic network tracing needs an isolated Windows VM.
 Hardware testing, prolonged playback/download stress and latest-board recovery
 are still required. Do not interpret successful host tests or MIPS compilation

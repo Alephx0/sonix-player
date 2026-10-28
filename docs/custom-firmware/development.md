@@ -127,3 +127,30 @@ Known reliability limits include source-side metadata/licence accuracy, a
 1000-page catalog ceiling and bounded release metadata, finite retry policy, sidecar metadata instead of embedded
 retagging, unmeasured audio scheduling under actual hardware load, and queue
 shutdown waiting on connection establishment. See the feature matrix for scope.
+
+
+## Offline player regression and interactive launch
+
+After building the synchronized Linux checkout:
+
+```sh
+python3 tools/test_priority_queue.py /home/justi/sonix-r1-build
+python3 tools/test_offline_library.py /home/justi/sonix-r1-build
+python3 tools/launch_simulator.py /home/justi/sonix-r1-build --restart
+```
+
+The launcher uses WSLg, preserves the private interactive card, selects Sonix
+layout and disables the host screen timeout. It uses a private ALSA Pulse
+configuration; install `libasound2-plugins` on the Linux host for WSLg audio.
+It does not change the system ALSA configuration. Tap with the mouse and hold
+then drag to scroll or reorder. A source file must exist on the simulated card
+and be indexed before it appears in the local library.
+
+For isolated visual checks, `offline_ui_session.py REPO start` creates a private
+Xvfb display and opens the synthetic offline fixture card. Subsequent commands
+are `click X Y`, `drag X Y END_X END_Y [HOLD_SECONDS]`, `shot NAME`, and `stop`.
+`start 0`, `start 1`, `start 2`, and `start 3` select the four player layouts.
+Stop the private session before other scripts use display :99. These fixtures
+are original **silent** WAV recordings; silence is expected during UI tests.
+The visible launcher uses the interactive card by default, which is separate
+from this fixture. `--card-root PATH` explicitly selects another card.

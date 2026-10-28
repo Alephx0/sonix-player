@@ -1,8 +1,18 @@
-# Validation report — 2026-10-27
+# Validation report — 2026-10-28
 
 Status: host-tested development implementation; production/device acceptance is
 incomplete. Test commands are in [development.md](development.md). Captured output
 is under [evidence](evidence/) and actual simulator images under [screenshots](screenshots/).
+
+## Offline integration update
+
+Host and MIPS builds pass after the offline queue/library additions, along with
+queue/session, offline-library, import, discovery/TLS sanitizer and packaging
+regressions. New touch captures cover priority queue gestures, selection move-up,
+instant search before submission, playlist membership, saved-collection artwork,
+lyrics and all four player layouts. See [offline-player.md](offline-player.md)
+for current evidence and limitations. The older performance samples below
+predate these additions and must not be treated as current memory measurements.
 
 ## Passed checks
 
