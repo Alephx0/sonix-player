@@ -1,0 +1,11 @@
+Synthetic UI fixture: /home/justi/sonix-r1-build/artifacts/offline-fixture-upsw5kp6/sd/Music/cover.png
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+config: /home/justi/sonix-r1-build/artifacts/offline-fixture-upsw5kp6/sd/config.ini not there yet, starting from defaults
+library: /home/justi/sonix-r1-build/artifacts/offline-fixture-upsw5kp6/sd/.local/library.db open, 0 tracks indexed
+library: /home/justi/sonix-r1-build/artifacts/offline-fixture-upsw5kp6/sd/.local/library.db open, 5 tracks indexed
+PASS offline library: real audio scan, persistent lyric/metadata prefix index, accent folding, changed LRC reindex, playlist membership, independent saved albums/artists, four-pin limit, no audio deletion, reopen persistence
+Fixture card: /home/justi/sonix-r1-build/artifacts/offline-fixture-upsw5kp6/sd

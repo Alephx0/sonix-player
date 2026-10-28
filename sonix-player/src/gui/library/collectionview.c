@@ -1,3 +1,5 @@
+#include "src/gui/shell/bottomsheet.h"
+#include "src/gui/nowplaying/player.h"
 #include "collectionview.h"
 #include "src/gui/shell/main_menu.h"
 #include "src/gui/fonts/fonts.h"
@@ -19,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 static gui_config_t *cfg;
@@ -58,6 +61,27 @@ static collection_item_t rows[24], menu_item;
 static int row_count;
 static char track[512], track_title[256], track_artist[256];
 static int member_page;
+static lv_obj_t *member_list, *member_search;
+static keyboard_t *member_keyboard;
+static char member_query[201];
+static bool name_returns;
+static lv_obj_t *member_art[8];
+static cover_image_t member_covers[8];
+static int member_art_count;
+static void member_art_drop(void) {
+    for(int i=0;i<8;i++) {
+        coverloader_release(COVERLOADER_MEMBERS_BASE+i);
+        if(member_art[i]) lv_image_set_src(member_art[i],&icon_files_playlist);
+        cover_free(&member_covers[i]);member_art[i]=NULL;
+    }
+    member_art_count=0;
+}
+static void member_art_tick(lv_timer_t *t) {
+    (void)t;
+    for(int i=0;i<member_art_count;i++) if(member_art[i] && !member_covers[i].pixels) {
+        bool done=false;if(coverloader_take(COVERLOADER_MEMBERS_BASE+i,&member_covers[i],&done)) lv_image_set_src(member_art[i],&member_covers[i].dsc);
+    }
+}
 static char member_names[24][201];
 static int member_count, member_seen;
 static unsigned seen_revision, seen_playlists;
@@ -94,38 +118,21 @@ static lv_obj_t *button(lv_obj_t *p, const char *s, int w, int h, lv_event_cb_t 
 	lv_obj_add_event_cb(o, cb, LV_EVENT_CLICKED, u);
 	return o;
 }
-static void close_sheet(lv_event_t *e) {
-	(void)e;
-	if (sheet) {
-		lv_obj_delete(sheet);
-		sheet = NULL;
-		sheet_body = NULL;
-	}
-	collectionview_refresh();
+static void sheet_cleanup(void) {
+    member_art_drop();
+    sheet=sheet_body=name_layer=name_field=member_list=member_search=NULL;member_keyboard=NULL;
+    player_refresh_membership();collectionview_refresh();
 }
+static void close_sheet(lv_event_t *e) { (void)e; bottomsheet_close(true); }
 static void sheet_new(const char *title) {
-	if (sheet)
-		lv_obj_delete(sheet);
-	int w = lv_display_get_horizontal_resolution(NULL), h = lv_display_get_vertical_resolution(NULL);
-	sheet = panel(lv_layer_top(), w, h);
-	lv_obj_set_style_bg_color(sheet, lv_color_black(), 0);
-	lv_obj_set_style_bg_opa(sheet, LV_OPA_70, 0);
-	lv_obj_set_clickable(sheet, true);
-	lv_obj_t *body = panel(sheet, w, h - 100);
-	lv_obj_set_align(body, LV_ALIGN_BOTTOM_MID);
-	lv_obj_add_style(body, &theme_style_card, 0);
-	lv_obj_set_style_radius(body, 20, 0);
-	lv_obj_t *l = text(body, title, w - 110, &font_ui_24_bold, false);
-	lv_obj_set_pos(l, 20, 18);
-	lv_obj_t *done = button(body, "Done", 76, 46, close_sheet, NULL);
-	lv_obj_set_pos(done, w - 92, 10);
-	sheet_body = panel(body, w - 32, h - 174);
-	lv_obj_set_pos(sheet_body, 16, 70);
-	lv_obj_set_scrollable(sheet_body, true);
-	lv_obj_set_scroll_dir(sheet_body, LV_DIR_VER);
-	lv_obj_set_flex_flow(sheet_body, LV_FLEX_FLOW_COLUMN);
-	lv_obj_set_style_pad_row(sheet_body, 10, 0);
-	lv_obj_update_layout(body);
+    int w=lv_display_get_horizontal_resolution(NULL), h=lv_display_get_vertical_resolution(NULL);
+    sheet=bottomsheet_open(h-60,sheet_cleanup);
+    lv_obj_t *l=text(sheet,title,w-122,&font_ui_24_bold,false);lv_obj_set_pos(l,20,12);
+    lv_obj_t *done=button(sheet,"Done",76,46,close_sheet,NULL);lv_obj_set_pos(done,w-92,0);
+    sheet_body=panel(sheet,w-32,h-160);lv_obj_set_pos(sheet_body,16,60);
+    lv_obj_set_style_bg_opa(sheet_body,0,0);lv_obj_set_scrollable(sheet_body,true);
+    lv_obj_set_scroll_dir(sheet_body,LV_DIR_VER);lv_obj_set_flex_flow(sheet_body,LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(sheet_body,10,0);
 }
 static void open_row(lv_event_t *e) {
 	collection_item_t *r = lv_event_get_user_data(e);
@@ -242,16 +249,21 @@ static void name_close(lv_event_t *e) {
 		lv_obj_delete(name_layer);
 		name_layer = NULL;
 	}
+    if(!name_returns) bottomsheet_close(true);
 }
 static void name_accept(lv_event_t *e) {
 	(void)e;
 	const char *name = lv_textarea_get_text(name_field);
-	if (!playlists_create(name)) {
+	if (!strcasecmp(name,"Liked Songs") || !playlists_create(name)) {
 		gui_notify_popup("Choose a new, valid playlist name.");
 		return;
 	}
 	bool ok = !track[0] || playlists_add_track(name, track);
 	collections_put(COLLECTION_PLAYLIST, name, name, "You", true);
+    if(name_returns && member_search) {
+        snprintf(member_query,sizeof(member_query),"%s",name);member_page=0;
+        lv_textarea_set_text(member_search,member_query);
+    }
 	name_close(NULL);
 	if (!ok)
 		gui_notify_popup("Playlist created, but the track could not be added.");
@@ -261,10 +273,14 @@ static void name_accept(lv_event_t *e) {
 }
 static void create_cb(lv_event_t *e) {
 	bool membership = lv_event_get_user_data(e) != NULL;
+    name_returns=membership;
 	if (!membership)
 		track[0] = 0;
 	int w = lv_display_get_horizontal_resolution(NULL), h = lv_display_get_vertical_resolution(NULL);
-	name_layer = panel(lv_layer_top(), w, h);
+	if(!sheet) sheet_new("New playlist");
+    h=lv_obj_get_height(sheet);
+    name_layer = panel(sheet, w, h);
+    lv_obj_move_foreground(name_layer);
 	lv_obj_set_clickable(name_layer, true);
 	lv_obj_t *l = text(name_layer, "New playlist", w - 40, &font_ui_24_bold, false);
 	lv_obj_set_pos(l, 20, 60);
@@ -285,7 +301,10 @@ static void create_cb(lv_event_t *e) {
 void collectionview_create_playlist(lv_event_t *e) { create_cb(e); }
 static bool member_collect(const char *name, void *user) {
 	(void)user;
-	if (member_seen++ < member_page * 24)
+	char folded[512], query[512];
+    library_search_fold(name,folded,sizeof(folded));library_search_fold(member_query,query,sizeof(query));
+    if(query[0] && !strstr(folded,query)) return true;
+    if (member_seen++ < member_page * 24)
 		return true;
 	if (member_count == 24)
 		return false;
@@ -314,26 +333,71 @@ static void member_page_cb(lv_event_t *e) {
 		member_page = 0;
 	members_draw();
 }
+static lv_obj_t *member_row(const char *name, bool selected, lv_event_cb_t cb, void *u) {
+    int w=lv_display_get_horizontal_resolution(NULL)-32;
+    lv_obj_t *row=button(member_list,NULL,w,74,cb,u);
+    lv_obj_set_style_bg_opa(row,selected?LV_OPA_20:LV_OPA_TRANSP,0);
+    lv_obj_t *art=lv_image_create(row);lv_image_set_src(art,!strcmp(name,"Liked Songs")?&icon_heart:&icon_files_playlist);
+    lv_obj_set_size(art,48,48);lv_image_set_inner_align(art,LV_IMAGE_ALIGN_CONTAIN);lv_obj_set_pos(art,4,12);
+    if(!strcmp(name,"Liked Songs")) {
+        lv_obj_set_style_bg_color(art,lv_color_hex(0x6432e8),0);lv_obj_set_style_bg_grad_color(art,lv_color_hex(0xa8dbca),0);
+        lv_obj_set_style_bg_grad_dir(art,LV_GRAD_DIR_VER,0);lv_obj_set_style_bg_opa(art,255,0);lv_obj_set_style_radius(art,5,0);
+    } else if(member_art_count<8) {
+        library_playlist_row_t first;
+        if(library_playlist_page(name,0,1,&first)==1) {
+            int slot=member_art_count++;member_art[slot]=art;
+            coverloader_request(COVERLOADER_MEMBERS_BASE+slot,first.path,48);
+        }
+    }
+    lv_obj_t *l=text(row,name,w-122,&font_ui_22,false);lv_obj_set_pos(l,68,12);
+    l=text(row,"Playlist",w-122,&font_ui_16,true);lv_obj_set_pos(l,68,42);
+    lv_obj_t *check=lv_image_create(row);lv_image_set_src(check,selected?&icon_circle_check:&icon_plus);
+    lv_obj_set_size(check,30,30);lv_image_set_inner_align(check,LV_IMAGE_ALIGN_CONTAIN);
+    lv_obj_align(check,LV_ALIGN_RIGHT_MID,-4,0);lv_obj_set_style_image_recolor(check,lv_color_hex(selected?0x1ed760:0xb3b3b3),0);
+    lv_obj_set_style_image_recolor_opa(check,255,0);return row;
+}
 static void members_draw(void) {
-	if (!sheet_body)
-		return;
-	lv_obj_clean(sheet_body);
-	int w = lv_display_get_horizontal_resolution(NULL) - 32;
-	text(sheet_body, track_title, w, &font_ui_22_bold, false);
-	text(sheet_body, track_artist, w, &font_ui_16, true);
-	button(sheet_body, library_fav_contains(track) ? "[x] Liked Songs" : "[ ] Liked Songs", w, 56, liked_cb, NULL);
-	button(sheet_body, "+ Create new playlist", w, 56, create_cb, (void *)1);
-	member_count = member_seen = 0;
-	playlists_for_each(member_collect, NULL);
-	for (int i = 0; i < member_count; i++) {
-		char line[220];
-		snprintf(line, sizeof(line), "[%c] %.200s", playlists_has_track(member_names[i], track) ? 'x' : ' ', member_names[i]);
-		button(sheet_body, line, w, 56, member_toggle, member_names[i]);
-	}
-	if (member_page)
-		button(sheet_body, "Previous playlists", w, 48, member_page_cb, (void *)(intptr_t)-1);
-	if (member_count == 24)
-		button(sheet_body, "More playlists", w, 48, member_page_cb, (void *)(intptr_t)1);
+    if (!member_list) return;
+    member_art_drop();
+    lv_obj_clean(member_list);
+    int w=lv_display_get_horizontal_resolution(NULL)-32;
+    char query[512];library_search_fold(member_query,query,sizeof(query));
+    bool liked_visible=!query[0] || strstr("liked songs",query), liked=library_fav_contains(track);
+    member_count=member_seen=0;playlists_for_each(member_collect,NULL);
+    for(int group=1;group>=0;group--) {
+        bool heading=false;
+        if(liked_visible && liked==group) {text(member_list,group?"Saved in":"Playlists",w,&font_ui_18,true);heading=true;member_row("Liked Songs",liked,liked_cb,NULL);}
+        for(int i=0;i<member_count;i++) if(playlists_has_track(member_names[i],track)==group) {
+            if(!heading) {text(member_list,group?"Saved in":"Playlists",w,&font_ui_18,true);heading=true;}
+            member_row(member_names[i],group,member_toggle,member_names[i]);
+        }
+    }
+    static lv_timer_t *art_timer;if(!art_timer) art_timer=lv_timer_create(member_art_tick,120,NULL);
+    if(!member_count && !liked_visible && member_query[0]) text(member_list,"No matching playlists",w,&font_ui_18,true);
+    if(member_page) button(member_list,"Previous playlists",w,48,member_page_cb,(void *)(intptr_t)-1);
+    if(member_count==24) button(member_list,"More playlists",w,48,member_page_cb,(void *)(intptr_t)1);
+    player_refresh_membership();
+}
+static void member_search_changed(lv_event_t *e) {
+    (void)e;snprintf(member_query,sizeof(member_query),"%s",lv_textarea_get_text(member_search));member_page=0;members_draw();
+}
+static void member_search_done(lv_event_t *e) {
+    (void)e;keyboard_set_visible(member_keyboard,false);lv_obj_set_height(member_list,lv_obj_get_height(sheet_body)-124);
+}
+static void member_search_focus(lv_event_t *e) {
+    (void)e;
+    if(!member_keyboard) member_keyboard=keyboard_create(sheet,lv_obj_get_width(sheet),270,member_search,NULL,"Done",member_search_done,NULL);
+    keyboard_set_visible(member_keyboard,true);lv_obj_set_height(member_list,LV_MAX(80,lv_obj_get_height(sheet_body)-394));
+}
+typedef struct {const char *path;bool found;} membership_t;
+static bool any_member(const char *name,void *u) {
+    membership_t *m=u;
+    m->found=playlists_has_track(name,m->path);return !m->found;
+}
+bool collectionview_track_saved(const char *path) {
+    if(library_fav_contains(path)) return true;
+    membership_t m={path,false};
+    playlists_for_each(any_member,&m);return m.found;
 }
 void collectionview_manage_track(const char *path) {
 	if (!path || !*path || !gui_card_available())
@@ -343,8 +407,20 @@ void collectionview_manage_track(const char *path) {
 	playlists_track_names(path, track_title, sizeof(track_title), track_artist, sizeof(track_artist));
 	member_page = 0;
 	collections_init(playlist_card_root());
-	sheet_new("Add to playlists");
-	members_draw();
+	sheet_new("Add to playlist");
+    member_query[0]=0;
+    int w=lv_display_get_horizontal_resolution(NULL)-32;
+    button(sheet_body,"+ New playlist",w,52,create_cb,(void *)1);
+    member_search=lv_textarea_create(sheet_body);lv_obj_set_size(member_search,w,54);
+    lv_textarea_set_one_line(member_search,true);lv_textarea_set_placeholder_text(member_search,"Find a playlist");
+    lv_obj_set_style_text_font(member_search,&font_ui_20,0);lv_textarea_set_max_length(member_search,200);
+    lv_obj_add_style(member_search,&theme_style_card,0);lv_obj_add_style(member_search,&theme_style_text,0);
+    lv_obj_add_event_cb(member_search,member_search_changed,LV_EVENT_VALUE_CHANGED,NULL);
+    lv_obj_add_event_cb(member_search,member_search_focus,LV_EVENT_CLICKED,NULL);
+    member_list=panel(sheet_body,w,lv_obj_get_height(sheet_body)-124);lv_obj_set_style_bg_opa(member_list,0,0);
+    lv_obj_set_scrollable(member_list,true);lv_obj_set_scroll_dir(member_list,LV_DIR_VER);
+    lv_obj_set_flex_flow(member_list,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(member_list,4,0);
+    members_draw();
 }
 static lv_obj_t *collection_shortcut(const char *title, const char *subtitle, const lv_image_dsc_t *icon, uint32_t color, int action, int width) {
 	lv_obj_t *row = button(list, NULL, width, 76, route, (void *)(intptr_t)action);

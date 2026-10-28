@@ -7,6 +7,9 @@ is under [evidence](evidence/) and actual simulator images under [screenshots](s
 The subsequent [reference UI validation](reference-ui.md) records the redesigned
 screens, album mini-player navigation checks and refreshed build evidence.
 
+See [sliding-panel validation](sliding-panels.md) for the newer modal, artwork
+search and metadata discography checks.
+
 ## Offline integration update
 
 Host and MIPS builds pass after the offline queue/library additions, along with

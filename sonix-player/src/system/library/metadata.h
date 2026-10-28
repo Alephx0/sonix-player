@@ -11,6 +11,8 @@ typedef struct {
 	char genre[128];
 	int track_number; // 0 if unknown
 	int disc_number;  // 0 if unknown, which is read as disc one; see below
+	char release_date[11], release_type[64];
+	char artists[512], artist_ids[768], album_artist_ids[768];
 	int year;		  // 0 if unknown
 	bool has_tags;	  // true if any tag field was found
 

@@ -27,7 +27,11 @@
 // takes 90; the podcasts on the card take 91..102 for their twelve rows, 103
 // for the cover at the head of one of them and 104..107 for the episodes being
 // listened to -- so the pools never trample each other's requests.
-#define COVERLOADER_SLOTS 120
+#define COVERLOADER_SLOTS 182
+#define COVERLOADER_QUEUE_BASE 162
+#define COVERLOADER_MEMBERS_BASE 174
+#define COVERLOADER_INSTANT_BASE 120
+#define COVERLOADER_DISCOGRAPHY_BASE 150
 // Eight visible saved-collection thumbnails.
 #define COVERLOADER_COLLECTION_BASE 112
 // Four bounded Home album thumbnails. These are released when Home is hidden.

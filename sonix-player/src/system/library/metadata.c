@@ -395,6 +395,22 @@ const char *metadata_shown_artist(const song_metadata_t *m) {
 	return m->album_artist;
 }
 
+/* Explicit credits and release tags; never split a display artist on "feat.". */
+static bool release_field(song_metadata_t *out,const char *key,const char *value,size_t len) {
+    char norm[64];size_t j=0;
+    for(size_t i=0;key[i] && j<sizeof(norm)-1;i++) if(isalnum((unsigned char)key[i])) norm[j++]=toupper((unsigned char)key[i]);
+    norm[j]=0;
+    char *dst=NULL;size_t size=0;bool append=false;
+    if(!strcmp(norm,"RELEASETYPE") || !strcmp(norm,"MUSICBRAINZALBUMTYPE")) {dst=out->release_type;size=sizeof(out->release_type);append=true;}
+    else if(!strcmp(norm,"ARTISTS")) {dst=out->artists;size=sizeof(out->artists);append=true;}
+    else if(!strcmp(norm,"MUSICBRAINZARTISTID")) {dst=out->artist_ids;size=sizeof(out->artist_ids);append=true;}
+    else if(!strcmp(norm,"MUSICBRAINZALBUMARTISTID")) {dst=out->album_artist_ids;size=sizeof(out->album_artist_ids);append=true;}
+    else if(!strcmp(norm,"DATE") || !strcmp(norm,"RELEASEDATE")) {dst=out->release_date;size=sizeof(out->release_date);}
+    if(!dst) return false;
+    if(append) append_value(dst,size,value,len);
+    else {size_t n=(len<size-1?len:size-1);memcpy(dst,value,n);dst[n]=0;}
+    return true;
+}
 static void apply_vorbis_comment(song_metadata_t *out, const char *comment, size_t len) {
 	const char *eq = memchr(comment, '=', len);
 	if (!eq)
@@ -411,6 +427,7 @@ static void apply_vorbis_comment(song_metadata_t *out, const char *comment, size
 		key[i] = (char)toupper((unsigned char)comment[i]);
 	}
 	key[key_len] = '\0';
+    release_field(out,key,value,value_len);
 
 	if (strcmp(key, "LYRICS") == 0 || strcmp(key, "UNSYNCEDLYRICS") == 0 || strcmp(key, "UNSYNCED LYRICS") == 0 ||
 		strcmp(key, "SYNCEDLYRICS") == 0) {
@@ -1046,8 +1063,9 @@ static void id3_txxx(song_metadata_t *out, uint8_t encoding, const uint8_t *data
 		return;
 	}
 
-	char text[256];
-	id3_decode_text(encoding, value, value_len, text, sizeof(text));
+	char text[768]="";
+	id3_values(encoding,value,value_len,text,sizeof(text),false);
+    release_field(out,key,text,strlen(text));
 	if (strcmp(key, "SERIES") == 0) {
 		copy_bounded(out->series, sizeof(out->series), text);
 	} else if (strcmp(key, "SERIES-PART") == 0 || strcmp(key, "SERIES_PART") == 0 || strcmp(key, "SERIESPART") == 0) {
@@ -1182,6 +1200,11 @@ static void fill_missing(song_metadata_t *out, const song_metadata_t *from) {
 		copy_bounded(out->artist, sizeof(out->artist), from->artist);
 	if (!out->album_artist[0])
 		copy_bounded(out->album_artist, sizeof(out->album_artist), from->album_artist);
+	if(!out->release_date[0]) copy_bounded(out->release_date,sizeof(out->release_date),from->release_date);
+	if(!out->release_type[0]) copy_bounded(out->release_type,sizeof(out->release_type),from->release_type);
+	if(!out->artists[0]) copy_bounded(out->artists,sizeof(out->artists),from->artists);
+	if(!out->artist_ids[0]) copy_bounded(out->artist_ids,sizeof(out->artist_ids),from->artist_ids);
+	if(!out->album_artist_ids[0]) copy_bounded(out->album_artist_ids,sizeof(out->album_artist_ids),from->album_artist_ids);
 	if (!out->album[0])
 		copy_bounded(out->album, sizeof(out->album), from->album);
 	if (!out->genre[0])
@@ -1360,7 +1383,7 @@ static bool read_id3v2(FILE *f, song_metadata_t *out) {
 					  strcmp(frame_id, "TPE1") == 0 || strcmp(frame_id, "TPE2") == 0 || strcmp(frame_id, "TALB") == 0 ||
 					  strcmp(frame_id, "TCON") == 0 || strcmp(frame_id, "TRCK") == 0 || strcmp(frame_id, "TPOS") == 0 ||
 					  strcmp(frame_id, "TYER") == 0 || strcmp(frame_id, "TDRC") == 0 || strcmp(frame_id, "TORY") == 0 ||
-					  strcmp(frame_id, "TDOR") == 0 || strcmp(frame_id, "TXXX") == 0 || strcmp(frame_id, "TCMP") == 0;
+					  strcmp(frame_id, "TDOR") == 0 || strcmp(frame_id, "TDRL") == 0 || strcmp(frame_id, "TXXX") == 0 || strcmp(frame_id, "TCMP") == 0;
 
 		bool lyrics_frame = lyrics_wanted && (strcmp(frame_id, "USLT") == 0 || strcmp(frame_id, "SYLT") == 0);
 		bool comment_frame = description_wanted && strcmp(frame_id, "COMM") == 0;
@@ -1461,9 +1484,12 @@ static bool read_id3v2(FILE *f, song_metadata_t *out) {
 				// "2" or "2/3"; strtol stops at the slash.
 				out->disc_number = (int)strtol(decoded, NULL, 10);
 			} else if (strcmp(frame_id, "TYER") == 0 || strcmp(frame_id, "TDRC") == 0) {
+                if(strcmp(frame_id,"TDRC")==0) release_field(out,"DATE",decoded,strlen(decoded));
 				if (out->year == 0)
 					out->year = (int)strtol(decoded, NULL, 10);
-			} else if (strcmp(frame_id, "TORY") == 0 || strcmp(frame_id, "TDOR") == 0) {
+			} else if(strcmp(frame_id,"TDRL")==0) {
+                release_field(out,"DATE",decoded,strlen(decoded));
+            } else if (strcmp(frame_id, "TORY") == 0 || strcmp(frame_id, "TDOR") == 0) {
 				// The original release, for a tag that has no other year.
 				original_year = (int)strtol(decoded, NULL, 10);
 			} else if (strcmp(frame_id, "MVNM") == 0) {
@@ -2266,6 +2292,9 @@ static void read_mp4_metadata(const char *filepath, song_metadata_t *out) {
 
 	// The freeform "----" atoms, where iTunes-style ReplayGain lives.
 	const char *value;
+    const char *extra[]={"MusicBrainz Album Type","MusicBrainz Artist Id","MusicBrainz Album Artist Id","ARTISTS","RELEASEDATE"};
+    for(size_t i=0;i<sizeof(extra)/sizeof(extra[0]);i++) {value=mp4_tag_freeform(m,extra[i]);if(value) release_field(out,extra[i],value,strlen(value));}
+    snprintf(out->release_date,sizeof(out->release_date),"%.10s",mp4_tag_date(m));
 	if ((value = mp4_tag_freeform(m, "replaygain_track_gain")) != NULL && value[0]) {
 		replaygain_field(out, "REPLAYGAIN_TRACK_GAIN", value, strlen(value));
 	}
@@ -2380,6 +2409,7 @@ static void read_sidecar_tags(const char *filepath, song_metadata_t *out) {
 		*equals = '\0';
 		const char *key = line;
 		const char *value = equals + 1;
+        release_field(out,key,value,strlen(value));
 		if (!value[0]) {
 			continue;
 		}

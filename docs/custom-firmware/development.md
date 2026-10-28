@@ -154,3 +154,10 @@ Stop the private session before other scripts use display :99. These fixtures
 are original **silent** WAV recordings; silence is expected during UI tests.
 The visible launcher uses the interactive card by default, which is separate
 from this fixture. `--card-root PATH` explicitly selects another card.
+## Discography fixtures
+
+Run `python3 tools/test_discography.py /home/justi/sonix-r1-build` against the
+host objects. It generates original silent tagged audio and requires FFmpeg
+in addition to the host toolchain. No network music is fetched.
+`tools/offline_ui_session.py REPO start --card FIXTURE_CARD` inspects that
+isolated card; the default remains the earlier offline UI fixture.

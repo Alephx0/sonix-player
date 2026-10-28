@@ -1,3 +1,4 @@
+#include "src/system/library/playlists.h"
 #include "src/gui/shell/toast.h"
 #include "main_menu.h"
 
@@ -355,6 +356,7 @@ typedef struct {
     discovery_results_t online;
     local_hit_t local[LOCAL_HITS];
     int local_count;
+    char artwork[LOCAL_HITS][512], artist[LOCAL_HITS][256];
     char error[192];
 } search_result_t;
 static search_result_t pending, shown;
@@ -379,11 +381,45 @@ static void local_collect(const library_instant_hit_t *item, void *user) {
     *hit = *item;
 }
 
+static bool search_sample(const char *name,const char *path,const char *artist,void *u) {
+    (void)name;int i=*(int *)u;
+    snprintf(pending.artwork[i],512,"%s",path?path:"");snprintf(pending.artist[i],256,"%s",artist?artist:"");return false;
+}
+static void search_resolve_art(void) {
+    for(int i=0;i<pending.local_count;i++) {
+        local_hit_t *hit=&pending.local[i];
+        if(hit->type==LIBRARY_SEARCH_TRACK || hit->type==LIBRARY_SEARCH_LYRICS) {
+            memcpy(pending.artwork[i],hit->path,sizeof(hit->path));
+            char title[256];playlists_track_names(hit->path,title,sizeof(title),pending.artist[i],256);
+        } else {
+            library_list_t kind=hit->type==LIBRARY_SEARCH_PLAYLIST?LIBRARY_LIST_PLAYLIST:LIBRARY_LIST_TRACKS;
+            library_filter_t filter=hit->type==LIBRARY_SEARCH_ARTIST?LIBRARY_FILTER_ARTIST:hit->type==LIBRARY_SEARCH_ALBUM?LIBRARY_FILTER_ALBUM:LIBRARY_FILTER_NONE;
+            library_index_t *ix=library_index_open(kind,filter,hit->name,LIBRARY_ORDER_DEFAULT,false);
+            if(ix) { library_index_window(ix,0,1,search_sample,&i);library_index_close(ix); }
+        }
+    }
+}
+static lv_obj_t *instant_images[LOCAL_HITS];
+static cover_image_t instant_covers[LOCAL_HITS];
+static void search_art_drop(void) {
+    for(int i=0;i<LOCAL_HITS;i++) {
+        coverloader_release(COVERLOADER_INSTANT_BASE+i);
+        if(instant_images[i]) lv_image_set_src(instant_images[i],&icon_album);
+        cover_free(&instant_covers[i]);instant_images[i]=NULL;
+    }
+}
+static void search_art_update(void) {
+    for(int i=0;i<LOCAL_HITS;i++) if(instant_images[i] && !instant_covers[i].pixels) {
+        bool done=false;
+        if(coverloader_take(COVERLOADER_INSTANT_BASE+i,&instant_covers[i],&done)) lv_image_set_src(instant_images[i],&instant_covers[i].dsc);
+    }
+}
 static void *search_worker(void *unused) {
     (void)unused;
     memset(&pending, 0, sizeof(pending));
     if (!request_album && !request_artist && request_page == 1 && request_filter != FILTER_ONLINE)
         library_search_instant(request_text, LOCAL_HITS / 5, local_collect, &pending);
+    search_resolve_art();
     if (request_album)
         discovery_album_page(request_text, request_page, &pending.online, pending.error, sizeof(pending.error));
     else if (request_filter != FILTER_LOCAL)
@@ -571,6 +607,7 @@ static void online_hit_cb(lv_event_t *e) {
 }
 
 static void search_draw(void) {
+    search_art_drop();
     lv_obj_clean(search_results);
     lv_obj_scroll_to_y(search_results, 0, LV_ANIM_OFF);
     shown = pending;
@@ -597,11 +634,18 @@ static void search_draw(void) {
             char name[256];
             if (kind == LIBRARY_SEARCH_ALBUM) library_album_title(hit->name, name, sizeof(name));
             else snprintf(name, sizeof(name), "%s", hit->name);
-            lv_obj_t *row=button(search_results, name, cfg->screen_width - 2 * PAD, hit->excerpt[0]?92:62, local_hit_cb, hit);
+            int rw=cfg->screen_width-2*PAD;
+            lv_obj_t *row=button(search_results,NULL,rw,hit->excerpt[0]?110:84,local_hit_cb,hit);
+            lv_obj_set_style_bg_opa(row,LV_OPA_TRANSP,0);
+            instant_images[i]=lv_image_create(row);lv_image_set_src(instant_images[i],kind==LIBRARY_SEARCH_ARTIST?&icon_artist:&icon_album);
+            lv_obj_set_size(instant_images[i],58,58);lv_obj_set_pos(instant_images[i],2,8);
+            lv_image_set_inner_align(instant_images[i],LV_IMAGE_ALIGN_CONTAIN);
+            if(shown.artwork[i][0]) coverloader_request(COVERLOADER_INSTANT_BASE+i,shown.artwork[i],58);
+            lv_obj_t *title=label(row,name,&font_ui_22,rw-88,false);lv_obj_set_pos(title,76,8);lv_obj_set_height(title,30);
+            char subtitle[300];snprintf(subtitle,sizeof(subtitle),"%s%s%s",(const char *[]){"Song","Album","Artist","Playlist","Lyrics"}[kind],shown.artist[i][0]?" \xc2\xb7 ":"",shown.artist[i]);
+            lv_obj_t *sub=label(row,subtitle,&font_ui_16,rw-88,true);lv_obj_set_pos(sub,76,42);lv_obj_set_height(sub,24);
             if(hit->excerpt[0]) {
-                lv_obj_align(lv_obj_get_child(row,0),LV_ALIGN_TOP_LEFT,14,7);
-                lv_obj_t *excerpt=label(row,hit->excerpt,&font_ui_16,cfg->screen_width-76,true);
-                lv_obj_set_height(excerpt,25);lv_obj_set_pos(excerpt,14,51);
+                lv_obj_t *excerpt=label(row,hit->excerpt,&font_ui_16,rw-88,true);lv_obj_set_pos(excerpt,76,72);lv_obj_set_height(excerpt,24);
             }
             lv_obj_add_event_cb(row,local_queue_cb,LV_EVENT_PRESSED,hit);
             lv_obj_add_event_cb(row,local_queue_cb,LV_EVENT_PRESSING,hit);
@@ -690,7 +734,10 @@ static void browse_tile(lv_obj_t *pair,const char *title,uint32_t color,const lv
     lv_obj_t *im=glyph(sleeve,icon,34);lv_obj_center(im);
     lv_obj_set_style_image_recolor(im,lv_color_white(),0);
 }
+static void search_clear_cb(lv_event_t *e) { (void)e;lv_textarea_set_text(search_field,""); }
+
 static void search_browse(void) {
+    search_art_drop();
     lv_obj_clean(search_results);
     browse_genre_count=0;
     library_for_each(LIBRARY_LIST_GENRES,LIBRARY_FILTER_NONE,NULL,browse_genre_row,NULL);
@@ -723,10 +770,16 @@ static void search_build(void) {
     lv_obj_add_style(search_field, &theme_style_card, 0);
     lv_obj_add_style(search_field, &theme_style_text, 0);
     lv_obj_set_style_text_font(search_field, &font_ui_20, 0);
-    lv_obj_set_style_bg_color(search_field,lv_color_white(),0);
-    lv_obj_set_style_text_color(search_field,lv_color_black(),0);
-    lv_obj_set_style_radius(search_field,6,0);
-    lv_obj_set_style_text_color(search_field,lv_color_hex(0x444444),LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_set_style_bg_color(search_field,lv_color_hex(0x292929),0);
+    lv_obj_set_style_text_color(search_field,lv_color_white(),0);
+    lv_obj_set_style_radius(search_field,28,0);
+    lv_obj_set_style_pad_left(search_field,48,0);lv_obj_set_style_pad_right(search_field,50,0);
+    lv_obj_set_style_text_color(search_field,lv_color_hex(0xb3b3b3),LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_t *mag=lv_image_create(p);lv_image_set_src(mag,&icon_search);lv_obj_set_size(mag,26,26);
+    lv_image_set_inner_align(mag,LV_IMAGE_ALIGN_CONTAIN);lv_obj_set_pos(mag,14,16);
+    lv_obj_t *clear=button(p,"",44,52,search_clear_cb,NULL);lv_obj_set_pos(clear,cfg->screen_width-2*PAD-46,3);
+    lv_obj_set_style_bg_opa(clear,0,0);lv_obj_t *x=lv_image_create(clear);lv_image_set_src(x,&icon_close);
+    lv_obj_set_size(x,24,24);lv_image_set_inner_align(x,LV_IMAGE_ALIGN_CONTAIN);lv_obj_center(x);
     keyboard_style_caret(search_field);
     lv_obj_add_event_cb(search_field, field_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(search_field, instant_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -917,6 +970,7 @@ static void mini_update(void) {
 
 static void poll_cb(lv_timer_t *timer) {
     (void)timer;
+    search_art_update();
     if (search_busy) {
         pthread_mutex_lock(&search_lock);
         bool ready = search_ready;

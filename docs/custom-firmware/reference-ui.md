@@ -1,5 +1,8 @@
 # Screenshot-based UI update
 
+The subsequent [sliding-panel update](sliding-panels.md) supersedes the earlier
+heart control, full-page queue/menu, and artist browsing descriptions below.
+
 The four supplied mobile screenshots guided this native 480 × 800 LVGL update.
 Colors follow local artwork and the content comes from the indexed card.
 

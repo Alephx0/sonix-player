@@ -18,7 +18,7 @@
 #define SIZE_WINDOW 1024   // sample sizes cached at a time
 #define MAX_SMALL_BOX (4 * 1024 * 1024)
 #define MAX_DEPTH 12
-#define MAX_FREEFORM 8
+#define MAX_FREEFORM 16
 
 struct chunk_run {
 	uint32_t first_chunk; // 1-based, as the file writes it
@@ -103,6 +103,7 @@ struct mp4_file {
 	char album[256];
 	char genre[128];
 	int year;
+    char date[11];
 	int track_number;
 	int disc_number;
 	char series[256];	  // ----:SERIES, else the movement name
@@ -711,6 +712,7 @@ static void parse_ilst(mp4_file_t *m, const box_t *ilst) {
 			char buf[32];
 			copy_text(buf, sizeof(buf), value, value_len);
 			m->year = atoi(buf);
+            snprintf(m->date,sizeof(m->date),"%.10s",buf);
 			break;
 		}
 		case FOURCC('t', 'r', 'k', 'n'):
@@ -1602,6 +1604,7 @@ const char *mp4_tag_album_artist(const mp4_file_t *m) { return m ? m->album_arti
 bool mp4_tag_compilation(const mp4_file_t *m) { return m && m->compilation; }
 const char *mp4_tag_album(const mp4_file_t *m) { return m ? m->album : ""; }
 const char *mp4_tag_genre(const mp4_file_t *m) { return m ? m->genre : ""; }
+const char *mp4_tag_date(const mp4_file_t *m) { return m?m->date:""; }
 int mp4_tag_year(const mp4_file_t *m) { return m ? m->year : 0; }
 
 const char *mp4_tag_series(const mp4_file_t *m) { return m ? m->series : ""; }

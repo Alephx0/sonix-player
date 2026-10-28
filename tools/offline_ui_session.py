@@ -13,6 +13,7 @@ p=argparse.ArgumentParser()
 p.add_argument('repo',type=Path)
 p.add_argument('action',choices=['start','click','drag','shot','stop'])
 p.add_argument('args',nargs='*')
+p.add_argument('--card',type=Path,help='Optional isolated fixture card')
 a=p.parse_args()
 repo=a.repo.resolve();out=repo/'artifacts/offline-ui';out.mkdir(parents=True,exist_ok=True)
 state_file=out/'session.json'
@@ -29,7 +30,7 @@ if a.action=='start':
     if layout not in range(4):raise SystemExit('Layout must be 0, 1, 2 or 3')
     config=out/'device_config.ini'
     config.write_text(f'[ui]\nlanguage=English\ntheme=dark\n[clock]\nconfigured=1\n[power]\nscreen_off_seconds=0\nstandby_mem=0\n[screen]\nplayer_layout_alt={layout}\n[player]\nremember_track=1\n')
-    env=dict(os.environ,DISPLAY='localhost:'+display,XAUTHORITY=str(auth),SONIX_PANEL='480x800',SONIX_SD_ROOT=str(repo/'artifacts/offline-fixture/sd'),SONIX_CONFIG=str(config),SONIX_EBOOK_CONFIG=str(out/'ebook.ini'),SONIX_NO_MOUNT='1',SONIX_NO_SYSSERVER='1',SDL_VIDEODRIVER='x11',SDL_RENDER_DRIVER='software')
+    env=dict(os.environ,DISPLAY='localhost:'+display,XAUTHORITY=str(auth),SONIX_PANEL='480x800',SONIX_SD_ROOT=str(a.card.resolve() if a.card else repo/'artifacts/offline-fixture/sd'),SONIX_CONFIG=str(config),SONIX_EBOOK_CONFIG=str(out/'ebook.ini'),SONIX_NO_MOUNT='1',SONIX_NO_SYSSERVER='1',SDL_VIDEODRIVER='x11',SDL_RENDER_DRIVER='software')
     alsa=out/'alsa.conf';alsa.write_text('pcm.!default { type pulse }\nctl.!default { type pulse }\n')
     env['ALSA_CONFIG_PATH']=str(alsa)
     app=subprocess.Popen([str(repo/'sonix-player/sonix_player_host')],cwd=repo/'sonix-player',env=env,stdin=subprocess.DEVNULL,stdout=(out/'simulator.log').open('w'),stderr=subprocess.STDOUT,start_new_session=True)

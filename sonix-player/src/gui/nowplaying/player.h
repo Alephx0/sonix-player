@@ -161,4 +161,5 @@ void player_set_statusbar_always(bool on);
 bool player_statusbar_always(void);
 
 
+void player_refresh_membership(void);
 #endif

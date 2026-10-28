@@ -56,14 +56,21 @@ static void instant_refresh(void);
 #define FORMAT_APE 9
 
 static const char *const SCHEMA[] = {
-	"CREATE TABLE IF NOT EXISTS MEDIA_TABLE(id INT,path TEXT COLLATE NOCASE,name TEXT COLLATE NOCASE,"
+	"CREATE TABLE IF NOT EXISTS RELEASE_META(path TEXT COLLATE NOCASE PRIMARY KEY,date TEXT,type TEXT,owner TEXT)",
+    "CREATE TABLE IF NOT EXISTS RELEASE_CREDIT(path TEXT COLLATE NOCASE,name TEXT COLLATE NOCASE,mbid TEXT,role INT)",
+    "CREATE INDEX IF NOT EXISTS release_credit_name ON RELEASE_CREDIT(name,role,path)",
+    "CREATE INDEX IF NOT EXISTS release_credit_path ON RELEASE_CREDIT(path)",
+    "CREATE TABLE IF NOT EXISTS MEDIA_TABLE(id INT,path TEXT COLLATE NOCASE,name TEXT COLLATE NOCASE,"
 	"album TEXT COLLATE NOCASE,artist TEXT COLLATE NOCASE,genre TEXT COLLATE NOCASE,year INT,dis_id INT,ck_id INT,"
 	"has_child_file INT,begin_time INT,end_time INT,cue_id INT,character TEXT COLLATE NOCASE,size INT,"
 	"sample_rate INT,bit_rate INT,bit INT,channel INT,format INT,quality TEXT COLLATE NOCASE,"
 	"album_pic_path TEXT COLLATE NOCASE,lrc_path TEXT COLLATE NOCASE,track_gain REAL,track_peak REAL,"
 	"album_artist TEXT COLLATE NOCASE,ctime INT,mtime INT,sortkey TEXT,disc INT,PRIMARY KEY(id, path, cue_id))",
 
-	"CREATE TABLE IF NOT EXISTS ALBUM_TABLE(id INT, album TEXT COLLATE NOCASE,character TEXT COLLATE NOCASE,"
+	"CREATE TRIGGER IF NOT EXISTS release_meta_delete AFTER DELETE ON MEDIA_TABLE "
+    "WHEN NOT EXISTS(SELECT 1 FROM MEDIA_TABLE WHERE path=old.path) BEGIN "
+    "DELETE FROM RELEASE_META WHERE path=old.path;DELETE FROM RELEASE_CREDIT WHERE path=old.path;END",
+    "CREATE TABLE IF NOT EXISTS ALBUM_TABLE(id INT, album TEXT COLLATE NOCASE,character TEXT COLLATE NOCASE,"
 	" cn INT, sortkey TEXT, PRIMARY KEY(album))",
 
 	// The albums as this player lists them: one row per name AND per whose it
@@ -4222,6 +4229,52 @@ static void lookup_names(sqlite3_stmt *lookup, sqlite3_stmt *link, const char *p
 	}
 }
 
+static int credit_split(const char *value,char out[][256],int cap) {
+    int count=0;const char *p=value;
+    while(p && *p && count<cap) {
+        const char *end=strchr(p,';');size_t n=end?(size_t)(end-p):strlen(p);
+        while(n && isspace((unsigned char)p[n-1])) n--;
+        while(n && isspace((unsigned char)*p)) {p++;n--;}
+        if(n && n<256) {memcpy(out[count],p,n);out[count++][n]=0;}
+        p=end?end+1:NULL;
+    }
+    return count;
+}
+static void release_store(const char *path,const song_metadata_t *m) {
+    sqlite3_stmt *st=NULL;
+    if(sqlite3_prepare_v2(db,"INSERT OR REPLACE INTO RELEASE_META VALUES(?1,?2,?3,?4)",-1,&st,NULL)==SQLITE_OK) {
+        char date[11];snprintf(date,sizeof(date),"%04d",m->year>0&&m->year<10000?m->year:0);
+        /* ISO dates sort lexically; partial years remain before dated releases in that year. */
+        if(m->release_date[0]) snprintf(date,sizeof(date),"%s",m->release_date);
+        sqlite3_bind_text(st,1,path,-1,SQLITE_TRANSIENT);sqlite3_bind_text(st,2,date,-1,SQLITE_TRANSIENT);
+        sqlite3_bind_text(st,3,m->release_type,-1,SQLITE_TRANSIENT);sqlite3_bind_text(st,4,m->album_artist,-1,SQLITE_TRANSIENT);
+        sqlite3_step(st);sqlite3_finalize(st);
+    }
+    if(sqlite3_prepare_v2(db,"DELETE FROM RELEASE_CREDIT WHERE path=?1",-1,&st,NULL)==SQLITE_OK) {
+        sqlite3_bind_text(st,1,path,-1,SQLITE_TRANSIENT);sqlite3_step(st);sqlite3_finalize(st);
+    }
+    char names[16][256],ids[16][256],owners[16][256],ownerids[16][256];
+    int nn=credit_split(m->artists[0]?m->artists:m->artist,names,16), ni=credit_split(m->artist_ids,ids,16);
+    int no=credit_split(m->album_artist,owners,16), noi=credit_split(m->album_artist_ids,ownerids,16);
+    if(sqlite3_prepare_v2(db,"INSERT INTO RELEASE_CREDIT VALUES(?1,?2,?3,?4)",-1,&st,NULL)!=SQLITE_OK) return;
+    for(int group=0;group<2;group++) for(int i=0;i<(group?no:nn);i++) {
+        const char *name=group?owners[i]:names[i];const char *id=group?(noi==no?ownerids[i]:""):(ni==nn?ids[i]:"");
+        int role=group?1:0;
+        if(!group) {
+            for(int j=0;j<no;j++) {
+                bool match=id[0] && noi==no ? !strcasecmp(id,ownerids[j]) : !strcasecmp(name,owners[j]);
+                if(match) role=1;
+            }
+            if(!role && no && (m->artists[0] || (ni==nn && noi==no && noi))) role=3;
+            /* Without ALBUMARTIST, only an unambiguous single performer owns the release. */
+            if(!no && nn==1) role=1;
+        }
+        sqlite3_reset(st);sqlite3_clear_bindings(st);
+        sqlite3_bind_text(st,1,path,-1,SQLITE_TRANSIENT);sqlite3_bind_text(st,2,name,-1,SQLITE_TRANSIENT);
+        sqlite3_bind_text(st,3,id,-1,SQLITE_TRANSIENT);sqlite3_bind_int(st,4,role);sqlite3_step(st);
+    }
+    sqlite3_finalize(st);
+}
 static void insert_track(const char *path, const char *filename, const song_metadata_t *tags, const struct stat *st) {
 	if (!stmt_track) {
 		return;
@@ -4294,8 +4347,9 @@ static void insert_track(const char *path, const char *filename, const song_meta
 	}
 	sqlite3_reset(stmt_track);
 
+	release_store(path,tags);
 	run_lookup(stmt_album, tags->album);
-	lookup_names(stmt_artist, stmt_artist_link, path, tags->artist, rules.artist_separators, rules.exceptions,
+	lookup_names(stmt_artist, stmt_artist_link, path, tags->artists[0]?tags->artists:tags->artist, tags->artists[0]?LIBRARY_SPLIT_SEMICOLON:rules.artist_separators, rules.exceptions,
 				 rules.exception_count);
 	lookup_names(stmt_genre, stmt_genre_link, path, tags->genre, rules.genre_separators, NULL, 0);
 	lookup_names(stmt_album_artist, stmt_album_artist_link, path, album_artist, rules.album_artist_separators,
@@ -5926,7 +5980,7 @@ static void update_retagged(walk_t *w) {
 		int n = 0;
 		pthread_mutex_lock(&db_lock);
 		sqlite3_stmt *stmt = NULL;
-		if (db && sqlite3_prepare_v2(db, "SELECT rowid, path, mtime FROM MEDIA_TABLE WHERE rowid > ?1 ORDER BY rowid LIMIT ?2",
+		if (db && sqlite3_prepare_v2(db, "SELECT rowid, path, CASE WHEN EXISTS(SELECT 1 FROM RELEASE_META r WHERE r.path=MEDIA_TABLE.path) THEN mtime ELSE -1 END FROM MEDIA_TABLE WHERE rowid > ?1 ORDER BY rowid LIMIT ?2",
 									 -1, &stmt, NULL) == SQLITE_OK) {
 			sqlite3_bind_int64(stmt, 1, after);
 			sqlite3_bind_int(stmt, 2, RETAG_SLICE);
@@ -8310,4 +8364,30 @@ void library_search_refresh_lyrics(void) {
         }
         pthread_mutex_unlock(&db_lock);free(text);
     }
+}
+
+int library_discography(const char *artist,int category,int offset,int count,library_release_t *out) {
+    if(!artist || !out || offset<0 || count<1) return 0;
+    const char *sql=
+        "WITH releases AS (SELECT m.album || char(31) || m.album_key AS value,m.album,"
+        " COALESCE(NULLIF(r.owner,''),m.album_artist,m.artist) AS owner,MIN(m.path) AS path,"
+        " MAX(r.date) AS date,MAX(r.type) AS type,"
+        " CASE WHEN MAX(c.role=1)=0 THEN 3 "
+        " WHEN MAX(lower(r.type)='single' OR lower(r.type)='ep' OR lower(r.type) LIKE 'single;%' OR lower(r.type) LIKE 'ep;%') THEN 2 ELSE 1 END AS category"
+        " FROM RELEASE_CREDIT c JOIN MEDIA_TABLE m ON m.path=c.path JOIN RELEASE_META r ON r.path=m.path"
+        " WHERE c.name=?1 COLLATE NOCASE AND c.role IN (1,3) AND m.album<>'' GROUP BY m.album,m.album_key)"
+        " SELECT * FROM releases WHERE ?2=0 OR category=?2 ORDER BY category,date DESC,album COLLATE NOCASE LIMIT ?3 OFFSET ?4";
+    int n=0;pthread_mutex_lock(&db_lock);sqlite3_stmt *st=NULL;
+    if(db && sqlite3_prepare_v2(db,sql,-1,&st,NULL)==SQLITE_OK) {
+        sqlite3_bind_text(st,1,artist,-1,SQLITE_TRANSIENT);sqlite3_bind_int(st,2,category);sqlite3_bind_int(st,3,count);sqlite3_bind_int(st,4,offset);
+        while(n<count && sqlite3_step(st)==SQLITE_ROW) {
+            library_release_t *r=&out[n++];memset(r,0,sizeof(*r));
+            char *fields[]={r->value,r->title,r->artist,r->path,r->date,r->type};
+            size_t sizes[]={sizeof(r->value),sizeof(r->title),sizeof(r->artist),sizeof(r->path),sizeof(r->date),sizeof(r->type)};
+            for(int i=0;i<6;i++) {const char *v=(const char *)sqlite3_column_text(st,i);snprintf(fields[i],sizes[i],"%s",v?v:"");}
+            r->category=sqlite3_column_int(st,6);
+        }
+        sqlite3_finalize(st);
+    }
+    pthread_mutex_unlock(&db_lock);return n;
 }

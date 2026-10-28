@@ -1,3 +1,6 @@
+#include "src/gui/nowplaying/coverloader.h"
+#include "src/system/core/config.h"
+#include "src/gui/shell/bottomsheet.h"
 #include "trackmenu.h"
 
 #include <stdint.h>
@@ -39,6 +42,8 @@
 #include "lvgl/src/core/lv_obj_scroll_private.h"
 
 lv_obj_t *queue_screen;
+static lv_obj_t *queue_sheet;
+static int queue_original_height;
 lv_obj_t *details_screen;
 
 // The queue is windowed like every other long list here: a fixed pool of row
@@ -370,6 +375,7 @@ static queue_row_t *queue_row_of(lv_obj_t *button) {
 }
 
 static void queue_row_drop_thumb(queue_row_t *row) {
+    coverloader_release(COVERLOADER_QUEUE_BASE+(int)(row-queue_rows));
 	if (row->has_thumb) {
 		// The widget must stop pointing at the pixels before they go.
 		lv_image_set_src(row->icon, &icon_music2);
@@ -393,6 +399,7 @@ static void queue_row_paint_mark(queue_row_t *row) {
 		return;
 	}
 	bool is_playing_row = row->index >= 0 && row->index == playlist_current_index();
+    if(queue_sheet && row->has_thumb) {lv_image_set_src(row->icon,&row->thumb.dsc);lv_obj_set_style_image_recolor_opa(row->icon,0,0);return;}
 	lv_image_set_src(row->icon, is_playing_row ? &icon_now_playing : &icon_music2);
 	lv_obj_add_style(row->icon, &theme_style_icon, 0);
 	if (is_playing_row) {
@@ -447,6 +454,7 @@ static void queue_row_bind(queue_row_t *row, int vindex) {
 		lv_obj_set_hidden(row->button, false);
 		lv_obj_set_y(row->button, queue_vrow_y(vindex));
 		lv_label_set_text(row->label, title);
+    if(queue_sheet) coverloader_request(COVERLOADER_QUEUE_BASE+(int)(row-queue_rows),path,QUEUE_THUMB_SIZE);
 	lv_obj_set_hidden(row->priority_mark, row->index < 0 || !playlist_is_priority(row->index));
 		queue_row_paint_mark(row);
 		queue_row_paint_tools(row);
@@ -479,6 +487,7 @@ static void queue_row_bind(queue_row_t *row, int vindex) {
 	lv_obj_set_hidden(row->button, false);
 	lv_obj_set_y(row->button, queue_row_y(index));
 	lv_label_set_text(row->label, title);
+    if(queue_sheet) coverloader_request(COVERLOADER_QUEUE_BASE+(int)(row-queue_rows),path,QUEUE_THUMB_SIZE);
 	lv_obj_set_hidden(row->priority_mark, row->index < 0 || !playlist_is_priority(row->index));
 
 	queue_row_paint_mark(row);
@@ -794,7 +803,7 @@ static void queue_scroll_cb(lv_event_t *e) {
 static void queue_drag_end(bool drop);
 
 void trackmenu_notify_now_playing(void) {
-	if (!queue_list || lv_screen_active() != queue_screen) {
+	if (!queue_list || (lv_screen_active() != queue_screen && !queue_sheet)) {
 		for (int i = 0; i < QUEUE_ROW_POOL; i++) {
 			queue_row_paint_mark(&queue_rows[i]);
 		}
@@ -1252,7 +1261,8 @@ static void queue_row_clicked_cb(lv_event_t *e) {
 	}
 	if (device_state_play_queue_index(index)) {
 		player_refresh_now_playing();
-		switch_screen(player_screen);
+        if(queue_sheet) queue_rebuild();
+        else switch_screen(player_screen);
 	}
 }
 
@@ -1786,10 +1796,48 @@ static void open_queue_cb(void *user) {
 // The same page without going through the menu: the player calls this when a
 // podcast is playing, where the overflow button becomes the episodes button --
 // and a podcast's episodes are exactly the queue.
+static void queue_art_tick(lv_timer_t *t) {
+    (void)t;if(!queue_sheet)return;
+    for(int i=0;i<QUEUE_ROW_POOL;i++) if(queue_rows[i].vindex>=0 && !queue_rows[i].has_thumb) {
+        bool done=false;if(coverloader_take(COVERLOADER_QUEUE_BASE+i,&queue_rows[i].thumb,&done)) {
+            queue_rows[i].has_thumb=true;queue_row_paint_mark(&queue_rows[i]);
+        }
+    }
+}
+static void queue_sheet_cleanup(void) {
+    queue_unloaded_cb(NULL);
+    if(queue_sheet) {
+        while(lv_obj_get_child_count(queue_sheet)) {
+            lv_obj_t *child=lv_obj_get_child(queue_sheet,0);
+            if(child!=queue_drag_layer) lv_obj_set_y(child,lv_obj_get_style_y(child,0)+64);
+            lv_obj_set_parent(child,queue_screen);
+        }
+        for(int i=0;i<QUEUE_ROW_POOL;i++) {
+            queue_row_drop_thumb(&queue_rows[i]);lv_obj_set_style_bg_opa(queue_rows[i].button,255,0);
+            lv_obj_set_style_text_font(queue_rows[i].label,&font_ui_24,0);
+        }
+        lv_obj_set_height(queue_list,queue_original_height);queue_view_h=queue_original_height;
+        queue_sheet=NULL;
+    }
+}
 void trackmenu_open_queue(void) {
-	player_sheet_close(false);
-	switch_screen(queue_screen);
-	switcher_set_player_return(queue_screen);
+    if(config_get_int("screen","player_layout_alt",3)==3) {
+        if(queue_sheet) return;
+        queue_sheet=bottomsheet_open(lv_display_get_vertical_resolution(NULL)-48,queue_sheet_cleanup);
+        queue_original_height=lv_obj_get_height(queue_list);
+        while(lv_obj_get_child_count(queue_screen)) {
+            lv_obj_t *child=lv_obj_get_child(queue_screen,0);lv_obj_set_parent(child,queue_sheet);
+            if(child!=queue_drag_layer) lv_obj_set_y(child,lv_obj_get_style_y(child,0)-64);
+        }
+        static lv_timer_t *art_timer; if(!art_timer) art_timer=lv_timer_create(queue_art_tick,100,NULL);
+        for(int i=0;i<QUEUE_ROW_POOL;i++) {lv_obj_set_style_bg_opa(queue_rows[i].button,0,0);lv_obj_set_style_text_font(queue_rows[i].label,&font_ui_22,0);}
+        queue_view_h=queue_original_height-20;lv_obj_set_height(queue_list,queue_view_h);
+        queue_rebuild();
+        return;
+    }
+    player_sheet_close(false);
+    switch_screen(queue_screen);
+    switcher_set_player_return(queue_screen);
 }
 
 static void open_details_cb(void *user) {

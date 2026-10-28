@@ -1,3 +1,4 @@
+#include "src/gui/shell/bottomsheet.h"
 #include "player.h"
 
 #include <pthread.h>
@@ -325,11 +326,10 @@ static bool layout_alt_now;		// and whether the current source can use it
 static bool layout_studio_now;	// likewise for the third arrangement
 static bool layout_sonix_now;
 static lv_obj_t *sonix_cover_empty, *sonix_heading;
-static lv_obj_t *sonix_actions, *sonix_repeat_btn, *sonix_repeat_icon;
+static lv_obj_t *sonix_actions, *sonix_repeat_btn, *sonix_repeat_icon, *sonix_save_icon;
 static lv_obj_t *sonix_inline, *sonix_inline_lines[3];
 static lv_obj_t *sonix_modal, *sonix_background, *sonix_lyrics_card, *sonix_lyrics_hint;
 static void sonix_tint(void);
-static void sonix_modal_close(void);
 static bool sonix_expanded, sonix_inline_visible;
 static bool sonix_layout_active;
 static int sonix_inline_line = -2;
@@ -3609,7 +3609,6 @@ static void update_qobuz_badge(void);
 // device state and resets the per-track length cache. Used both when the user
 // picks a file and when playback auto-advances to a new track.
 static void refresh_now_playing(void) {
-    sonix_modal_close();
 	current_total_length = 0; // unknown until the playback thread reports it
 
 	// The library lists carry an accent mark on the playing track (and on the
@@ -3851,7 +3850,7 @@ static void update_fav_button(void) {
 		// database while the drawing looked up a different one.
 		device_state_t state;
 		device_state_get(&state);
-		starred = state.current_file[0] && library_fav_contains(state.current_file);
+		starred = state.current_file[0] && (layout_sonix_now ? collectionview_track_saved(state.current_file) : library_fav_contains(state.current_file));
 	}
 
 	// The star's colour is decided here and nowhere else. This function runs
@@ -3863,14 +3862,19 @@ static void update_fav_button(void) {
 	// player and is what says "favourite" rather than "here is the album's
 	// colour again".
 	if (starred) {
-		lv_image_set_src(fav_btn_icon, layout_sonix_now ? &icon_heart : &icon_star_filled);
+		lv_image_set_src(fav_btn_icon, layout_sonix_now ? &icon_circle_check : &icon_star_filled);
 		lv_obj_set_style_image_recolor(fav_btn_icon, layout_sonix_now ? lv_color_hex(0x1ed760) : lv_color_make(246, 211, 45), 0); // Adwaita yellow
 	} else {
-		lv_image_set_src(fav_btn_icon, layout_sonix_now ? &sonix_icon_heart : &icon_star);
+		lv_image_set_src(fav_btn_icon, layout_sonix_now ? &icon_plus : &icon_star);
 		lv_obj_set_style_image_recolor(fav_btn_icon, layout_alt_now ? alt_ink() : lv_color_make(150, 150, 150), 0);
 	}
 	lv_obj_set_style_image_recolor_opa(fav_btn_icon, LV_OPA_COVER, 0);
     if(layout_sonix_now) {lv_obj_set_size(fav_btn_icon,30,30);lv_image_set_inner_align(fav_btn_icon,LV_IMAGE_ALIGN_CONTAIN);}
+    if(layout_sonix_now && sonix_save_icon) {
+        lv_image_set_src(sonix_save_icon,starred?&icon_circle_check:&icon_plus);
+        lv_obj_set_style_image_recolor(sonix_save_icon,lv_color_hex(starred?0x1ed760:0xffffff),0);
+        lv_obj_set_style_image_recolor_opa(sonix_save_icon,255,0);
+    }
 }
 
 // The outcome of a Qobuz star, from the qobuzsync worker. Success says
@@ -3951,6 +3955,7 @@ static void fav_btn_event_cb(lv_event_t *e) {
 		return;
 	}
 
+	if(layout_sonix_now) { collectionview_manage_track(state.current_file); return; }
 	const char *title = state.metadata.title[0] ? state.metadata.title : strrchr(state.current_file, '/') + 1;
 	// No notification popup: the star filling in is the whole feedback.
 	library_fav_toggle(state.current_file, title, state.metadata.artist);
@@ -4606,26 +4611,24 @@ enum { SONIX_QUEUE, SONIX_ADD_QUEUE, SONIX_ALBUM, SONIX_ARTISTS, SONIX_PLAYLIST,
 static char sonix_menu_path[512], sonix_artist_names[16][256];
 static int sonix_artist_count;
 static cover_image_t sonix_menu_cover;
+static device_state_t sonix_menu_state;
 
-static void sonix_modal_close(void) {
-    if (sonix_modal) {
-        lv_obj_delete(sonix_modal);
-        sonix_modal = NULL;
-    }
-    cover_free(&sonix_menu_cover);
-}
+static void sonix_modal_cleanup(void) { sonix_modal=NULL; cover_free(&sonix_menu_cover); }
 
-static void sonix_album_open(void) {
-    device_state_t state;
-    device_state_get(&state);
-    char album[256];
-    if (!state.current_file[0] || !library_track_album_value(state.current_file, album, sizeof(album)) || !album[0]) {
+static void sonix_album_open_path(const char *path) {
+    char album[256],title[256];
+    if (!path[0] || !library_track_album_value(path, album, sizeof(album)) || !album[0]) {
         gui_notify_popup("This track has no indexed local album.");
         return;
     }
     player_sheet_close(false);
-    medialist_open(state.metadata.album[0] ? state.metadata.album : album, LIBRARY_LIST_TRACKS, LIBRARY_FILTER_ALBUM, album);
+    library_album_title(album,title,sizeof(title));
+    medialist_open(title, LIBRARY_LIST_TRACKS, LIBRARY_FILTER_ALBUM, album);
     if (!medialist_step_back_to_player()) switcher_set_player_return(medialist_tracks_screen);
+}
+
+static void sonix_album_open(void) {
+    device_state_t state;device_state_get(&state);sonix_album_open_path(state.current_file);
 }
 
 static void sonix_action_cb(lv_event_t *e) {
@@ -4637,7 +4640,7 @@ static void sonix_action_cb(lv_event_t *e) {
     char artist[256] = "";
     if (action >= SONIX_ARTIST_BASE && action < SONIX_ARTIST_BASE + sonix_artist_count)
         snprintf(artist, sizeof(artist), "%s", sonix_artist_names[action - SONIX_ARTIST_BASE]);
-    sonix_modal_close();
+    if(action!=SONIX_PLAYLIST && action!=SONIX_ARTISTS && action!=SONIX_QUEUE && action!=SONIX_FOLLOW && action!=SONIX_SAVE_ALBUM) bottomsheet_close(true);
     switch (action) {
     case SONIX_LIKE:
         if(path[0]) library_fav_toggle(path,state.metadata.title,state.metadata.artist);
@@ -4658,7 +4661,7 @@ static void sonix_action_cb(lv_event_t *e) {
         if (path[0] && playlist_priority_add(path)) {device_state_queue_changed();toast_glyph(&icon_list_music, "added_to_the_queue");}
         else gui_notify_popup("Could not add this track to the queue.");
         break;
-    case SONIX_ALBUM: sonix_album_open(); break;
+    case SONIX_ALBUM: sonix_album_open_path(path); break;
     case SONIX_ARTISTS: sonix_artist_follow = false; sonix_artist_open(); break;
     case SONIX_PLAYLIST:
         if (path[0]) collectionview_manage_track(path);
@@ -4688,7 +4691,7 @@ static void sonix_action_cb(lv_event_t *e) {
         } else if (artist[0]) {
             player_sheet_close(false);
             medialist_open_artist(artist);
-            switcher_set_player_return(medialist_album_view() ? medialist_albums_screen : medialist_tracks_screen);
+            switcher_set_player_return(lv_screen_active());
         }
         break;
     }
@@ -4712,41 +4715,32 @@ static lv_obj_t *sonix_text_button(lv_obj_t *parent, const char *text, int width
     return button;
 }
 
-static void sonix_dismiss_cb(lv_event_t *e) {
-    if (lv_event_get_target(e) == sonix_modal) sonix_modal_close();
+static lv_obj_t *sonix_sheet_create(const char *title, int rows, const device_state_t *snapshot) {
+    device_state_t state=*snapshot;sonix_menu_state=state;
+    snprintf(sonix_menu_path,sizeof(sonix_menu_path),"%s",state.current_file);
+    int w=lv_obj_get_width(player_screen), h=lv_obj_get_height(player_screen);
+    sonix_modal=bottomsheet_open(LV_MIN(h-60,132+rows*56),sonix_modal_cleanup);
+    lv_obj_t *content=lv_obj_create(sonix_modal);lv_obj_remove_style_all(content);
+    lv_obj_set_size(content,w-32,lv_obj_get_height(sonix_modal));lv_obj_set_pos(content,16,0);
+    lv_obj_set_flex_flow(content,LV_FLEX_FLOW_COLUMN);lv_obj_set_scroll_dir(content,LV_DIR_VER);
+    lv_obj_set_style_pad_row(content,4,0);
+    if(title && *title) { lv_obj_t *l=lv_label_create(content);lv_label_set_text(l,title);
+        lv_obj_set_style_text_font(l,&font_ui_24_bold,0);lv_obj_set_style_text_color(l,lv_color_white(),0); }
+    return content;
 }
-
-static lv_obj_t *sonix_sheet_create(const char *title, int rows) {
-    sonix_modal_close();
-    device_state_t state;
-    device_state_get(&state);
-    snprintf(sonix_menu_path, sizeof(sonix_menu_path), "%s", state.current_file);
-    int width = lv_obj_get_width(player_screen), height = lv_obj_get_height(player_screen);
-    sonix_modal = lv_obj_create(lv_layer_top());
-    lv_obj_remove_style_all(sonix_modal);
-    lv_obj_set_size(sonix_modal, width, height);
-    lv_obj_set_style_bg_color(sonix_modal, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(sonix_modal, LV_OPA_50, 0);
-    lv_obj_set_clickable(sonix_modal, true);
-    lv_obj_add_event_cb(sonix_modal, sonix_dismiss_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *sheet = lv_obj_create(sonix_modal);
-    lv_obj_add_style(sheet, &theme_style_panel, 0);
-    lv_obj_set_size(sheet, width, LV_MIN(height - 80, 76 + rows * 54));
-    lv_obj_align(sheet, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_border_width(sheet, 0, 0);
-    lv_obj_set_style_radius(sheet, 20, 0);
-    lv_obj_set_style_pad_all(sheet, 16, 0);
-    lv_obj_set_style_pad_row(sheet, 0, 0);
-    lv_obj_set_flex_flow(sheet, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_scroll_dir(sheet, LV_DIR_VER);
-    lv_obj_t *heading = lv_label_create(sheet);
-    lv_label_set_text(heading, title);
-    lv_obj_add_style(heading, &theme_style_text, 0);
-    lv_obj_set_style_text_font(heading, &font_ui_26, 0);
-    lv_obj_set_width(heading, width - 32);
-    lv_label_set_long_mode(heading, LV_LABEL_LONG_DOT);
-    lv_obj_set_height(heading, 44);
-    return sheet;
+static void sonix_song_header(lv_obj_t *body, const device_state_t *state) {
+    int w=lv_obj_get_width(player_screen)-40;
+    lv_obj_t *row=sonix_text_button(body,"",w,86,SONIX_ALBUM);
+    lv_obj_t *im=lv_image_create(row);lv_obj_set_size(im,64,64);lv_obj_set_pos(im,0,0);
+    device_state_t current;device_state_get(&current);
+    uint64_t id; bool copied=!strcmp(current.current_file,state->current_file) && player_cover_copy(64,&sonix_menu_cover,&id);
+    lv_image_set_src(im,copied?&sonix_menu_cover.dsc:&icon_album);lv_image_set_inner_align(im,LV_IMAGE_ALIGN_CONTAIN);
+    lv_obj_t *l=lv_label_create(row);lv_label_set_text(l,state->metadata.title);lv_obj_set_pos(l,78,0);
+    lv_obj_set_width(l,w-110);lv_label_set_long_mode(l,LV_LABEL_LONG_DOT);lv_obj_set_height(l,30);
+    lv_obj_set_style_text_font(l,&font_ui_22_bold,0);lv_obj_set_style_text_color(l,lv_color_white(),0);
+    l=lv_label_create(row);lv_label_set_text_fmt(l,"%s \xc2\xb7 %s",state->metadata.artist,state->metadata.album);
+    lv_obj_set_width(l,w-110);lv_label_set_long_mode(l,LV_LABEL_LONG_DOT);lv_obj_set_height(l,24);lv_obj_set_pos(l,78,34);
+    lv_obj_set_style_text_font(l,&font_ui_16,0);lv_obj_set_style_text_color(l,lv_color_hex(0xb3b3b3),0);
 }
 
 static void sonix_menu_row(lv_obj_t *parent,const char *title,const lv_image_dsc_t *icon,int action) {
@@ -4761,55 +4755,23 @@ static void sonix_menu_row(lv_obj_t *parent,const char *title,const lv_image_dsc
     lv_obj_set_style_image_recolor(im,lv_color_hex(0xb3b3b3),0);lv_obj_set_style_image_recolor_opa(im,LV_OPA_COVER,0);
 }
 static void sonix_options_open(void) {
-    sonix_modal_close();
     device_state_t state;device_state_get(&state);
-    snprintf(sonix_menu_path,sizeof(sonix_menu_path),"%s",state.current_file);
-    int w=lv_obj_get_width(player_screen),h=lv_obj_get_height(player_screen);
-    sonix_modal=lv_obj_create(lv_layer_top());lv_obj_remove_style_all(sonix_modal);
-    lv_obj_set_size(sonix_modal,w,h);lv_obj_set_style_bg_opa(sonix_modal,LV_OPA_COVER,0);
-    lv_obj_set_style_bg_color(sonix_modal,album_tone?lv_color_darken(lv_color_hex(album_tone),LV_OPA_60):lv_color_hex(0x252525),0);
-    lv_obj_set_style_bg_grad_color(sonix_modal,lv_color_hex(0x121212),0);
-    lv_obj_set_style_bg_grad_dir(sonix_modal,LV_GRAD_DIR_VER,0);
-    lv_obj_set_style_bg_grad_stop(sonix_modal,120,0);
-    lv_obj_set_scrollable(sonix_modal,false);
-    lv_obj_t *body=lv_obj_create(sonix_modal);lv_obj_remove_style_all(body);
-    lv_obj_set_size(body,w-40,h-70);lv_obj_set_pos(body,20,16);
-    lv_obj_set_flex_flow(body,LV_FLEX_FLOW_COLUMN);lv_obj_set_flex_align(body,LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(body,0,0);lv_obj_set_scroll_dir(body,LV_DIR_VER);
-    lv_obj_t *art=lv_image_create(body);lv_obj_set_size(art,104,104);
-    uint64_t cover_id;
-    bool copied=player_cover_copy(104,&sonix_menu_cover,&cover_id);
-    lv_image_set_src(art,copied?&sonix_menu_cover.dsc:&icon_album);
-    lv_image_set_inner_align(art,LV_IMAGE_ALIGN_CONTAIN);
-    lv_obj_set_style_margin_bottom(art,12,0);
-    lv_obj_t *title=lv_label_create(body);lv_label_set_text(title,state.metadata.title[0]?state.metadata.title:"Song options");
-    lv_obj_set_width(title,w-48);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(title,&font_ui_22_bold,0);lv_obj_set_style_text_color(title,lv_color_white(),0);
-    lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_CENTER,0);
-    title=lv_label_create(body);lv_label_set_text(title,state.metadata.artist);
-    lv_obj_set_width(title,w-48);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(title,&font_ui_16,0);lv_obj_set_style_text_color(title,lv_color_hex(0xb3b3b3),0);
-    lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_style_margin_bottom(title,16,0);
-    sonix_menu_row(body,library_fav_contains(state.current_file)?"Unlike":"Like",library_fav_contains(state.current_file)?&icon_heart:&sonix_icon_heart,SONIX_LIKE);
-    sonix_menu_row(body,"Add to playlist",&icon_list_plus,SONIX_PLAYLIST);
+    lv_obj_t *body=sonix_sheet_create("",9,&state);
+    sonix_song_header(body,&state);
+    sonix_menu_row(body,"Add to playlist",&icon_plus,SONIX_PLAYLIST);
     sonix_menu_row(body,"Add to queue",&icon_list_queue,SONIX_ADD_QUEUE);
-    sonix_menu_row(body,"View queue",&icon_list_music,SONIX_QUEUE);
+    sonix_menu_row(body,"Go to queue",&icon_list_music,SONIX_QUEUE);
     sonix_menu_row(body,"View album",&icon_album,SONIX_ALBUM);
-    sonix_menu_row(body,"View artist",&icon_artist,SONIX_ARTISTS);
-    sonix_menu_row(body,"Song information",&icon_music_note,SONIX_CREDITS);
-    sonix_menu_row(body,"Sleep timer",&icon_sleep_music_quick,SONIX_SLEEP);
-    sonix_menu_row(body,"Save album / Pin",&icon_album,SONIX_SAVE_ALBUM);
-    sonix_menu_row(body,"Follow artist / Pin",&icon_artist,SONIX_FOLLOW);
-    sonix_menu_row(body,config_get_bool("player","inline_lyrics",true)?"Lyric preview: On":"Lyric preview: Off",&icon_files_text,SONIX_INLINE);
+    sonix_menu_row(body,"View artists",&icon_artist,SONIX_ARTISTS);
+    sonix_menu_row(body,config_get_bool("player","inline_lyrics",true)?"Lyrics preview \xc2\xb7 On":"Lyrics preview \xc2\xb7 Off",&icon_files_text,SONIX_INLINE);
     sonix_menu_row(body,"Full lyrics",&icon_files_text,SONIX_LYRICS);
-    sonix_menu_row(body,"Reshuffle",&icon_shuffle,SONIX_RESHUFFLE);
-    lv_obj_t *close=sonix_text_button(sonix_modal,"Close",w,52,SONIX_CLOSE);
-    lv_obj_align(close,LV_ALIGN_BOTTOM_MID,0,-4);
+    sonix_menu_row(body,"Track information / File details",&icon_music_note,SONIX_CREDITS);
 }
 
 static void sonix_artist_open(void) {
     device_state_t state;
     device_state_get(&state);
+    if(sonix_modal) state=sonix_menu_state;
     sonix_artist_count = library_track_artists(state.current_file, sonix_artist_names, 16);
     if (!sonix_artist_count) {
         const char *name = state.metadata.artist[0] ? state.metadata.artist : state.metadata.album_artist;
@@ -4819,11 +4781,10 @@ static void sonix_artist_open(void) {
         }
     }
     if (!sonix_artist_count) { gui_notify_popup("No credited artist metadata for this track."); return; }
-    lv_obj_t *sheet = sonix_sheet_create(sonix_artist_follow ? "Follow an artist" : "Artists on this track", sonix_artist_count + 1);
-    int width = lv_obj_get_width(player_screen) - 32;
+    lv_obj_t *sheet = sonix_sheet_create(sonix_artist_follow ? "Follow an artist" : "Artists on this track", sonix_artist_count + 2,&state);
+    sonix_song_header(sheet,&state);
     for (int i = 0; i < sonix_artist_count; i++)
-        sonix_text_button(sheet, sonix_artist_names[i], width, 54, SONIX_ARTIST_BASE + i);
-    sonix_text_button(sheet, "Close", width, 54, SONIX_CLOSE);
+        sonix_menu_row(sheet,sonix_artist_names[i],&icon_artist,SONIX_ARTIST_BASE+i);
 }
 
 static void sonix_title_cb(lv_event_t *e) {
@@ -4991,9 +4952,14 @@ static void sonix_actions_build(void) {
     lv_obj_set_flex_flow(sonix_actions, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(sonix_actions, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scrollable(sonix_actions, false);
-    sonix_text_button(sonix_actions, "+ Save", 132, 40, SONIX_PLAYLIST);
-    sonix_text_button(sonix_actions, "Lyrics", 132, 40, SONIX_LYRICS);
-    sonix_text_button(sonix_actions, "Queue", 132, 40, SONIX_QUEUE);
+    const lv_image_dsc_t *glyphs[]={&icon_plus,&icon_files_text,&icon_list_music};
+    const int actions[]={SONIX_PLAYLIST,SONIX_LYRICS,SONIX_QUEUE};
+    for(int i=0;i<3;i++) {
+        lv_obj_t *b=sonix_text_button(sonix_actions,"",96,40,actions[i]);
+        lv_obj_t *im=lv_image_create(b);lv_image_set_src(im,glyphs[i]);lv_obj_set_size(im,28,28);
+        if(i==0) sonix_save_icon=im;
+        lv_image_set_inner_align(im,LV_IMAGE_ALIGN_CONTAIN);lv_obj_center(im);
+    }
     sonix_repeat_btn = lv_button_create(controls_row);
     lv_obj_remove_style_all(sonix_repeat_btn);
     lv_obj_set_size(sonix_repeat_btn, 56, 56);
@@ -6257,3 +6223,5 @@ void player_init(gui_config_t *cfg) {
 }
 
 
+
+void player_refresh_membership(void) { update_fav_button(); }

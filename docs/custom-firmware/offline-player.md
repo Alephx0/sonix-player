@@ -1,5 +1,8 @@
 # Offline player integration — 2026-10-28
 
+The subsequent [sliding-panel update](sliding-panels.md) supersedes the earlier
+heart control, full-page queue/menu, and artist browsing descriptions below.
+
 The native Sonix player now has independent priority/context queues, editable
 playlist membership, saved collections and incremental local lyric search.
 These are C/LVGL changes in the actual application, exercised in the SDL host

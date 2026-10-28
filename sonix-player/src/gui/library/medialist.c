@@ -1,3 +1,4 @@
+#include "discography.h"
 #include "medialist.h"
 #include "src/gui/shell/main_menu.h"
 
@@ -3146,6 +3147,7 @@ static void album_order_clicked_cb(lv_event_t *e) {
 }
 
 void medialist_open_artist(const char *name) {
+    if(reference_layout()) { discography_open(name);return; }
 	if (!name || !name[0]) {
 		return;
 	}

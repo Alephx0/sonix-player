@@ -805,4 +805,11 @@ int library_queue_load_extra(char ***paths_out, int **slots_out);
 int library_queue_load(char ***paths_out, int *index_out, bool *custom_out);
 void library_queue_free(char **paths, int count);
 
+/* Bounded, indexed local discography. category: 0 all, 1 albums/unknown,
+ * 2 explicit singles/EPs, 3 credited appearances outside the owned release. */
+typedef struct {
+    char value[300], title[256], artist[256], path[512], date[11], type[64];
+    int category;
+} library_release_t;
+int library_discography(const char *artist,int category,int offset,int count,library_release_t *out);
 #endif /* LIBRARY_H */
