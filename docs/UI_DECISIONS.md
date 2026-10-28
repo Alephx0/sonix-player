@@ -1,5 +1,32 @@
 # UI decisions and recurring corrections
 
+## 2026-10-28: artwork taps, playback preview and initial online flow
+
+The decorative artwork panel on Library shortcuts intercepted touches. Make the
+artwork and glyph non-clickable so hit testing reaches the owning collection row;
+the same component serves list and grid. Names and portraits open identically.
+
+Reference-layout collection track/Play/Shuffle actions now stay on the collection
+page. All songs also mounts the shared mini-player/footer. Explicit mini-player
+taps still expand Now Playing; legacy layouts keep their previous behavior.
+
+The user selected native adaptation of SpotBye's workflow, rather than connecting
+an existing SpotBye backend. This increment adds direct Archive release links and
+a source-details bottom sheet before explicit downloading, reusing the existing
+bounded provider worker, resumable queue and local importer. No SpotBye executable
+or unverified private endpoint is used. Unsupported service links produce feedback.
+The live provider contract is documented by the
+[Archive metadata API](https://archive.org/developers/md-read.html).
+
+Verified with actual simulator taps: Liked Songs artwork in list/grid, All songs
+artwork, track playback staying collapsed, explicit mini-player expansion,
+details-sheet playback continuity and no implicit download. The focused journey
+passed 15 checks. Provider/queue/TLS regression tests passed. A fresh live
+6,419,897-byte download passed checksum, index and offline-decode checks. Details
+and inspected screenshots are in `custom-firmware/native-online.md`.
+The broader collection journey passed 71 checks, including collapsed Play/Shuffle
+and restart persistence. Host/target builds and the glibc <= 2.22 ABI gate passed.
+
 ## 2026-10-28: shared collection page and repeatable verification
 
 Audit: playlists used a second screen in `playlistview.c` with text Play/Shuffle,

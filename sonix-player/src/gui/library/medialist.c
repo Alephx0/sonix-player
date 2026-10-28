@@ -2725,7 +2725,7 @@ static void row_clicked_cb(lv_event_t *e) {
 		} else {
 			player_play_file(path); // out of memory: at least play it
 		}
-		switch_screen(player_screen);
+		if (!reference_layout()) switch_screen(player_screen);
 		return;
 	}
 
@@ -3340,7 +3340,7 @@ static void play_artist(panel_t *p, bool shuffled) {
 	stamp_last_album(p);
 
 	player_refresh_now_playing();
-	switch_screen(player_screen);
+	if (!reference_layout()) switch_screen(player_screen);
 }
 
 static void play_menu_shuffle_cb(lv_event_t *e) {
@@ -3700,7 +3700,7 @@ static void init_styles(void) {
 // tap is dead until the user scrolls.
 static void screen_loaded_cb(lv_event_t *e) {
 	panel_t *p = lv_event_get_user_data(e);
-    if(p && reference_layout() && p->head) {
+    if(p && reference_layout() && p->is_tracks) {
         int footer=main_menu_mount_footer(p->screen);
         lv_obj_set_height(p->list,p->cfg->screen_height-p->cfg->top_bar_height-footer);
     }

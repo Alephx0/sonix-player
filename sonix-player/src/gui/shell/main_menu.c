@@ -298,6 +298,17 @@ static void search_keyboard_visible(bool visible) {
 static void start_search_page(const char *query, bool album, bool artist, unsigned page_number) {
     if (search_busy) { gui_notify_popup("A search is already running."); return; }
     if (!query || !query[0]) { gui_notify_popup("Enter an artist, album or track."); return; }
+    char linked_id[128];
+    if (!album && !artist && search_filter != FILTER_LOCAL &&
+        (strstr(query, "://") || !strncmp(query,"spotify:",8))) {
+        if (!discovery_release_link(query,linked_id,sizeof(linked_id))) {
+            gui_notify_popup("Supported release links: https://archive.org/details/... ");
+            return;
+        }
+        query=linked_id;
+        album=true;
+        release_artist[0]=0;
+    }
     int filter = (album || artist || page_number > 1) ? FILTER_ONLINE : search_filter;
     if (!config_get_bool("discovery", "enabled", true)) {
         if (album || filter == FILTER_ONLINE) {
@@ -441,6 +452,58 @@ static void local_queue_cb(lv_event_t *e) {
     }
 }
 
+/* A copied selection outlives asynchronous search result replacement. */
+static discovery_item_t online_selection;
+static void online_download_cb(lv_event_t *e) {
+    (void)e;
+    if (!gui_card_available()) { gui_notify_no_card(); return; }
+    char error[192] = "Could not open the download queue.";
+    unsigned id = 0;
+    if (!download_queue_init(cfg->sd_root_path) ||
+        !(id = download_enqueue(&online_selection, error, sizeof(error)))) {
+        gui_notify_popup(error);
+        return;
+    }
+    download_resume(id);
+    bottomsheet_close(false);
+    show_page(DOWNLOADS);
+}
+static void online_artist_cb(lv_event_t *e) {
+    (void)e;
+    char artist[128];snprintf(artist,sizeof(artist),"%s",online_selection.artist);
+    bottomsheet_close(false);
+    start_search_page(artist,false,true,1);
+}
+static void online_queue_cb(lv_event_t *e) {
+    (void)e;bottomsheet_close(false);show_page(DOWNLOADS);
+}
+static void online_track_sheet(const discovery_item_t *item) {
+    online_selection=*item;
+    int w=cfg->screen_width-40;
+    lv_obj_t *body=bottomsheet_open(cfg->screen_height-120,NULL);
+    lv_obj_t *content=column(body,w,lv_obj_get_height(body)-24);
+    lv_obj_set_pos(content,20,12);
+    lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0);
+    lv_obj_t *title=label(content,item->title,&font_ui_24_bold,w,false);
+    lv_obj_set_height(title,68);
+    lv_obj_t *artist=label(content,item->artist,&font_ui_18,w,true);
+    lv_obj_set_height(artist,26);
+    lv_obj_t *album=label(content,item->album,&font_ui_18,w,true);
+    lv_obj_set_height(album,50);
+    char technical[128];snprintf(technical,sizeof(technical),"%s  /  %.1f MB  /  Original source",item->format,(double)item->bytes/1048576);
+    lv_obj_t *detail=label(content,technical,&font_ui_18,w,false);
+    lv_obj_set_height(detail,28);
+    label(content,"Internet Archive",&font_ui_18,w,true);
+    lv_obj_t *license=label(content,item->license,&font_ui_16,w,true);
+    lv_obj_set_height(license,48);
+    lv_label_set_long_mode(license,LV_LABEL_LONG_WRAP);
+    if(discovery_item_valid(item)) {
+        lv_obj_t *download=button(content,"Download to microSD",w,56,online_download_cb,NULL);
+        lv_obj_set_style_bg_color(download,lv_color_hex(0x167c40),0);
+    }
+    if(item->artist[0]) button(content,"More by this artist",w,52,online_artist_cb,NULL);
+    button(content,"View downloads",w,52,online_queue_cb,NULL);
+}
 static void online_hit_cb(lv_event_t *e) {
     discovery_item_t *item = lv_event_get_user_data(e);
     if (!tapped() || search_busy) return;
@@ -449,18 +512,16 @@ static void online_hit_cb(lv_event_t *e) {
         start_search(item->id, true);
         return;
     }
-    if (!gui_card_available()) { gui_notify_no_card(); return; }
-    char error[192] = "Could not open the download queue.";
-    unsigned id = 0;
-    if (!download_queue_init(cfg->sd_root_path) || !(id = download_enqueue(item, error, sizeof(error)))) {
-        gui_notify_popup(error);
-        return;
-    }
-    /* A repeated explicit download tap may select a restored paused job.
-     * Resume that job instead of saying it was added while leaving it idle. */
-    download_resume(id);
-    show_page(DOWNLOADS);
+    online_track_sheet(item);
 }
+#ifdef HOST_BUILD
+/* Render a fixture through the production sheet; never a provider/network override. */
+void main_menu_probe_online_track(const discovery_item_t *item) {
+    switch_screen(main_menu_screen);
+    show_page(SEARCH);
+    online_track_sheet(item);
+}
+#endif
 
 static void search_draw(void) {
     search_art_drop();
@@ -528,7 +589,7 @@ static void search_draw(void) {
         lv_obj_set_pos(title, 14, 11);
         char subtitle[220];
         if (item->kind == DISCOVERY_ALBUM) snprintf(subtitle, sizeof(subtitle), "%s  /  Open release", item->artist);
-        else snprintf(subtitle, sizeof(subtitle), "%s  /  %.1f MB  /  Download", item->format, (double)item->bytes / 1048576);
+        else snprintf(subtitle, sizeof(subtitle), "%s  /  %.1f MB  /  Details", item->format, (double)item->bytes / 1048576);
         lv_obj_t *sub = label(b, subtitle, &font_ui_16, cfg->screen_width - 76, true);
         lv_obj_set_height(sub, 24);
         lv_obj_set_pos(sub, 14, 48);
@@ -622,7 +683,7 @@ static void search_build(void) {
     lv_obj_set_pos(search_field, 0, 0);
     lv_textarea_set_one_line(search_field, true);
     lv_textarea_set_max_length(search_field, 160);
-    lv_textarea_set_placeholder_text(search_field, "Songs, artists, albums or lyrics");
+    lv_textarea_set_placeholder_text(search_field, "Music, lyrics or a release link");
     lv_obj_add_style(search_field, &theme_style_card, 0);
     lv_obj_add_style(search_field, &theme_style_text, 0);
     lv_obj_set_style_text_font(search_field, &font_ui_20, 0);
@@ -699,7 +760,7 @@ static void pause_all_cb(lv_event_t *e) {
 static void providers_build(void) {
     lv_obj_t *p = page[PROVIDERS];
     section(p, "Internet Archive");
-    lv_obj_t *note = label(p, "Release search, album files and authorized downloads. No sign-in required.",
+    lv_obj_t *note = label(p, "Search music or paste an Archive release link. Open a track to choose a download. No sign-in required.",
                           &font_ui_18, cfg->screen_width - 2 * PAD, true);
     lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
     lv_obj_t *enabled = button(p, "", cfg->screen_width - 2 * PAD, 58, provider_setting_cb, (void *)0);
@@ -713,7 +774,7 @@ static void providers_build(void) {
         &font_ui_18, cfg->screen_width - 2 * PAD, true);
     lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
     section(p, "Provider capabilities");
-    note = label(p, "Supported: paged release search, artist release lists, release files, source metadata, licensed audio downloads. "
+    note = label(p, "Supported: paged release search, direct release links, artist release lists, track details and licensed audio downloads. "
         "Artist lists follow source creator names, which may include several contributors. "
         "Not supported: streaming previews, artist biographies, online playlists or automatic provider fallback. "
         "Downloads keep the original audio quality and embedded tags, with an attribution sidecar for missing metadata.",

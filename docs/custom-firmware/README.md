@@ -14,6 +14,9 @@ browsing and adds a repeatable native simulator regression harness. Current UI
 rules are consolidated in [UI_SPEC](../UI_SPEC.md), [DESIGN_SYSTEM](../DESIGN_SYSTEM.md),
 [UI_TEST_MATRIX](../UI_TEST_MATRIX.md), and [UI_DECISIONS](../UI_DECISIONS.md).
 
+The [native online increment](native-online.md) adds direct release links and
+track details before downloading, alongside artwork-tap and playback-preview fixes.
+
 The latest offline integration adds separate priority/context queues, playlist
 membership, saved/pinned collections and indexed lyric search. See the
 [offline player guide](offline-player.md) for controls, evidence and remaining scope.

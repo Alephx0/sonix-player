@@ -1,0 +1,152 @@
+{
+  "actions": [
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-7m8pqroz/sd"
+    ],
+    [
+      "click",
+      "400",
+      "770"
+    ],
+    [
+      "click",
+      "52",
+      "254"
+    ],
+    [
+      "shot",
+      "portrait-liked"
+    ],
+    [
+      "click",
+      "400",
+      "770"
+    ],
+    [
+      "drag",
+      "230",
+      "595",
+      "230",
+      "300"
+    ],
+    [
+      "drag",
+      "230",
+      "595",
+      "230",
+      "300"
+    ],
+    [
+      "click",
+      "52",
+      "616"
+    ],
+    [
+      "shot",
+      "portrait-all"
+    ],
+    [
+      "click",
+      "400",
+      "770"
+    ],
+    [
+      "click",
+      "430",
+      "182"
+    ],
+    [
+      "click",
+      "127",
+      "323"
+    ],
+    [
+      "shot",
+      "portrait-liked-grid"
+    ],
+    [
+      "click",
+      "400",
+      "770"
+    ],
+    [
+      "click",
+      "430",
+      "182"
+    ],
+    [
+      "click",
+      "254",
+      "537"
+    ],
+    [
+      "shot",
+      "playlist-preview"
+    ],
+    [
+      "click",
+      "170",
+      "695"
+    ],
+    [
+      "drag",
+      "240",
+      "65",
+      "240",
+      "610"
+    ],
+    [
+      "shot",
+      "online-track-details"
+    ],
+    [
+      "click",
+      "240",
+      "642"
+    ],
+    [
+      "shot",
+      "online-downloads"
+    ],
+    [
+      "stop"
+    ]
+  ],
+  "checks": [
+    "portrait-liked: native 480x800 render",
+    "Liked Songs portrait opens collection",
+    "portrait-all: native 480x800 render",
+    "All songs portrait opens collection",
+    "portrait-liked-grid: native 480x800 render",
+    "grid artwork also opens Liked Songs",
+    "playlist-preview: native 480x800 render",
+    "track row starts selected song",
+    "track tap keeps playlist and mini-player visible",
+    "explicit mini-player tap expands Now Playing",
+    "online-track-details: native 480x800 render",
+    "online track details preserve playback",
+    "opening track details does not enqueue a download",
+    "downloads action closes details sheet",
+    "online-downloads: native 480x800 render"
+  ],
+  "screenshots": [
+    "portrait-liked.png",
+    "portrait-all.png",
+    "portrait-liked-grid.png",
+    "playlist-preview.png",
+    "online-track-details.png",
+    "online-downloads.png"
+  ],
+  "metrics": {
+    "host_rss_kib": 41372,
+    "idle_cpu_percent_one_core": 5.0,
+    "sample_seconds": 1.0,
+    "lvgl": "9.6.0",
+    "note": "SDL software rendering on host; not a measurement of R1 RAM or timing"
+  },
+  "baseline": "No approved baseline supplied",
+  "result": "PASS"
+}

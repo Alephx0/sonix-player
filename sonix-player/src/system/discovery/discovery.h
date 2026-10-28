@@ -42,4 +42,6 @@ bool discovery_parse_album_page(const char *identifier, const char *json, unsign
                                discovery_results_t *out, char *error, size_t error_size);
 bool discovery_license_allowed(const char *url);
 bool discovery_item_valid(const discovery_item_t *item);
+/* Parse supported release links without fetching arbitrary URLs. */
+bool discovery_release_link(const char *url, char *identifier, size_t size);
 #endif

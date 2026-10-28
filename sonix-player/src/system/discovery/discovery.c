@@ -20,6 +20,23 @@ static bool identifier_ok(const char *s) {
     for (;*s;s++) if (!(isalnum((unsigned char)*s)||*s=='-'||*s=='_'||*s=='.')) return false;
     return true;
 }
+bool discovery_release_link(const char *url, char *identifier, size_t size) {
+    if (identifier && size) identifier[0]=0;
+    if (!url || !identifier || size<2) return false;
+    const char *prefix="https://archive.org/details/";
+    if (strncmp(url,prefix,strlen(prefix))) return false;
+    const char *id=url+strlen(prefix);
+    size_t len=strcspn(id,"/?#");
+    if (!len || len>=128 || len>=size) return false;
+    /* Only a release URL, optionally a trailing slash and query/fragment. */
+    const char *suffix=id+len;
+    if (*suffix=='/' && suffix[1] && suffix[1]!='?' && suffix[1]!='#') return false;
+    memcpy(identifier,id,len);identifier[len]=0;
+    if (!identifier_ok(identifier)) {identifier[0]=0;return false;}
+    for (const unsigned char *p=(const unsigned char *)url;*p;p++)
+        if (*p<=32 || *p==127) {identifier[0]=0;return false;}
+    return true;
+}
 bool discovery_license_allowed(const char *url) {
     if (!url) return false;
     const char *p=NULL;

@@ -63,7 +63,8 @@ class Session:
         ImageDraw.Draw(img).rectangle((0,0,479,43),fill='#121212')
         img.save(self.out/f'{name}.normalized.png')
         # Dynamic playback captures are evidence, not deterministic pixel fixtures.
-        dynamic=name in {'playlist-playing-menu','playlist-edit','playlist-added','library-playlists','liked-songs'}
+        dynamic=name in {'playlist-playing-menu','playlist-edit','playlist-added','library-playlists','liked-songs',
+                         'playlist-preview','online-track-details','online-downloads'}
         if self.baseline and not dynamic:
             expected=self.baseline/f'{name}.normalized.png'
             self.check(expected.exists(),name+': baseline exists')
@@ -130,7 +131,7 @@ def journey(s,card):
     playing=s.snapshot();s.check(bool(playing['file']),'collection Play starts actual audio')
     s.check(len(playing['queue'])==6,'Play establishes exactly the playlist context')
     # Return to collection without changing audio, then reopen menu.
-    s.command('drag',240,65,240,610);s.setup('playlist Night Drive')
+    s.check(not playing['now_playing_open'],'collection Play stays in mini-player preview');s.setup('playlist Night Drive')
     before=s.snapshot();s.command('click',102,cy);after=s.capture('playlist-playing-menu')
     s.check(after['modal'] and after['file']==before['file'] and after['status']==before['status'] and after['seconds']>=before['seconds'],'sheet preserves active playback and position')
     s.command('click',240,48)
@@ -156,7 +157,7 @@ def journey(s,card):
     s.command('click',240,48)
     s.command('click',43,cy);shuffled=s.snapshot()
     s.check(shuffled['shuffle'] and shuffled['priority']==6,'collection shuffle preserves priority entries')
-    s.command('drag',240,65,240,610)
+    s.check(not shuffled['now_playing_open'],'collection Shuffle stays in mini-player preview')
     s.command('click',400,770);s.click_label('Playlists');filtered=s.snapshot()
     s.check(filtered['route']=='main' and filtered['tab']==2 and filtered['library_filter']==1,'Library navigation and active filter update underlying state')
     s.capture('library-playlists')
@@ -171,15 +172,56 @@ def journey(s,card):
     s.check(resumed['shuffle'] and resumed['priority']==6,'shuffle and manual queue survive restart')
     s.check(entries('Empty Playlist')==[str(card/'Music/track001.flac')],'playlist membership survives restart')
 
+def preview_online(s,card):
+    s.command('click',400,770)
+    # Tap actual cover rectangles, not text labels. Scroll the Library as needed.
+    def portrait(title):
+        for _ in range(20):
+            state=s.snapshot()
+            matches=[n for n in s.visible(state) if n.get('text')==title and 210<n['rect'][1]<625]
+            if matches:
+                row=state['nodes'][matches[0]['parent']]
+                covers=[n for n in state['nodes'] if n['parent']==row['id'] and n['type']=='object' and n['rect'][2]-n['rect'][0]>=60]
+                cover=covers[0];x,y,r,b=cover['rect'];s.command('click',(x+r)//2,(y+b)//2);return
+            s.command('drag',230,595,230,300)
+        raise AssertionError('Cannot find collection portrait: '+title)
+    portrait('Liked Songs');state=s.capture('portrait-liked')
+    s.check(state['route']=='collection' and not state['now_playing_open'],'Liked Songs portrait opens collection')
+    s.command('click',400,770);portrait('All songs');state=s.capture('portrait-all')
+    s.check(state['route']=='collection','All songs portrait opens collection')
+    s.label(state,'Your Library')
+    s.command('click',400,770);s.command('click',430,182)
+    portrait('Liked Songs');state=s.capture('portrait-liked-grid')
+    s.check(state['route']=='collection','grid artwork also opens Liked Songs')
+    s.command('click',400,770);s.command('click',430,182)
+    s.setup('playlist Night Drive');s.click_label('Night Walk');playing=s.capture('playlist-preview')
+    s.check(playing['file'].endswith('track000.flac') and playing['status']==1,'track row starts selected song')
+    s.check(not playing['now_playing_open'] and playing['route']=='collection','track tap keeps playlist and mini-player visible')
+    s.command('click',170,695);s.check(s.snapshot()['now_playing_open'],'explicit mini-player tap expands Now Playing')
+    s.command('drag',240,65,240,610)
+    # Offline provider metadata, parsed and rendered by production code.
+    fixture=s.out/'online.json';fixture.write_text(json.dumps({'metadata':{'mediatype':'audio','title':'Night Lights','creator':'Night Ensemble','licenseurl':'https://creativecommons.org/licenses/by/4.0/'},'files':[{'name':'night-walk.flac','title':'Night Walk','size':'10485760','md5':'0123456789abcdef0123456789abcdef'}]}))
+    queue_file=card/'Downloads/.sonix-downloads.json'
+    queued_before=json.loads(queue_file.read_text()) if queue_file.exists() else None
+    before=s.snapshot();s.setup('online-fixture '+str(fixture));online=s.capture('online-track-details')
+    s.label(online,'Download to microSD');s.label(online,'More by this artist')
+    s.check(online['modal'] and online['file']==before['file'],'online track details preserve playback')
+    queued_after=json.loads(queue_file.read_text()) if queue_file.exists() else None
+    s.check(queued_before==queued_after,'opening track details does not enqueue a download')
+    s.click_label('View downloads');s.check(not s.snapshot()['modal'],'downloads action closes details sheet')
+    s.capture('online-downloads');s.metrics()
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('repo',type=Path);p.add_argument('--baseline',type=Path);p.add_argument('--card',type=Path)
-    p.add_argument('--journey',choices=['collections','empty-liked'],default='collections')
+    p.add_argument('--journey',choices=['collections','empty-liked','preview-online'],default='collections')
     a=p.parse_args();repo=a.repo.resolve();out=Path(tempfile.mkdtemp(prefix='ui-collections-',dir=repo/'artifacts'))
     s=Session(repo,out,a.baseline);started=False
     try:
         card=a.card.resolve() if a.card else create(repo,out/'sd')
         s.command('start',3,'--card',card);started=True
         if a.journey=='collections':journey(s,card)
+        elif a.journey=='preview-online':preview_online(s,card)
         else:
             s.command('click',400,770);s.click_label('Liked Songs')
             state=s.capture('liked-songs');_,play=s.collection_geometry(state)

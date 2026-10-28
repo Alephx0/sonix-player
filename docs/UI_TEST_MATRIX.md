@@ -9,6 +9,9 @@ substitute browser renders. LVGL version is read from the checked-out headers.
 | Journey | Acceptance | Automation |
 | --- | --- | --- |
 | Album / playlist | Same cover/title/action geometry, scrolling rows and footer | UI collection harness |
+| Portrait / playback preview | Liked Songs and All songs open via cover; track/Play/Shuffle stay collapsed; explicit mini-player expands | `test_ui_collections.py --journey preview-online`, full collection journey |
+| Online details | Metadata sheet does not download or interrupt playback; explicit queue navigation | `--journey preview-online` with parsed offline provider fixture |
+| Online transport | Link validation, transfer integrity, pause/resume/import/decode | `tests/discovery/run.sh`, `test_live_download.py --fresh` |
 | Empty / long / large playlist | No overlap, useful empty action, bounded widget count | UI collection harness |
 | Playlist menu / editing | Add, remove, reorder, rename persist without file deletion | UI harness + `test_collection_library.py` |
 | Artist selection | Individual selectable credits, bounded text | `test_collection_library.py`, rendered artist evidence |

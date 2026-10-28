@@ -5,6 +5,9 @@
 #include "main_menu.h"
 #include "src/gui/library/medialist.h"
 #include "src/gui/library/playlistview.h"
+#include "src/gui/nowplaying/player.h"
+#include "src/system/discovery/discovery.h"
+extern void main_menu_probe_online_track(const discovery_item_t *item);
 #include "src/system/core/config.h"
 #include "src/system/playback/device_state.h"
 #include "src/system/playback/playlist.h"
@@ -61,7 +64,17 @@ static void probe_poll(lv_timer_t *timer) {
 	unlink(path);
 	command[strcspn(command, "\r\n")] = 0;
 	/* Setup only; test interactions are delivered through SDL input. */
-	if (!strncmp(command, "playlist ", 9))
+	if (!strncmp(command, "online-fixture ", 15)) {
+        /* Offline metadata fixture; the real parser and real sheet render it. */
+        FILE *fixture=fopen(command+15,"r");
+        if(fixture) {
+            char json[8192];size_t len=fread(json,1,sizeof(json)-1,fixture);json[len]=0;fclose(fixture);
+            discovery_results_t *results=calloc(1,sizeof(*results));char error[192];
+            if(results && discovery_parse_album("sonix-ui-fixture",json,results,error,sizeof(error)) && results->count)
+                main_menu_probe_online_track(&results->items[0]);
+            free(results);
+        }
+    } else if (!strncmp(command, "playlist ", 9))
 		playlistview_open(command + 9, false);
 	else if (!strncmp(command, "album ", 6)) {
 		char album[512];
@@ -84,6 +97,7 @@ static void probe_poll(lv_timer_t *timer) {
 	string(f, lv_screen_active() == medialist_tracks_screen ? "collection" : lv_screen_active() == main_menu_screen ? "main" : "other");
 	fprintf(f, ",\"modal\":%s,\"status\":%d,\"seconds\":%.3f,\"shuffle\":%s,\"repeat\":%d,\"priority\":%d,\"tab\":%d,\"file\":", bottomsheet_active() ? "true" : "false", state.status, state.progress_current_secs, playlist_shuffle_enabled() ? "true" : "false", playlist_repeat_mode(), playlist_priority_count(), (int)config_get_int("ui", "last_tab", 0));
 	string(f, state.current_file);
+	fprintf(f, ",\"now_playing_open\":%s", player_sheet_is_open() ? "true" : "false");
 	fprintf(f, ",\"library_filter\":%d,\"library_sort\":%d,\"library_grid\":%d", (int)config_get_int("collections", "filter", 0), (int)config_get_int("collections", "sort", 0), (int)config_get_int("collections", "grid", 0));
 	fputs(",\"queue\":[", f);
 	for (int i = 0; i < playlist_count() && i < 512; i++) {

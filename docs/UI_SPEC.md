@@ -11,6 +11,10 @@ sits above navigation. Opening a collection never starts or interrupts audio;
 its Play/Shuffle actions establish the automatic context. Now Playing expands
 upward from the mini-player and collapses downward. Physical transport buttons
 and touch controls use the same playback actions.
+Starting a track, Play, or Shuffle from the reference collection view keeps that
+view visible and updates the mini-player (preview mode). Only an explicit tap on
+the mini-player expands Now Playing. Collection artwork and names share the same
+open action, including Liked Songs and All songs in both List and Grid layouts.
 
 ## Collections
 
@@ -79,3 +83,16 @@ opens, explicit Play starts. All recommendations reference existing local files.
 The simulator renders production LVGL widgets, but host RSS/timing do not prove
 64 MB device performance, touch fidelity, DAC behavior, or firmware compatibility.
 Hardware tests and approved pixel baselines remain separate acceptance gates.
+
+## Native online workflow
+
+Adapt SpotBye's search → release → track details → managed downloads flow into
+the native player. The initial provider is Internet Archive. Search accepts its
+HTTPS release links as well as text. An online track opens a bottom sheet with
+title, artist, release, source format/size and licence; opening it never downloads
+or starts playback. Download to microSD is an explicit action. View downloads
+opens the existing resumable queue; More by this artist performs creator search.
+Completed files enter the local library through the existing import pipeline.
+Expose unsupported links clearly. Do not label this a SpotBye service connection
+or Spotify catalog client. Additional providers and online previews remain future
+work; source identity and downloadable audio identity stay explicit.

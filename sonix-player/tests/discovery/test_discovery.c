@@ -75,7 +75,21 @@ static void test_pages(void) {
     free(body);free(r);
     puts("PASS paged catalog/artist queries: literal escaping, valid page bounds, final/empty eligible pages, release file pagination");
 }
-int main(void){memset(payload,'a',sizeof(payload));test_md5();test_provider();test_pages();char temp[]="/tmp/sonix-discovery-test-XXXXXX";assert(mkdtemp(temp));assert(!download_queue_init(""));assert(download_queue_init(temp));assert(download_queue_init(temp));char err[192];discovery_item_t a=item("complete");unsigned id=download_enqueue(&a,err,sizeof(err));assert(id);assert(download_enqueue(&a,err,sizeof(err))==id);download_job_t j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE&&j.done==sizeof(payload));struct stat st;assert(!stat(j.path,&st)&&st.st_size==sizeof(payload));assert(download_revision()==1);
+static void test_release_links(void) {
+    char id[128];
+    assert(discovery_release_link("https://archive.org/details/test-release",id,sizeof(id)) && !strcmp(id,"test-release"));
+    assert(discovery_release_link("https://archive.org/details/test-release/?source=share#files",id,sizeof(id)));
+    const char *bad[]={"http://archive.org/details/test", "https://archive.org.evil/details/test",
+        "https://archive.org@evil/details/test", "https://archive.org/details/../secret",
+        "https://archive.org/details/%2e%2e", "https://archive.org/details/test/file.mp3",
+        "https://archive.org/details/", "https://open.spotify.com/track/example", "spotify:track:example",
+        "https://archive.org/details/test\n"};
+    for(size_t i=0;i<sizeof(bad)/sizeof(*bad);i++) {strcpy(id,"stale");assert(!discovery_release_link(bad[i],id,sizeof(id)));assert(!*id);}
+    assert(!discovery_release_link("https://archive.org/details/toolong",id,3));
+    assert(!discovery_release_link(NULL,id,sizeof(id)));
+    puts("PASS direct release links: exact host, bounded IDs, query handling, rejected traversal/unsupported links");
+}
+int main(void){test_release_links();memset(payload,'a',sizeof(payload));test_md5();test_provider();test_pages();char temp[]="/tmp/sonix-discovery-test-XXXXXX";assert(mkdtemp(temp));assert(!download_queue_init(""));assert(download_queue_init(temp));assert(download_queue_init(temp));char err[192];discovery_item_t a=item("complete");unsigned id=download_enqueue(&a,err,sizeof(err));assert(id);assert(download_enqueue(&a,err,sizeof(err))==id);download_job_t j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE&&j.done==sizeof(payload));struct stat st;assert(!stat(j.path,&st)&&st.st_size==sizeof(payload));assert(download_revision()==1);
 atomic_store(&opens,0);atomic_store(&mode,1);a=item("retry");id=download_enqueue(&a,err,sizeof(err));j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE&&j.attempts==2);assert(atomic_load(&opens)==2);
 atomic_store(&mode,2);a=item("pause");id=download_enqueue(&a,err,sizeof(err));wait_progress(id);assert(download_pause(id));usleep(150000);assert(snapshot(id).state==DOWNLOAD_PAUSED);assert(download_resume(id));j=wait_terminal(id);assert(j.state==DOWNLOAD_DONE);
 a=item("cancel");id=download_enqueue(&a,err,sizeof(err));wait_progress(id);assert(download_cancel(id));usleep(150000);assert(snapshot(id).state==DOWNLOAD_CANCELLED);assert(access(snapshot(id).path,F_OK)!=0);

@@ -799,11 +799,14 @@ static lv_obj_t *collection_shortcut(const char *title, const char *subtitle, co
 	lv_obj_t *row = button(list, NULL, rw, rh, route, (void *)(intptr_t)action);
 	lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
 	lv_obj_t *art = panel(row, grid ? rw - 12 : 64, grid ? rw - 12 : 64);
+	/* Decorative artwork must not swallow the collection row's tap. */
+	lv_obj_set_clickable(art, false);
 	lv_obj_set_pos(art, grid ? 6 : 0, 6);
 	lv_obj_set_style_bg_color(art, lv_color_hex(color), 0);
 	lv_obj_set_style_bg_grad_color(art, lv_color_lighten(lv_color_hex(color), LV_OPA_50), 0);
 	lv_obj_set_style_bg_grad_dir(art, LV_GRAD_DIR_VER, 0);
 	lv_obj_t *im = lv_image_create(art);
+	lv_obj_set_clickable(im, false);
 	lv_image_set_src(im, icon);
 	lv_obj_set_size(im, 30, 30);
 	lv_image_set_inner_align(im, LV_IMAGE_ALIGN_CONTAIN);
