@@ -1,4 +1,5 @@
 #include "src/gui/library/homeview.h"
+#include "src/gui/library/playlistview.h"
 #include "src/gui/shell/bottomsheet.h"
 #include "src/system/library/playlists.h"
 #include "src/gui/shell/toast.h"
@@ -48,7 +49,7 @@
  * created on demand. One bounded catalogue request runs at a time; workers
  * never touch LVGL. Download completion/indexing is owned by the application. */
 lv_obj_t *main_menu_screen;
-static lv_obj_t *tools_screen, *header_tools, *header_settings, *header_add;
+static lv_obj_t *tools_screen, *header_tools, *header_settings, *header_add, *header_search;
 static gui_config_t *cfg;
 static lv_obj_t *page[5], *heading, *nav_icon[3], *nav_label[3], *nav_objects[3];
 static lv_obj_t *mini, *mini_title, *mini_artist, *mini_art, *mini_play, *mini_progress;
@@ -407,7 +408,7 @@ static void local_hit_cb(lv_event_t *e) {
         char title[256];
         library_album_title(hit->name, title, sizeof(title));
         medialist_open(title, LIBRARY_LIST_TRACKS, LIBRARY_FILTER_ALBUM, hit->name);
-    } else if(hit->type==LIBRARY_SEARCH_PLAYLIST) medialist_open(hit->name,LIBRARY_LIST_PLAYLIST,LIBRARY_FILTER_NONE,hit->name);
+    } else if(hit->type==LIBRARY_SEARCH_PLAYLIST) playlistview_open(hit->name,false);
     else medialist_open_artist(hit->name);
 }
 
@@ -881,6 +882,7 @@ static void show_page(int tab) {
     const char *titles[] = {"Sonix", "Search", "Your Library", "Downloads", "Discovery"};
     lv_label_set_text(heading, titles[tab]);
     lv_obj_set_hidden(header_add,tab!=LIBRARY);
+    lv_obj_set_hidden(header_search,tab!=LIBRARY);lv_obj_set_hidden(header_tools,tab==LIBRARY);
     lv_obj_set_hidden(header_settings,tab==LIBRARY);
     for (int i = 0; i < 3; i++) {
         bool active = i == (tab == DOWNLOADS ? LIBRARY : tab == PROVIDERS ? SEARCH : tab);
@@ -941,7 +943,10 @@ void main_menu_init(gui_config_t *config) {
     lv_obj_set_pos(settings, cfg->screen_width - 72, cfg->top_bar_height + 10);
     lv_obj_t *settings_icon = glyph(settings, &icon_music_settings, 26);
     lv_obj_center(settings_icon);
-    header_add=button(main_menu_screen,NULL,52,48,collectionview_create_playlist,NULL);
+    header_search=button(main_menu_screen,NULL,48,48,collectionview_search,NULL);
+    lv_obj_set_pos(header_search,cfg->screen_width-132,cfg->top_bar_height+10);
+    lv_obj_set_style_bg_opa(header_search,LV_OPA_TRANSP,0);lv_obj_center(glyph(header_search,&icon_search,26));
+    header_add=button(main_menu_screen,NULL,52,48,collectionview_create_menu,NULL);
     lv_obj_set_pos(header_add,cfg->screen_width-72,cfg->top_bar_height+10);
     lv_obj_set_style_bg_opa(header_add,LV_OPA_TRANSP,0);
     lv_obj_center(glyph(header_add,&icon_plus,28));

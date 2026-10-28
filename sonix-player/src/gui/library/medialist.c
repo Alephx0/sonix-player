@@ -1,3 +1,4 @@
+#include "src/system/library/collections.h"
 #include "discography.h"
 #include "medialist.h"
 #include "src/gui/shell/main_menu.h"
@@ -4957,6 +4958,8 @@ bool medialist_step_back_to_player(void) {
 
 void medialist_open(const char *title, library_list_t kind, library_filter_t filter, const char *filter_value) {
     library_home_touch(kind,filter,filter_value,title);
+    if(kind==LIBRARY_LIST_PLAYLIST)collections_touch(COLLECTION_PLAYLIST,filter_value);
+    else if(kind==LIBRARY_LIST_TRACKS && filter==LIBRARY_FILTER_ALBUM)collections_touch(COLLECTION_ALBUM,filter_value);
 	last_stacked = NULL;
 	last_unchanged = NULL;
 

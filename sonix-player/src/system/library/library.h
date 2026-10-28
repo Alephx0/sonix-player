@@ -703,6 +703,7 @@ bool library_playlist_append_all(const char *name, const library_playlist_row_t 
 // playlist. Read
 // in pages, so that nothing holds more than a pageful and the index lock is
 // released between them.
+int library_song_search_page(const char *query,int offset,int count,library_playlist_row_t *out);
 int library_playlist_page(const char *name, int offset, int count, library_playlist_row_t *out);
 
 // Every row, in order, in one malloc'd array; free() it when done. Two

@@ -1,4 +1,5 @@
 #include "homeview.h"
+#include "playlistview.h"
 #include "collectionview.h"
 #include "medialist.h"
 #include "src/gui/fonts/fonts.h"
@@ -115,9 +116,11 @@ static void open_item(lv_event_t *e) {
 		podcastpage_open_feed(strtoll(i->context.spec.value, NULL, 10), i->context.title);
 		return;
 	}
+	if(i->context.spec.kind==LIBRARY_LIST_PLAYLIST){playlistview_open(i->context.spec.value,false);return;}
 	medialist_open(i->context.title, i->context.spec.kind, i->context.spec.filter, i->context.spec.value);
 }
 static void play(item_t *i) {
+    if(i->collection)collections_touch(i->collection,i->context.spec.value);
 	library_index_spec_t *s = &i->context.spec;
 	library_index_t *ix = library_index_open(s->kind, s->filter, s->value, s->order, s->desc);
 	if (!ix)
@@ -462,7 +465,7 @@ void homeview_build(lv_obj_t *parent, gui_config_t *cfg) {
 			if (section == 0) {
 				quick_count = 0;
 				for (int j = 0; j < ns; j++)
-					if (saved[j].pin && (scope == 0 || saved[j].kind != COLLECTION_PODCAST))
+					if (saved[j].kind!=COLLECTION_FOLDER && saved[j].pin && (scope == 0 || saved[j].kind != COLLECTION_PODCAST))
 						quick_add(from_saved(saved[j]));
 				for (int j = 0; j < nr && j < 3; j++)
 					quick_add(from_context(recent[j]));

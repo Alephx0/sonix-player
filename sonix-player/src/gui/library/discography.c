@@ -1,4 +1,5 @@
 #include "discography.h"
+#include "src/system/library/collections.h"
 #include "src/gui/fonts/fonts.h"
 #include "src/gui/library/medialist.h"
 #include "src/gui/nowplaying/coverloader.h"
@@ -96,7 +97,7 @@ static void draw(void) {
 			lv_obj_set_height(l, 30);
 			char sub[340];
 			const char *year = strcmp(r->date, "0000") ? r->date : "";
-			snprintf(sub, sizeof(sub), "%.4s%s%s", year, *year ? " \xc2\xb7 " : "", r->category == 3 ? r->artist : r->type[0] ? r->type : "Release");
+			snprintf(sub, sizeof(sub), "%.4s%s%s", year, *year ? " \xc2\xb7 " : "", !strcmp(r->type,"unclassified-credit") ? "Credited artist / owner unknown" : r->category == 3 ? r->artist : r->type[0] ? r->type : "Release");
 			l = label(row, sub, w - 88, &font_ui_16, 0xb3b3b3);
 			lv_obj_set_pos(l, 82, 46);
 			lv_obj_set_height(l, 24);
@@ -140,6 +141,7 @@ void discography_open(const char *artist) {
 	if (!artist || !*artist)
 		return;
 	snprintf(artist_name, sizeof(artist_name), "%s", artist);
+    collections_touch(COLLECTION_ARTIST,artist);
 	selected = page = 0;
 	if (!screen) {
 		int w = lv_display_get_horizontal_resolution(NULL), h = lv_display_get_vertical_resolution(NULL);

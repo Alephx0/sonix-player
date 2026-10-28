@@ -1,0 +1,12 @@
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+config: /home/justi/sonix-r1-build/artifacts/discography-fixture-2cnt9k0l/sd/config.ini not there yet, starting from defaults
+library: /home/justi/sonix-r1-build/artifacts/discography-fixture-2cnt9k0l/sd/.local/library.db open, 0 tracks indexed
+library: /home/justi/sonix-r1-build/artifacts/discography-fixture-2cnt9k0l/sd/.local/library.db open, 7 tracks indexed
+PASS discography: embedded FLAC/ID3 credits, full-date ordering, explicit single/EP, conservative unknown and featured classification, paging and persistence
+Discography fixture: /home/justi/sonix-r1-build/artifacts/discography-fixture-2cnt9k0l/sd

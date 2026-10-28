@@ -4701,6 +4701,7 @@ static void sonix_action_cb(lv_event_t *e) {
 static lv_obj_t *sonix_text_button(lv_obj_t *parent, const char *text, int width, int height, int action) {
     lv_obj_t *button = lv_button_create(parent);
     lv_obj_set_size(button, width, height);
+    lv_obj_set_style_pad_all(button,0,0);lv_obj_set_scrollable(button,false);
     lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, 0);
     lv_obj_set_style_shadow_width(button, 0, 0);
     lv_obj_set_style_border_width(button, 0, 0);
@@ -4709,6 +4710,7 @@ static lv_obj_t *sonix_text_button(lv_obj_t *parent, const char *text, int width
     lv_obj_add_style(label, &theme_style_text, 0);
     lv_obj_set_style_text_font(label, &font_ui_22, 0);
     lv_obj_set_width(label, width - 24);
+    lv_obj_set_height(label,28);
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     lv_label_set_text(label, text);
     lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
@@ -4726,6 +4728,7 @@ static lv_obj_t *sonix_sheet_create(const char *title, int rows, const device_st
     lv_obj_set_flex_flow(content,LV_FLEX_FLOW_COLUMN);lv_obj_set_scroll_dir(content,LV_DIR_VER);
     lv_obj_set_style_pad_row(content,4,0);
     if(title && *title) { lv_obj_t *l=lv_label_create(content);lv_label_set_text(l,title);
+        lv_obj_set_width(l,w-72);lv_obj_set_height(l,32);lv_label_set_long_mode(l,LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_font(l,&font_ui_24_bold,0);lv_obj_set_style_text_color(l,lv_color_white(),0); }
     return content;
 }
@@ -4748,7 +4751,7 @@ static void sonix_menu_row(lv_obj_t *parent,const char *title,const lv_image_dsc
     int w=lv_obj_get_width(player_screen)-40;
     lv_obj_t *row=sonix_text_button(parent,title,w,52,action);
     lv_obj_t *text=lv_obj_get_child(row,0);
-    lv_obj_set_width(text,w-66);lv_obj_align(text,LV_ALIGN_LEFT_MID,48,0);
+    lv_obj_set_width(text,w-66);lv_obj_set_height(text,28);lv_obj_align(text,LV_ALIGN_LEFT_MID,48,0);
     lv_obj_set_style_text_font(text,&font_ui_20,0);
     lv_obj_set_style_text_align(text,LV_TEXT_ALIGN_LEFT,0);
     lv_obj_t *im=lv_image_create(row);lv_image_set_src(im,icon);lv_obj_set_size(im,26,26);

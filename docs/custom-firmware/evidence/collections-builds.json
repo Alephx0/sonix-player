@@ -1,0 +1,14 @@
+{
+  "sonix_player_host": {
+    "bytes": 38017824,
+    "sha256": "64bce2010a31fa2d9f00b31297bb6bc8c26bd26e3e36db69a418f3a69dc2e1af"
+  },
+  "sonix_player": {
+    "bytes": 10289388,
+    "sha256": "60c79f046ec2ba80af9b2567c8ce6a792e0b013003277e20b7b376637e7e68c3"
+  },
+  "sonix_player_debug": {
+    "bytes": 43760960,
+    "sha256": "5effc937676d9c3b3c1feda402a17186e05ddb5af9052960704476e0694e3074"
+  }
+}

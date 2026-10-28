@@ -1,0 +1,10 @@
+Synthetic UI fixture: /home/justi/sonix-r1-build/artifacts/collection-fixture-15pzwdun/sd/Music/cover.png
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+config: /home/justi/sonix-r1-build/artifacts/collection-fixture-15pzwdun/sd/config.ini not there yet, starting from defaults
+library: /home/justi/sonix-r1-build/artifacts/collection-fixture-15pzwdun/sd/.local/library.db open, 0 tracks indexed
+PASS collection library: individual role credits and discography, unsaved indexed albums/artists, filtered search, one-level folders, playlist/folder renames, pinned order, restart persistence, deletion preserving audio
+Fixture card: /home/justi/sonix-r1-build/artifacts/collection-fixture-15pzwdun/sd

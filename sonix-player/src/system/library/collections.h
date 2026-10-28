@@ -2,13 +2,13 @@
 #define SONIX_COLLECTIONS_H
 #include <stdbool.h>
 #include <stddef.h>
-typedef enum { COLLECTION_PLAYLIST=1, COLLECTION_ALBUM, COLLECTION_ARTIST, COLLECTION_PODCAST } collection_kind_t;
-typedef enum { COLLECTION_RECENT, COLLECTION_ADDED, COLLECTION_NAME, COLLECTION_CREATOR } collection_sort_t;
+typedef enum { COLLECTION_PLAYLIST=1, COLLECTION_ALBUM, COLLECTION_ARTIST, COLLECTION_PODCAST, COLLECTION_FOLDER } collection_kind_t;
+typedef enum { COLLECTION_RECENT, COLLECTION_ADDED, COLLECTION_NAME, COLLECTION_CREATOR, COLLECTION_CUSTOM } collection_sort_t;
 typedef struct {
     collection_kind_t kind;
     char key[512], title[256], creator[256];
     bool saved;
-    int pin;
+    int pin, year;
     long long added, recent;
 } collection_item_t;
 /* UI-thread metadata only. Each operation closes its database before returning,
@@ -23,4 +23,11 @@ bool collections_pin(collection_kind_t kind, const char *key, bool pin);
 /* filter 0 means all; pages are bounded to 48 records. Pins precede sort. */
 int collections_list(int filter, collection_sort_t sort, int offset, collection_item_t *out, int capacity);
 unsigned collections_revision(void);
+/* Metadata-only playlist folders: one level, no filesystem operations. */
+bool collections_custom_first(collection_kind_t kind,const char *key);
+bool collections_folder_create(const char *name);
+bool collections_move_playlist(const char *playlist,const char *folder);
+int collections_folder_count(const char *folder);
+bool collections_catalog_sync(void);
+int collections_browse(int filter,collection_sort_t sort,const char *query,const char *folder,int offset,collection_item_t *out,int capacity);
 #endif
