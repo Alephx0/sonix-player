@@ -97,10 +97,10 @@ def run(repo, label, online=False, layout=None, card_root=None, cycles=0, downlo
                 click(240, 760)
                 click(410, 208)
                 shot('provider-settings')
-                click(240, 250)
+                click(240, 240)
                 shot('provider-disabled')
-                click(240, 250)
-                click(240, 320)  # Prefer MP3, without hiding other formats.
+                click(240, 240)
+                click(240, 310)  # Prefer MP3, without hiding other formats.
                 saved = configparser.ConfigParser()
                 saved.read(config)
                 assert saved.getboolean('discovery', 'enabled')
@@ -198,7 +198,7 @@ def run(repo, label, online=False, layout=None, card_root=None, cycles=0, downlo
                         click(x, 760, .15)
                 metrics['navigation_cycles'] = cycles
                 click(400, 760)
-                click(140, 157)
+                click(140, 414)  # Downloads after Liked Songs / On repeat on this fresh card.
                 shot('downloads')
                 # A fixture from test_live_download.py, if present, was restored
                 # paused. Validate its existing bytes, then open Now Playing.

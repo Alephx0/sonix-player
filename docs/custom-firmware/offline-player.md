@@ -6,6 +6,9 @@ These are C/LVGL changes in the actual application, exercised in the SDL host
 simulator and cross-compiled for the R1 CPU. They are not a flashable firmware
 release or a Spotify service integration.
 
+The subsequent [screenshot-based UI update](reference-ui.md) supersedes the
+visual layout shown in the captures below; the offline behavior remains.
+
 ## Using the interface
 
 - Tap the mini-player to open Now Playing. Tap the title for its album and the

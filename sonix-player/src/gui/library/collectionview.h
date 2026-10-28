@@ -7,4 +7,5 @@ void collectionview_refresh(void);
 void collectionview_manage_track(const char *path);
 /* Opens save/follow and pin actions without changing playback. */
 void collectionview_collection_options(collection_kind_t kind,const char *key,const char *title,const char *creator);
+void collectionview_create_playlist(lv_event_t *e);
 #endif

@@ -1,0 +1,11 @@
+{
+  "cycles": 12,
+  "elapsed_seconds": 23.47,
+  "alive": true,
+  "route": "Library > saved album > mini-player > back > Search > Home",
+  "process": [
+    "VmHWM:\t   41024 kB",
+    "VmRSS:\t   40536 kB",
+    "Threads:\t23"
+  ]
+}

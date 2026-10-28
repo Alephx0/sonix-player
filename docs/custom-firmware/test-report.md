@@ -4,6 +4,9 @@ Status: host-tested development implementation; production/device acceptance is
 incomplete. Test commands are in [development.md](development.md). Captured output
 is under [evidence](evidence/) and actual simulator images under [screenshots](screenshots/).
 
+The subsequent [reference UI validation](reference-ui.md) records the redesigned
+screens, album mini-player navigation checks and refreshed build evidence.
+
 ## Offline integration update
 
 Host and MIPS builds pass after the offline queue/library additions, along with

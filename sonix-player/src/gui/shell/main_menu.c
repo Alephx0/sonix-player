@@ -20,11 +20,14 @@
 #include "src/gui/settings/settings.h"
 #include "src/gui/shell/gridpage.h"
 #include "src/gui/shell/icons.h"
+#include "src/gui/shell/reference_icons.h"
 #include "src/gui/shell/keyboard.h"
 #include "src/gui/shell/morepage.h"
 #include "src/gui/shell/switcher.h"
 #include "src/gui/shell/theme.h"
+#include "src/gui/shell/topbar.h"
 #include "src/gui/streaming/streaming.h"
+#include "src/gui/streaming/podcastpage.h"
 #include "src/gui/wireless/wifisettings.h"
 #include "src/gui/wireless/wireless.h"
 #include "src/system/core/lang.h"
@@ -42,9 +45,9 @@
  * created on demand. One bounded catalogue request runs at a time; workers
  * never touch LVGL. Download completion/indexing is owned by the application. */
 lv_obj_t *main_menu_screen;
-static lv_obj_t *tools_screen;
+static lv_obj_t *tools_screen, *header_tools, *header_settings, *header_add;
 static gui_config_t *cfg;
-static lv_obj_t *page[5], *heading, *nav_icon[3], *nav_label[3];
+static lv_obj_t *page[5], *heading, *nav_icon[3], *nav_label[3], *nav_objects[3];
 static lv_obj_t *mini, *mini_title, *mini_artist, *mini_art, *mini_play, *mini_progress;
 static int selected;
 static cover_image_t mini_image;
@@ -58,20 +61,21 @@ enum { FILTER_ALL, FILTER_LOCAL, FILTER_ONLINE };
 enum { OPEN_FAVOURITES, OPEN_ALBUMS, OPEN_ARTISTS, OPEN_TRACKS, OPEN_PLAYLISTS,
        OPEN_BROWSE, OPEN_MOST_PLAYED, OPEN_TOOLS, OPEN_DOWNLOADS, OPEN_SETTINGS,
        OPEN_CLASSIC_LIBRARY, OPEN_LOCAL_SEARCH, OPEN_WIFI, OPEN_STREAMING,
-       OPEN_DISCOVERY, OPEN_DOWNLOAD_FOLDER, OPEN_PROVIDERS };
+       OPEN_DISCOVERY, OPEN_DOWNLOAD_FOLDER, OPEN_PROVIDERS, OPEN_GENRES, OPEN_PODCASTS };
 
 #define PAD 20
-#define NAV_H 74
-#define MINI_H 76
-#define HEADER_H 74
+#define NAV_H 68
+#define MINI_H 64
+#define HEADER_H 64
 #define LOCAL_HITS 30
 
 static lv_color_t ink(void) { return theme()->text_primary; }
 static lv_color_t quiet(void) { return theme()->text_secondary; }
-static lv_color_t mint(void) { return lv_color_hex(theme_is_dark() ? 0x63dfb2 : 0x087954); }
+static lv_color_t mint(void) { return lv_color_hex(theme_is_dark() ? 0x1ed760 : 0x087954); }
 static bool tapped(void) { return !player_sheet_drag_active() && !switcher_back_drag_active(); }
 static int body_height(void) { return cfg->screen_height - cfg->top_bar_height - HEADER_H - NAV_H - MINI_H - 14; }
 static void show_page(int tab);
+static void search_browse(void);
 
 static lv_obj_t *box(lv_obj_t *parent, int w, int h, bool surface) {
     lv_obj_t *o = lv_obj_create(parent);
@@ -82,6 +86,7 @@ static lv_obj_t *box(lv_obj_t *parent, int w, int h, bool surface) {
     lv_obj_set_style_border_width(o, 0, 0);
     lv_obj_set_style_radius(o, surface ? 12 : 0, 0);
     lv_obj_set_scrollable(o, false);
+    if (!surface && theme_is_dark()) lv_obj_set_style_bg_color(o, lv_color_hex(0x121212), 0);
     return o;
 }
 
@@ -137,6 +142,8 @@ static void section(lv_obj_t *parent, const char *title) {
 static void action_cb(lv_event_t *e) {
     if (!tapped()) return;
     switch ((intptr_t)lv_event_get_user_data(e)) {
+    case OPEN_GENRES: medialist_open("Genres", LIBRARY_LIST_GENRES, LIBRARY_FILTER_NONE, NULL); break;
+    case OPEN_PODCASTS: podcastpage_open_followed(); break;
     case OPEN_FAVOURITES: medialist_open(tr("favourites"), LIBRARY_LIST_FAVOURITES, LIBRARY_FILTER_NONE, NULL); break;
     case OPEN_ALBUMS: medialist_open(tr("albums"), LIBRARY_LIST_ALBUMS, LIBRARY_FILTER_NONE, NULL); break;
     case OPEN_ARTISTS: medialist_open(tr("artists"), LIBRARY_LIST_ARTISTS, LIBRARY_FILTER_NONE, NULL); break;
@@ -336,11 +343,9 @@ static void home_build(void) {
 
 static void library_build(void) {
     lv_obj_t *p = page[LIBRARY];
-    lv_obj_set_flex_flow(p,LV_FLEX_FLOW_COLUMN);
-    route(p,"Downloads","Transfers and local downloaded files",&icon_download,OPEN_DOWNLOADS);
-    lv_obj_t *collections=box(p,cfg->screen_width-2*PAD,body_height()-112,false);
+    lv_obj_set_scrollable(p, false);
+    lv_obj_t *collections=box(p,cfg->screen_width-2*PAD,body_height(),false);
     collectionview_build(collections,cfg);
-    route(p,"All library views","Tracks, genres, years, album artists and folders",&icon_folder,OPEN_CLASSIC_LIBRARY);
 }
 
 /* The worker writes separate storage. Displayed buttons keep stable data
@@ -452,8 +457,8 @@ static void start_instant(void) {
     const char *query=lv_textarea_get_text(search_field);
     instant_pending=false;
     if(!query[0]) {
-        lv_obj_clean(search_results);
-        lv_label_set_text(search_status,"Search songs, artists, albums, playlists and lyrics");
+        search_browse();
+        lv_label_set_text(search_status,"");
         return;
     }
     snprintf(request_text,sizeof(request_text),"%s",query);
@@ -491,8 +496,8 @@ static void filter_cb(lv_event_t *e) {
     if (!tapped() || search_busy) return;
     search_filter = (int)(intptr_t)lv_event_get_user_data(e);
     for (int i = 0; i < 3; i++) {
-        lv_obj_set_style_border_width(filter_buttons[i], i == search_filter ? 2 : 0, 0);
-        lv_obj_set_style_border_color(filter_buttons[i], mint(), 0);
+        lv_obj_set_style_border_width(filter_buttons[i], i == search_filter ? 2 : 1, 0);
+        lv_obj_set_style_border_color(filter_buttons[i],i == search_filter ? mint() : lv_color_hex(0x555555), 0);
     }
     if (lv_textarea_get_text(search_field)[0]) submit_cb(NULL);
 }
@@ -651,6 +656,60 @@ static void search_draw(void) {
         route(search_results, "Search the full local library", "This overview shows up to six hits per category", &icon_search, OPEN_LOCAL_SEARCH);
 }
 
+static char browse_genres[2][256];
+static int browse_genre_count;
+static bool browse_genre_row(const char *name, const char *path, const char *artist, void *user) {
+    (void)path; (void)artist; (void)user;
+    if (browse_genre_count == 2) return false;
+    snprintf(browse_genres[browse_genre_count++], 256, "%s", name);
+    return browse_genre_count < 2;
+}
+static void browse_genre_cb(lv_event_t *e) {
+    const char *genre=lv_event_get_user_data(e);
+    if (tapped()) medialist_open(genre, LIBRARY_LIST_TRACKS, LIBRARY_FILTER_GENRE, genre);
+}
+static lv_obj_t *browse_pair(const char *title) {
+    section(search_results,title);
+    lv_obj_t *pair=box(search_results,cfg->screen_width-2*PAD,126,false);
+    lv_obj_set_flex_flow(pair,LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(pair,12,0);
+    return pair;
+}
+static void browse_tile(lv_obj_t *pair,const char *title,uint32_t color,const lv_image_dsc_t *icon,int action,const char *genre) {
+    int w=(cfg->screen_width-2*PAD-12)/2;
+    lv_obj_t *tile=button(pair,NULL,w,118,genre?browse_genre_cb:action_cb,genre?(void *)genre:(void *)(intptr_t)action);
+    lv_obj_set_style_bg_color(tile,lv_color_hex(color),0);
+    lv_obj_set_style_bg_opa(tile,LV_OPA_COVER,0);
+    lv_obj_set_style_radius(tile,6,0);
+    lv_obj_t *t=label(tile,title,&font_ui_22_bold,w-24,false);
+    lv_obj_set_style_text_color(t,lv_color_white(),0);lv_obj_set_pos(t,14,14);
+    lv_obj_t *sleeve=box(tile,68,68,true);
+    lv_obj_set_style_bg_color(sleeve,lv_color_darken(lv_color_hex(color),LV_OPA_50),0);
+    lv_obj_set_style_radius(sleeve,3,0);lv_obj_set_pos(sleeve,w-64,62);
+    lv_obj_set_style_transform_rotation(sleeve,180,0);
+    lv_obj_t *im=glyph(sleeve,icon,34);lv_obj_center(im);
+    lv_obj_set_style_image_recolor(im,lv_color_white(),0);
+}
+static void search_browse(void) {
+    lv_obj_clean(search_results);
+    browse_genre_count=0;
+    library_for_each(LIBRARY_LIST_GENRES,LIBRARY_FILTER_NONE,NULL,browse_genre_row,NULL);
+    lv_obj_t *pair=browse_pair(browse_genre_count?"Your genres":"Your music");
+    browse_tile(pair,browse_genre_count?browse_genres[0]:"Songs",0x9950ad,&icon_music2,OPEN_TRACKS,browse_genre_count?browse_genres[0]:NULL);
+    browse_tile(pair,browse_genre_count>1?browse_genres[1]:"Albums",0x637e25,&icon_album,OPEN_ALBUMS,browse_genre_count>1?browse_genres[1]:NULL);
+    pair=browse_pair("Explore your collection");
+    browse_tile(pair,"Podcasts",0x2865c7,&icon_podcast_list,OPEN_PODCASTS,NULL);
+    browse_tile(pair,"Playlists",0xc44822,&icon_list_music,OPEN_PLAYLISTS,NULL);
+    pair=browse_pair("Browse all");
+    browse_tile(pair,"Liked Songs",0x8170b3,&icon_heart,OPEN_FAVOURITES,NULL);
+    browse_tile(pair,"Artists",0x23375f,&icon_artist,OPEN_ARTISTS,NULL);
+    pair=browse_pair("More music");
+    browse_tile(pair,"Genres",0x3d8964,&icon_genre,OPEN_GENRES,NULL);
+    browse_tile(pair,"Downloads",0xb45b23,&icon_download,OPEN_DOWNLOADS,NULL);
+    route(search_results,"Streaming & radio","Your connected music services",&icon_wifi,OPEN_STREAMING);
+    route(search_results,"Files & folders","Browse the microSD card",&icon_folder,OPEN_BROWSE);
+}
+
 static void search_build(void) {
     lv_obj_t *p = page[SEARCH];
     lv_obj_set_layout(p, LV_LAYOUT_NONE);
@@ -660,10 +719,14 @@ static void search_build(void) {
     lv_obj_set_pos(search_field, 0, 0);
     lv_textarea_set_one_line(search_field, true);
     lv_textarea_set_max_length(search_field, 160);
-    lv_textarea_set_placeholder_text(search_field, "Artists, albums or songs");
+    lv_textarea_set_placeholder_text(search_field, "Songs, artists, albums or lyrics");
     lv_obj_add_style(search_field, &theme_style_card, 0);
     lv_obj_add_style(search_field, &theme_style_text, 0);
     lv_obj_set_style_text_font(search_field, &font_ui_20, 0);
+    lv_obj_set_style_bg_color(search_field,lv_color_white(),0);
+    lv_obj_set_style_text_color(search_field,lv_color_black(),0);
+    lv_obj_set_style_radius(search_field,6,0);
+    lv_obj_set_style_text_color(search_field,lv_color_hex(0x444444),LV_PART_TEXTAREA_PLACEHOLDER);
     keyboard_style_caret(search_field);
     lv_obj_add_event_cb(search_field, field_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(search_field, instant_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -671,6 +734,10 @@ static void search_build(void) {
     for (int i = 0; i < 3; i++) {
         filter_buttons[i] = button(p, names[i], 110, 46, filter_cb, (void *)(intptr_t)i);
         lv_obj_set_pos(filter_buttons[i], i * 120, 68);
+        lv_obj_set_style_radius(filter_buttons[i],24,0);
+        lv_obj_set_style_bg_opa(filter_buttons[i],LV_OPA_TRANSP,0);
+        lv_obj_set_style_border_color(filter_buttons[i],lv_color_hex(0x555555),0);
+        lv_obj_set_style_border_width(filter_buttons[i],1,0);
     }
     lv_obj_set_style_border_width(filter_buttons[0], 2, 0);
     lv_obj_set_style_border_color(filter_buttons[0], mint(), 0);
@@ -678,18 +745,11 @@ static void search_build(void) {
     lv_obj_set_style_text_font(lv_obj_get_child(sources, 0), &font_ui_14, 0);
     lv_obj_set_height(lv_obj_get_child(sources, 0), 20);
     lv_obj_set_pos(sources, 360, 68);
-    search_status = label(p, "Local music + Internet Archive", &font_ui_16, cfg->screen_width - 2 * PAD, true);
+    search_status = label(p, "", &font_ui_16, cfg->screen_width - 2 * PAD, true);
     lv_obj_set_pos(search_status, 0, 122);
     search_results = column(p, cfg->screen_width - 2 * PAD, body_height() - 150);
     lv_obj_set_pos(search_results, 0, 150);
-    section(search_results, "Browse everything");
-    route(search_results, "Your full local library", "Tracks, albums and artists", &icon_music2, OPEN_LOCAL_SEARCH);
-    route(search_results, "Streaming & podcasts", "Tidal, Qobuz, radio and podcast search", &icon_wifi, OPEN_STREAMING);
-    route(search_results, "Wi-Fi settings", "Connect to explore online", &icon_wifi, OPEN_WIFI);
-    lv_obj_t *note = label(search_results,
-        "Online search finds openly licensed releases. Open one to choose its source format and download. Streaming previews are not supported by this provider.",
-        &font_ui_18, cfg->screen_width - 2 * PAD, true);
-    lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
+    search_browse();
     search_keyboard_parent = box(main_menu_screen, cfg->screen_width, 310, false);
     lv_obj_set_pos(search_keyboard_parent, 0, cfg->screen_height - NAV_H - 310);
     search_keyboard = keyboard_create(search_keyboard_parent, cfg->screen_width, 310, search_field,
@@ -822,6 +882,7 @@ static void mini_drop(void) {
         lv_obj_set_style_image_recolor_opa(mini_art, LV_OPA_COVER, 0);
         cover_free(&mini_image);
         mini_has_art = false;
+        lv_obj_set_style_bg_color(mini,lv_color_hex(0x252525),0);
     }
 }
 
@@ -849,6 +910,7 @@ static void mini_update(void) {
             lv_image_set_src(mini_art, &mini_image.dsc);
             lv_obj_set_style_image_recolor_opa(mini_art, LV_OPA_TRANSP, 0);
             mini_has_art = true;
+            if(mini_image.has_tone) lv_obj_set_style_bg_color(mini,lv_color_darken(lv_color_hex(mini_image.tone),LV_OPA_70),0);
         }
     }
 }
@@ -862,13 +924,29 @@ static void poll_cb(lv_timer_t *timer) {
         if (ready) { if(request_epoch==search_epoch)search_draw(); search_busy = false; }
     }
     if(!search_busy && instant_pending && lv_tick_elaps(instant_changed)>=180)start_instant();
-    if (lv_screen_active() != main_menu_screen || player_sheet_is_open()) return;
-    mini_update();
+    if (player_sheet_is_open()) return;
+    if(mini && lv_screen_active()==lv_obj_get_parent(mini)) mini_update();
+    if (lv_screen_active() != main_menu_screen) return;
     if (selected == HOME) home_art_update();
     if (selected == DOWNLOADS) downloads_update();
 }
 
-static void nav_cb(lv_event_t *e) { if (tapped()) show_page((int)(intptr_t)lv_event_get_user_data(e)); }
+int main_menu_mount_footer(lv_obj_t *screen) {
+    if(!mini || !screen) return 0;
+    lv_obj_set_parent(mini,screen);lv_obj_set_hidden(mini,false);lv_obj_move_foreground(mini);
+    for(int i=0;i<3;i++) {lv_obj_set_parent(nav_objects[i],screen);lv_obj_move_foreground(nav_objects[i]);}
+    mini_update();
+    return NAV_H+MINI_H+12;
+}
+void main_menu_restore_footer(lv_obj_t *screen) {
+    if(mini && lv_obj_get_parent(mini)==screen) main_menu_mount_footer(main_menu_screen);
+}
+static void nav_cb(lv_event_t *e) {
+    if(!tapped()) return;
+    int tab=(int)(intptr_t)lv_event_get_user_data(e);
+    if(lv_screen_active()!=main_menu_screen) {main_menu_mount_footer(main_menu_screen);switch_screen(main_menu_screen);}
+    show_page(tab);
+}
 
 static void show_page(int tab) {
     if (tab < HOME || tab > PROVIDERS) return;
@@ -888,9 +966,11 @@ static void show_page(int tab) {
     for (int i = 0; i < 5; i++) if (page[i]) lv_obj_set_hidden(page[i], i != tab);
     const char *titles[] = {"Sonix", "Search", "Your Library", "Downloads", "Discovery"};
     lv_label_set_text(heading, titles[tab]);
+    lv_obj_set_hidden(header_add,tab!=LIBRARY);
+    lv_obj_set_hidden(header_settings,tab==LIBRARY);
     for (int i = 0; i < 3; i++) {
         bool active = i == (tab == DOWNLOADS ? LIBRARY : tab == PROVIDERS ? SEARCH : tab);
-        lv_obj_set_style_image_recolor(nav_icon[i], active ? mint() : quiet(), 0);
+        lv_obj_set_style_image_recolor(nav_icon[i], active ? ink() : quiet(), 0);
         lv_obj_set_style_text_color(nav_label[i], active ? ink() : quiet(), 0);
     }
     if (tab == HOME && (home_revision != library_revision(LIBRARY_LIST_TRACKS) || home_history != library_history_revision())) home_build();
@@ -898,8 +978,14 @@ static void show_page(int tab) {
     if(tab==LIBRARY) collectionview_refresh();
 }
 
+void main_menu_open_downloads(void) {
+    if(lv_screen_active()!=main_menu_screen) switch_screen(main_menu_screen);
+    show_page(DOWNLOADS);
+}
+
 static void screen_cb(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
+        main_menu_mount_footer(main_menu_screen);
         show_page(selected);
         mini_update();
     } else {
@@ -927,26 +1013,39 @@ void main_menu_init(gui_config_t *config) {
     lv_obj_add_style(main_menu_screen, &theme_style_screen, 0);
     lv_obj_set_style_pad_all(main_menu_screen, 0, 0);
     lv_obj_set_scrollable(main_menu_screen, false);
-    heading = label(main_menu_screen, "Sonix", &font_ui_32, cfg->screen_width - 190, false);
+    if(theme_is_dark()) {lv_obj_set_style_bg_color(main_menu_screen,lv_color_hex(0x121212),0);topbar_tint_on_screen(main_menu_screen,true,lv_color_hex(0x121212),lv_color_white());}
+    heading = label(main_menu_screen, "Sonix", &font_ui_28, cfg->screen_width - 140, false);
     lv_obj_set_pos(heading, PAD, cfg->top_bar_height + 17);
-    lv_obj_t *tools = button(main_menu_screen, "Tools", 82, 48, action_cb, (void *)OPEN_TOOLS);
-    lv_obj_set_pos(tools, cfg->screen_width - 174, cfg->top_bar_height + 10);
+    lv_obj_t *tools = button(main_menu_screen, NULL, 48, 48, action_cb, (void *)OPEN_TOOLS);
+    header_tools=tools;
+    lv_obj_set_style_bg_opa(tools,LV_OPA_TRANSP,0);
+    lv_obj_center(glyph(tools,&icon_ellipsis_vertical,26));
+    lv_obj_set_pos(tools, cfg->screen_width - 122, cfg->top_bar_height + 10);
     lv_obj_t *settings = button(main_menu_screen, NULL, 60, 48, action_cb, (void *)OPEN_SETTINGS);
-    lv_obj_set_pos(settings, cfg->screen_width - 80, cfg->top_bar_height + 10);
+    header_settings=settings;
+    lv_obj_set_style_bg_opa(settings,LV_OPA_TRANSP,0);
+    lv_obj_set_pos(settings, cfg->screen_width - 72, cfg->top_bar_height + 10);
     lv_obj_t *settings_icon = glyph(settings, &icon_music_settings, 26);
     lv_obj_center(settings_icon);
+    header_add=button(main_menu_screen,NULL,52,48,collectionview_create_playlist,NULL);
+    lv_obj_set_pos(header_add,cfg->screen_width-72,cfg->top_bar_height+10);
+    lv_obj_set_style_bg_opa(header_add,LV_OPA_TRANSP,0);
+    lv_obj_center(glyph(header_add,&icon_plus,28));
     mini = button(main_menu_screen, NULL, cfg->screen_width - 24, MINI_H, mini_open_cb, NULL);
     lv_obj_set_pos(mini, 12, cfg->screen_height - NAV_H - MINI_H - 6);
-    mini_art = glyph(mini, &icon_music2, 52);
-    lv_obj_set_pos(mini_art, 10, 10);
+    lv_obj_set_style_bg_color(mini,lv_color_hex(0x252525),0);
+    lv_obj_set_style_radius(mini,6,0);
+    mini_art = glyph(mini, &icon_music2, 44);
+    lv_obj_set_pos(mini_art, 8, 8);
     mini_title = label(mini, "Choose something to play", &font_ui_18, cfg->screen_width - 166, false);
     lv_obj_set_height(mini_title, 25);
-    lv_obj_set_pos(mini_title, 74, 12);
+    lv_obj_set_pos(mini_title, 64, 8);
     mini_artist = label(mini, "", &font_ui_16, cfg->screen_width - 166, true);
     lv_obj_set_height(mini_artist, 23);
-    lv_obj_set_pos(mini_artist, 74, 39);
+    lv_obj_set_pos(mini_artist, 64, 33);
     lv_obj_t *transport = button(mini, NULL, 54, 58, mini_play_cb, NULL);
     lv_obj_set_event_bubble(transport, false);
+    lv_obj_set_style_bg_opa(transport,LV_OPA_TRANSP,0);
     lv_obj_align(transport, LV_ALIGN_RIGHT_MID, -5, -2);
     mini_play = glyph(transport, &icon_play, 28);
     lv_obj_center(mini_play);
@@ -954,15 +1053,17 @@ void main_menu_init(gui_config_t *config) {
     lv_obj_set_size(mini_progress, cfg->screen_width - 44, 3);
     lv_obj_align(mini_progress, LV_ALIGN_BOTTOM_MID, 0, -2);
     lv_bar_set_range(mini_progress, 0, 1000);
-    lv_obj_set_style_bg_color(mini_progress, mint(), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(mini_progress, lv_color_white(), LV_PART_INDICATOR);
     lv_obj_set_style_shadow_width(mini_progress, 0, 0);
     const char *names[] = {"Home", "Search", "Your Library"};
-    const lv_image_dsc_t *icons[] = {&icon_now_playing, &icon_search, &icon_list_music};
+    const lv_image_dsc_t *icons[] = {&sonix_icon_home, &icon_search, &sonix_icon_library};
     for (int i = 0; i < 3; i++) {
         lv_obj_t *nav = button(main_menu_screen, NULL, cfg->screen_width / 3, NAV_H, nav_cb, (void *)(intptr_t)i);
+        nav_objects[i]=nav;
         lv_obj_set_pos(nav, i * (cfg->screen_width / 3), cfg->screen_height - NAV_H);
         lv_obj_set_style_radius(nav, 0, 0);
         lv_obj_add_style(nav, &theme_style_panel, 0);
+        if(theme_is_dark()) lv_obj_set_style_bg_color(nav,lv_color_hex(0x121212),0);
         nav_icon[i] = glyph(nav, icons[i], 26);
         lv_obj_align(nav_icon[i], LV_ALIGN_TOP_MID, 0, 9);
         nav_label[i] = label(nav, names[i], &font_ui_16, cfg->screen_width / 3 - 8, false);

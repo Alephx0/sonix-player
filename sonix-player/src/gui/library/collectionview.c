@@ -1,4 +1,5 @@
 #include "collectionview.h"
+#include "src/gui/shell/main_menu.h"
 #include "src/gui/fonts/fonts.h"
 #include "src/gui/library/medialist.h"
 #include "src/gui/library/playlistpage.h"
@@ -6,6 +7,7 @@
 #include "src/gui/shell/icons.h"
 #include "src/gui/shell/keyboard.h"
 #include "src/gui/shell/popover.h"
+#include "src/gui/shell/reference_icons.h"
 #include "src/gui/shell/switcher.h"
 #include "src/gui/shell/theme.h"
 #include "src/gui/streaming/podcastpage.h"
@@ -76,6 +78,8 @@ static lv_obj_t *panel(lv_obj_t *p, int w, int h) {
 	lv_obj_set_size(o, w, h);
 	lv_obj_set_style_pad_all(o, 0, 0);
 	lv_obj_set_scrollable(o, false);
+	if (theme_is_dark())
+		lv_obj_set_style_bg_color(o, lv_color_hex(0x121212), 0);
 	return o;
 }
 static lv_obj_t *button(lv_obj_t *p, const char *s, int w, int h, lv_event_cb_t cb, void *u) {
@@ -175,6 +179,7 @@ static void row_options(lv_event_t *e) {
 }
 static void route(lv_event_t *e) {
 	switch ((intptr_t)lv_event_get_user_data(e)) {
+    case 7: main_menu_open_downloads(); break;
 	case 1:
 		medialist_open("Liked Songs", LIBRARY_LIST_FAVOURITES, LIBRARY_FILTER_NONE, NULL);
 		break;
@@ -277,6 +282,7 @@ static void create_cb(lv_event_t *e) {
 	lv_obj_set_pos(cancel, 20, 205);
 	keyboard_create(name_layer, w, 300, name_field, NULL, "Create", name_accept, NULL);
 }
+void collectionview_create_playlist(lv_event_t *e) { create_cb(e); }
 static bool member_collect(const char *name, void *user) {
 	(void)user;
 	if (member_seen++ < member_page * 24)
@@ -340,6 +346,27 @@ void collectionview_manage_track(const char *path) {
 	sheet_new("Add to playlists");
 	members_draw();
 }
+static lv_obj_t *collection_shortcut(const char *title, const char *subtitle, const lv_image_dsc_t *icon, uint32_t color, int action, int width) {
+	lv_obj_t *row = button(list, NULL, width, 76, route, (void *)(intptr_t)action);
+	lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+	lv_obj_t *art = panel(row, 64, 64);
+	lv_obj_set_pos(art, 0, 6);
+	lv_obj_set_style_bg_color(art, lv_color_hex(color), 0);
+	lv_obj_set_style_bg_grad_color(art, lv_color_lighten(lv_color_hex(color), LV_OPA_50), 0);
+	lv_obj_set_style_bg_grad_dir(art, LV_GRAD_DIR_VER, 0);
+	lv_obj_t *im = lv_image_create(art);
+	lv_image_set_src(im, icon);
+	lv_obj_set_size(im, 30, 30);
+	lv_image_set_inner_align(im, LV_IMAGE_ALIGN_CONTAIN);
+	lv_obj_center(im);
+	lv_obj_set_style_image_recolor(im, lv_color_white(), 0);
+	lv_obj_set_style_image_recolor_opa(im, LV_OPA_COVER, 0);
+	lv_obj_t *l = text(row, title, width - 98, &font_ui_22, false);
+	lv_obj_set_pos(l, 82, 12);
+	l = text(row, subtitle, width - 98, &font_ui_16, true);
+	lv_obj_set_pos(l, 82, 43);
+	return row;
+}
 void collectionview_refresh(void) {
 	if (!root || !cfg)
 		return;
@@ -357,53 +384,85 @@ void collectionview_refresh(void) {
 	lv_obj_set_scroll_dir(filters, LV_DIR_HOR);
 	lv_obj_set_style_pad_column(filters, 8, 0);
 	for (int i = 0; i < 5; i++) {
-		lv_obj_t *b = button(filters, names[i], i ? 104 : 56, 42, filters_cb, (void *)(intptr_t)i);
-		if (filter == i)
-			lv_obj_set_style_bg_color(b, lv_color_hex(0x1DB954), 0);
+		lv_obj_t *b = button(filters, names[i], i ? 104 : 52, 42, filters_cb, (void *)(intptr_t)i);
+		lv_obj_set_style_radius(b, 24, 0);
+		lv_obj_set_style_bg_opa(b, filter == i ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+		lv_obj_set_style_bg_color(b, lv_color_hex(0x242424), 0);
+		lv_obj_set_style_border_width(b, 1, 0);
+		lv_obj_set_style_border_color(b, lv_color_hex(filter == i ? 0xaaaaaa : 0x555555), 0);
 	}
-	static const char *sorts[] = {"Recents", "Recently added", "Alphabetical", "Creator"};
-	lv_obj_t *b = button(root, sorts[sort_mode], 180, 42, sort_cb, NULL);
+	static const char *sorts[] = {"Recently played", "Recently added", "Alphabetical", "Creator"};
+	lv_obj_t *b = button(root, sorts[sort_mode], 210, 42, sort_cb, NULL);
 	lv_obj_set_pos(b, 0, 54);
-	b = button(root, grid ? "List" : "Grid", 80, 42, grid_cb, NULL);
-	lv_obj_set_pos(b, w - 166, 54);
-	b = button(root, "+", 68, 42, create_cb, NULL);
-	lv_obj_set_pos(b, w - 68, 54);
+	lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_text_align(lv_obj_get_child(b, 0), LV_TEXT_ALIGN_LEFT, 0);
+	b = button(root, NULL, 60, 42, grid_cb, NULL);
+	lv_obj_t *layout_icon = lv_image_create(b);
+	lv_image_set_src(layout_icon, grid ? &sonix_icon_library : &sonix_icon_grid);
+	lv_obj_set_size(layout_icon, 22, 22);
+	lv_image_set_inner_align(layout_icon, LV_IMAGE_ALIGN_CONTAIN);
+	lv_obj_center(layout_icon);
+	lv_obj_set_pos(b, w - 60, 54);
+	lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
+
 	list = panel(root, w, h - 108);
 	lv_obj_set_pos(list, 0, 108);
 	lv_obj_set_scrollable(list, true);
 	lv_obj_set_scroll_dir(list, LV_DIR_VER);
 	lv_obj_set_flex_flow(list, LV_FLEX_FLOW_ROW_WRAP);
-	lv_obj_set_style_pad_row(list, 10, 0);
+	lv_obj_set_style_pad_row(list, 4, 0);
 	lv_obj_set_style_pad_column(list, 10, 0);
 
+	if (page == 0 && (filter == 0 || filter == 1))
+		collection_shortcut("Liked Songs", "Playlist / Your favorite tracks", &icon_heart, 0x5330aa, 1, w);
+	if (page == 0 && filter == 4)
+		collection_shortcut("Your episodes", "Podcasts & followed shows", &icon_podcast_list, 0x22694e, 4, w);
 	row_count = collections_list(filter, (collection_sort_t)sort_mode, page * 24, rows, 24);
 	for (int i = 0; i < row_count; i++) {
 		collection_item_t *r = &rows[i];
 		if (r->kind == COLLECTION_PLAYLIST && !playlists_exists(r->key))
 			continue;
-		int rw = grid ? (w - 10) / 2 : w, rh = grid ? 190 : 88;
+		int rw = grid ? (w - 10) / 2 : w, rh = grid ? 180 : 78;
 		lv_obj_t *row = button(list, NULL, rw, rh, open_row, r);
 		row_boxes[i] = row;
+		lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
 		row_images[i] = lv_image_create(row);
 		lv_image_set_src(row_images[i], r->kind == COLLECTION_ARTIST ? &icon_artist : &icon_album);
 		lv_obj_set_size(row_images[i], 64, 64);
 		lv_image_set_inner_align(row_images[i], LV_IMAGE_ALIGN_CONTAIN);
-		lv_obj_set_pos(row_images[i], 12, 12);
+		lv_obj_set_pos(row_images[i], grid ? 12 : 0, 7);
+		if (r->kind == COLLECTION_ARTIST) {
+			lv_obj_set_style_bg_color(row_images[i], lv_color_hex(0x383838), 0);
+			lv_obj_set_style_bg_opa(row_images[i], LV_OPA_COVER, 0);
+			lv_obj_set_style_radius(row_images[i], LV_RADIUS_CIRCLE, 0);
+		}
 		char title[280];
-		snprintf(title, sizeof(title), "%s%s", r->pin ? "PIN  " : "", r->title);
-		lv_obj_t *l = text(row, title, grid ? rw - 24 : rw - 132, &font_ui_22_bold, false);
-		lv_obj_set_pos(l, grid ? 12 : 86, grid ? 92 : 12);
-		const char *kind = r->kind == COLLECTION_PLAYLIST ? "Playlist" : r->kind == COLLECTION_ALBUM ? "Saved album" : r->kind == COLLECTION_ARTIST ? "Followed artist" : "Podcast";
+		snprintf(title, sizeof(title), "%s", r->title);
+		lv_obj_t *l = text(row, title, grid ? rw - 24 : rw - 132, &font_ui_22, false);
+		lv_obj_set_pos(l, grid ? 12 : 82, grid ? 92 : 12);
+		const char *kind = r->kind == COLLECTION_PLAYLIST ? "Playlist" : r->kind == COLLECTION_ALBUM ? "Album" : r->kind == COLLECTION_ARTIST ? "Artist" : "Podcast";
 		char sub[300];
 		snprintf(sub, sizeof(sub), "%s%s%s", kind, r->creator[0] ? " / " : "", r->creator);
 		l = text(row, sub, grid ? rw - 24 : rw - 98, &font_ui_16, true);
-		lv_obj_set_pos(l, grid ? 12 : 86, grid ? 130 : 48);
+		lv_obj_set_pos(l, grid ? 12 : 82, grid ? 130 : 43);
+		if (r->pin) {
+			lv_obj_set_x(l, grid ? 34 : 104);
+			lv_obj_set_width(l, grid ? rw - 48 : rw - 120);
+			lv_obj_t *pin = lv_image_create(row);
+			lv_image_set_src(pin, &sonix_icon_pin);
+			lv_obj_set_size(pin, 16, 16);
+			lv_image_set_inner_align(pin, LV_IMAGE_ALIGN_CONTAIN);
+			lv_obj_set_pos(pin, grid ? 12 : 82, grid ? 131 : 44);
+			lv_obj_set_style_image_recolor(pin, lv_color_hex(0x1ed760), 0);
+			lv_obj_set_style_image_recolor_opa(pin, LV_OPA_COVER, 0);
+		}
 		b = button(row, "...", 42, 40, row_options, r);
 		lv_obj_set_pos(b, rw - 46, 5);
+		lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
 	}
 	if (filter == 0) {
-		button(list, "Liked Songs", w, 62, route, (void *)1);
-		button(list, "Most played", w, 54, route, (void *)6);
+		collection_shortcut("On repeat", "Your most played songs", &icon_repeat_all, 0x8c3b69, 6, w);
+        collection_shortcut("Downloads", "Transfers and local files", &icon_download, 0x335e78, 7, w);
 	}
 	if (!row_count)
 		text(list, "Save albums or follow artists from song options. Your files remain available below.", w, &font_ui_18, true);
@@ -412,11 +471,11 @@ void collectionview_refresh(void) {
 	if (row_count == 24)
 		button(list, "More", (w - 10) / 2, 48, page_cb, (void *)(intptr_t)1);
 	if (filter == 0 || filter == 1)
-		button(list, "All playlists / rename / order", w, 54, route, (void *)5);
+		button(list, "Manage playlists", w, 54, route, (void *)5);
 	if (filter == 0 || filter == 2)
-		button(list, "All indexed albums", w, 54, route, (void *)2);
+		button(list, "All albums", w, 54, route, (void *)2);
 	if (filter == 0 || filter == 3)
-		button(list, "All indexed artists", w, 54, route, (void *)3);
+		button(list, "All artists", w, 54, route, (void *)3);
 	if (filter == 0 || filter == 4)
 		button(list, "Podcasts & shows", w, 54, route, (void *)4);
 	seen_revision = collections_revision();

@@ -15,10 +15,12 @@
 #include "src/gui/nowplaying/lyricsearch.h"
 #include "src/gui/library/medialist.h"
 #include "src/gui/library/collectionview.h"
+#include "src/gui/settings/musicsettings.h"
 #include "src/gui/fonts/fonts.h"
 #include "src/gui/shell/confirm.h"
 #include "src/gui/shell/gui.h"
 #include "src/gui/shell/icons.h"
+#include "src/gui/shell/reference_icons.h"
 #include "src/gui/shell/popover.h"
 #include "src/gui/shell/quickpanel.h"
 #include "src/gui/shell/scrolltext.h"
@@ -325,7 +327,9 @@ static bool layout_sonix_now;
 static lv_obj_t *sonix_cover_empty, *sonix_heading;
 static lv_obj_t *sonix_actions, *sonix_repeat_btn, *sonix_repeat_icon;
 static lv_obj_t *sonix_inline, *sonix_inline_lines[3];
-static lv_obj_t *sonix_modal;
+static lv_obj_t *sonix_modal, *sonix_background, *sonix_lyrics_card, *sonix_lyrics_hint;
+static void sonix_tint(void);
+static void sonix_modal_close(void);
 static bool sonix_expanded, sonix_inline_visible;
 static bool sonix_layout_active;
 static int sonix_inline_line = -2;
@@ -733,7 +737,7 @@ static void apply_playback_status(audio_status_t status) {
 	// it opens a fresh connection to the same one.
 	lv_image_set_src(play_btn_icon,
 					 live_mode ? (playing ? &icon_stop : &icon_play) : (playing ? &icon_pause : &icon_play));
-	lv_obj_set_style_image_recolor(play_btn_icon, chrome_accent(), 0);
+	lv_obj_set_style_image_recolor(play_btn_icon, layout_sonix_now ? lv_color_hex(0x121212) : chrome_accent(), 0);
 	lv_obj_set_style_image_recolor_opa(play_btn_icon, LV_OPA_COVER, 0);
 
 	// Keep polling either way, just less often when nothing is playing. The
@@ -961,20 +965,20 @@ static void cover_show(bool have_cover) {
 		/* Inset the existing decoded sleeve; no second bitmap or blur surface.
 		 * Leave room for the status/back controls and the track row below. */
 		int size = sonix_expanded ? cover_box_w - 32 : cover_box_w - 64;
-		int reserve = sonix_expanded ? 76 : sonix_inline_visible ? 216 : 116;
+		int reserve = sonix_expanded ? 92 : 116;
 		if (size > cover_box_h - reserve) size = cover_box_h - reserve;
 		if (size < 64) size = 64;
 		lv_obj_set_size(cover_img, size, size);
 		lv_image_set_inner_align(cover_img, LV_IMAGE_ALIGN_CONTAIN);
-		lv_obj_align(cover_img, LV_ALIGN_BOTTOM_MID, 0, sonix_inline_visible ? -116 : -16);
+		lv_obj_align(cover_img, LV_ALIGN_BOTTOM_MID, 0, -16);
 		if (sonix_cover_empty) {
 			lv_obj_set_size(sonix_cover_empty, size, size);
-			lv_obj_align(sonix_cover_empty, LV_ALIGN_BOTTOM_MID, 0, sonix_inline_visible ? -116 : -16);
+			lv_obj_align(sonix_cover_empty, LV_ALIGN_BOTTOM_MID, 0, -16);
 			lv_obj_set_hidden(sonix_cover_empty, have_cover);
 		}
 		if (cover_placeholder_icon)
 			lv_obj_align(cover_placeholder_icon, LV_ALIGN_BOTTOM_MID, 0,
-				(sonix_inline_visible ? -116 : -16) - size / 2 + lv_obj_get_height(cover_placeholder_icon) / 2);
+				(-16) - size / 2 + lv_obj_get_height(cover_placeholder_icon) / 2);
 	} else {
 		lv_image_set_inner_align(cover_img, LV_IMAGE_ALIGN_DEFAULT);
 		if (current_cover.pixels)
@@ -1049,7 +1053,7 @@ static void set_over_cover(bool on) {
 		lv_obj_set_style_bg_opa(play_btn, LV_OPA_COVER, 0);
 	}
 	if (play_btn_icon) {
-		lv_obj_set_style_image_recolor(play_btn_icon, chrome_accent(), 0);
+		lv_obj_set_style_image_recolor(play_btn_icon, layout_sonix_now ? lv_color_hex(0x121212) : chrome_accent(), 0);
 		lv_obj_set_style_image_recolor_opa(play_btn_icon, LV_OPA_COVER, 0);
 	}
 
@@ -1168,7 +1172,7 @@ static void lyrics_repaint_lit(void);
 // moment can have moved: the play/pause disc and the repeat/shuffle mode.
 static void paint_transport_tint(void) {
 	if (play_btn_icon) {
-		lv_obj_set_style_image_recolor(play_btn_icon, chrome_accent(), 0);
+		lv_obj_set_style_image_recolor(play_btn_icon, layout_sonix_now ? lv_color_hex(0x121212) : chrome_accent(), 0);
 		lv_obj_set_style_image_recolor_opa(play_btn_icon, LV_OPA_COVER, 0);
 	}
 	if (repeat_btn_icon) {
@@ -1177,8 +1181,8 @@ static void paint_transport_tint(void) {
 	update_speed_button();
 	// The progress bar, which Waveform hides under the shape of the track.
 	if (progress_slider) {
-		lv_obj_set_style_bg_color(progress_slider, chrome_accent(), LV_PART_INDICATOR);
-		lv_obj_set_style_bg_color(progress_slider, chrome_accent(), LV_PART_KNOB);
+		lv_obj_set_style_bg_color(progress_slider, layout_sonix_now ? lv_color_white() : chrome_accent(), LV_PART_INDICATOR);
+		lv_obj_set_style_bg_color(progress_slider, layout_sonix_now ? lv_color_white() : chrome_accent(), LV_PART_KNOB);
 	}
 	lyrics_repaint_lit(); // the sung line wears it too
 }
@@ -1203,6 +1207,7 @@ static void alt_pills_sync(void) {
 // these are local style properties on widgets the two arrangements share, so
 // leaving them behind painted the standard page in the last sleeve's ink.
 static void paint_alt_tint(void) {
+    sonix_tint();
 	if (!alt_title_pill) {
 		return;
 	}
@@ -1866,6 +1871,7 @@ static void lyrics_progress_apply(int32_t progress) {
 	lyrics_progress = progress;
 	lyrics_find_sync(progress == LYRICS_FULL);
 	if (sonix_inline) lv_obj_set_hidden(sonix_inline, !sonix_inline_visible || progress != 0);
+    if(sonix_lyrics_card) lv_obj_set_hidden(sonix_lyrics_card,!layout_sonix_now || progress!=0);
 	bool rest = progress == 0;
 	if (sonix_heading) lv_obj_set_hidden(sonix_heading, !layout_sonix_now || sonix_expanded || !rest);
 	int32_t travel = cover_box_w - lyrics_pane_x;
@@ -2951,6 +2957,19 @@ static void apply_layout(void) {
 	if (sonix_layout_active && !layout_sonix_now) {
 		lv_obj_set_style_pad_ver(player_menu, menu_pad_ver, 0);
 		lv_obj_set_style_pad_gap(player_menu, menu_gap, 0);
+        lv_obj_remove_local_style_prop(cover_panel,LV_STYLE_BG_OPA,0);
+        lv_obj_remove_local_style_prop(player_menu,LV_STYLE_BG_OPA,0);
+        lv_obj_remove_local_style_prop(player_menu,LV_STYLE_BG_IMAGE_OPA,0);
+        lv_obj_set_style_text_font(song_title_label,&font_ui_26,0);
+        lv_obj_set_style_text_font(song_artist_label,&font_ui_24,0);
+        lv_obj_set_size(play_btn,84,84);
+        lv_obj_set_style_text_font(elapsed_label,&font_ui_22,0);
+        lv_obj_set_style_text_font(remaining_label,&font_ui_22,0);
+        lv_obj_remove_local_style_prop(progress_slider,LV_STYLE_WIDTH,LV_PART_KNOB);
+        lv_obj_remove_local_style_prop(progress_slider,LV_STYLE_HEIGHT,LV_PART_KNOB);
+        lv_obj_remove_local_style_prop(fav_btn_icon,LV_STYLE_WIDTH,0);
+        lv_obj_remove_local_style_prop(fav_btn_icon,LV_STYLE_HEIGHT,0);
+        lv_image_set_inner_align(fav_btn_icon,LV_IMAGE_ALIGN_DEFAULT);
 		sonix_expanded = false;
 		sonix_inline_visible = false;
 	}
@@ -3570,8 +3589,8 @@ static void player_refresh_theme(void) {
 	// The backdrop over a loaded cover is always the dark treatment -- same
 	// look in both themes; only the no-cover panel follows the theme.
 	cover_set_backdrop_light(false);
-	lv_obj_set_style_bg_color(progress_slider, chrome_accent(), LV_PART_INDICATOR);
-	lv_obj_set_style_bg_color(progress_slider, chrome_accent(), LV_PART_KNOB);
+	lv_obj_set_style_bg_color(progress_slider, layout_sonix_now ? lv_color_white() : chrome_accent(), LV_PART_INDICATOR);
+	lv_obj_set_style_bg_color(progress_slider, layout_sonix_now ? lv_color_white() : chrome_accent(), LV_PART_KNOB);
 	set_over_cover(chrome_over_cover); // repaints the play disc for the new palette
 	update_repeat_button();
 	update_speed_button();
@@ -3590,6 +3609,7 @@ static void update_qobuz_badge(void);
 // device state and resets the per-track length cache. Used both when the user
 // picks a file and when playback auto-advances to a new track.
 static void refresh_now_playing(void) {
+    sonix_modal_close();
 	current_total_length = 0; // unknown until the playback thread reports it
 
 	// The library lists carry an accent mark on the playing track (and on the
@@ -3843,13 +3863,14 @@ static void update_fav_button(void) {
 	// player and is what says "favourite" rather than "here is the album's
 	// colour again".
 	if (starred) {
-		lv_image_set_src(fav_btn_icon, &icon_star_filled);
-		lv_obj_set_style_image_recolor(fav_btn_icon, lv_color_make(246, 211, 45), 0); // Adwaita yellow
+		lv_image_set_src(fav_btn_icon, layout_sonix_now ? &icon_heart : &icon_star_filled);
+		lv_obj_set_style_image_recolor(fav_btn_icon, layout_sonix_now ? lv_color_hex(0x1ed760) : lv_color_make(246, 211, 45), 0); // Adwaita yellow
 	} else {
-		lv_image_set_src(fav_btn_icon, &icon_star);
+		lv_image_set_src(fav_btn_icon, layout_sonix_now ? &sonix_icon_heart : &icon_star);
 		lv_obj_set_style_image_recolor(fav_btn_icon, layout_alt_now ? alt_ink() : lv_color_make(150, 150, 150), 0);
 	}
 	lv_obj_set_style_image_recolor_opa(fav_btn_icon, LV_OPA_COVER, 0);
+    if(layout_sonix_now) {lv_obj_set_size(fav_btn_icon,30,30);lv_image_set_inner_align(fav_btn_icon,LV_IMAGE_ALIGN_CONTAIN);}
 }
 
 // The outcome of a Qobuz star, from the qobuzsync worker. Success says
@@ -4578,17 +4599,20 @@ static void repeat_btn_event_cb(lv_event_t *e) {
 }
 
 /* Sonix's compact actions share the existing player and lyric state. Nothing
- * opened from here starts playback or creates another decoded artwork surface. */
+ * opened from here starts playback. The menu owns a small cover copy so a
+ * track transition cannot invalidate its image. */
 enum { SONIX_QUEUE, SONIX_ADD_QUEUE, SONIX_ALBUM, SONIX_ARTISTS, SONIX_PLAYLIST,
-       SONIX_INLINE, SONIX_LYRICS, SONIX_RESHUFFLE, SONIX_CLOSE, SONIX_SAVE_ALBUM, SONIX_FOLLOW, SONIX_ARTIST_BASE = 100 };
+       SONIX_INLINE, SONIX_LYRICS, SONIX_RESHUFFLE, SONIX_CLOSE, SONIX_SAVE_ALBUM, SONIX_FOLLOW, SONIX_LIKE, SONIX_CREDITS, SONIX_SLEEP, SONIX_ARTIST_BASE = 100 };
 static char sonix_menu_path[512], sonix_artist_names[16][256];
 static int sonix_artist_count;
+static cover_image_t sonix_menu_cover;
 
 static void sonix_modal_close(void) {
     if (sonix_modal) {
         lv_obj_delete(sonix_modal);
         sonix_modal = NULL;
     }
+    cover_free(&sonix_menu_cover);
 }
 
 static void sonix_album_open(void) {
@@ -4615,6 +4639,11 @@ static void sonix_action_cb(lv_event_t *e) {
         snprintf(artist, sizeof(artist), "%s", sonix_artist_names[action - SONIX_ARTIST_BASE]);
     sonix_modal_close();
     switch (action) {
+    case SONIX_LIKE:
+        if(path[0]) library_fav_toggle(path,state.metadata.title,state.metadata.artist);
+        update_fav_button(); break;
+    case SONIX_CREDITS: trackmenu_details_open(path); break;
+    case SONIX_SLEEP: player_sheet_close(false); switch_screen(musicsettings_playback_screen()); break;
     case SONIX_SAVE_ALBUM: {
         char album[256];
         if(library_track_album_value(path,album,sizeof(album))) collectionview_collection_options(COLLECTION_ALBUM,album,state.metadata.album,state.metadata.artist);
@@ -4678,6 +4707,7 @@ static lv_obj_t *sonix_text_button(lv_obj_t *parent, const char *text, int width
     lv_obj_set_width(label, width - 24);
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     lv_label_set_text(label, text);
+    lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_center(label);
     return button;
 }
@@ -4719,20 +4749,62 @@ static lv_obj_t *sonix_sheet_create(const char *title, int rows) {
     return sheet;
 }
 
+static void sonix_menu_row(lv_obj_t *parent,const char *title,const lv_image_dsc_t *icon,int action) {
+    int w=lv_obj_get_width(player_screen)-40;
+    lv_obj_t *row=sonix_text_button(parent,title,w,52,action);
+    lv_obj_t *text=lv_obj_get_child(row,0);
+    lv_obj_set_width(text,w-66);lv_obj_align(text,LV_ALIGN_LEFT_MID,48,0);
+    lv_obj_set_style_text_font(text,&font_ui_20,0);
+    lv_obj_set_style_text_align(text,LV_TEXT_ALIGN_LEFT,0);
+    lv_obj_t *im=lv_image_create(row);lv_image_set_src(im,icon);lv_obj_set_size(im,26,26);
+    lv_image_set_inner_align(im,LV_IMAGE_ALIGN_CONTAIN);lv_obj_align(im,LV_ALIGN_LEFT_MID,4,0);
+    lv_obj_set_style_image_recolor(im,lv_color_hex(0xb3b3b3),0);lv_obj_set_style_image_recolor_opa(im,LV_OPA_COVER,0);
+}
 static void sonix_options_open(void) {
-    lv_obj_t *sheet = sonix_sheet_create("Song options", 11);
-    int width = lv_obj_get_width(player_screen) - 32;
-    sonix_text_button(sheet, "Add to queue", width, 54, SONIX_ADD_QUEUE);
-    sonix_text_button(sheet, "Go to queue", width, 54, SONIX_QUEUE);
-    sonix_text_button(sheet, "Go to album", width, 54, SONIX_ALBUM);
-    sonix_text_button(sheet, "Go to artist", width, 54, SONIX_ARTISTS);
-    sonix_text_button(sheet, "Add to playlists", width, 54, SONIX_PLAYLIST);
-    sonix_text_button(sheet,"Save album / Pin",width,54,SONIX_SAVE_ALBUM);
-    sonix_text_button(sheet,"Follow artist / Pin",width,54,SONIX_FOLLOW);
-    sonix_text_button(sheet, config_get_bool("player", "inline_lyrics", true) ? "Inline lyrics: On" : "Inline lyrics: Off", width, 54, SONIX_INLINE);
-    sonix_text_button(sheet, lyrics_on_screen() ? "Back to artwork" : "Full lyrics", width, 54, SONIX_LYRICS);
-    sonix_text_button(sheet, "Reshuffle upcoming tracks", width, 54, SONIX_RESHUFFLE);
-    sonix_text_button(sheet, "Close", width, 54, SONIX_CLOSE);
+    sonix_modal_close();
+    device_state_t state;device_state_get(&state);
+    snprintf(sonix_menu_path,sizeof(sonix_menu_path),"%s",state.current_file);
+    int w=lv_obj_get_width(player_screen),h=lv_obj_get_height(player_screen);
+    sonix_modal=lv_obj_create(lv_layer_top());lv_obj_remove_style_all(sonix_modal);
+    lv_obj_set_size(sonix_modal,w,h);lv_obj_set_style_bg_opa(sonix_modal,LV_OPA_COVER,0);
+    lv_obj_set_style_bg_color(sonix_modal,album_tone?lv_color_darken(lv_color_hex(album_tone),LV_OPA_60):lv_color_hex(0x252525),0);
+    lv_obj_set_style_bg_grad_color(sonix_modal,lv_color_hex(0x121212),0);
+    lv_obj_set_style_bg_grad_dir(sonix_modal,LV_GRAD_DIR_VER,0);
+    lv_obj_set_style_bg_grad_stop(sonix_modal,120,0);
+    lv_obj_set_scrollable(sonix_modal,false);
+    lv_obj_t *body=lv_obj_create(sonix_modal);lv_obj_remove_style_all(body);
+    lv_obj_set_size(body,w-40,h-70);lv_obj_set_pos(body,20,16);
+    lv_obj_set_flex_flow(body,LV_FLEX_FLOW_COLUMN);lv_obj_set_flex_align(body,LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(body,0,0);lv_obj_set_scroll_dir(body,LV_DIR_VER);
+    lv_obj_t *art=lv_image_create(body);lv_obj_set_size(art,104,104);
+    uint64_t cover_id;
+    bool copied=player_cover_copy(104,&sonix_menu_cover,&cover_id);
+    lv_image_set_src(art,copied?&sonix_menu_cover.dsc:&icon_album);
+    lv_image_set_inner_align(art,LV_IMAGE_ALIGN_CONTAIN);
+    lv_obj_set_style_margin_bottom(art,12,0);
+    lv_obj_t *title=lv_label_create(body);lv_label_set_text(title,state.metadata.title[0]?state.metadata.title:"Song options");
+    lv_obj_set_width(title,w-48);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(title,&font_ui_22_bold,0);lv_obj_set_style_text_color(title,lv_color_white(),0);
+    lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_CENTER,0);
+    title=lv_label_create(body);lv_label_set_text(title,state.metadata.artist);
+    lv_obj_set_width(title,w-48);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(title,&font_ui_16,0);lv_obj_set_style_text_color(title,lv_color_hex(0xb3b3b3),0);
+    lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_style_margin_bottom(title,16,0);
+    sonix_menu_row(body,library_fav_contains(state.current_file)?"Unlike":"Like",library_fav_contains(state.current_file)?&icon_heart:&sonix_icon_heart,SONIX_LIKE);
+    sonix_menu_row(body,"Add to playlist",&icon_list_plus,SONIX_PLAYLIST);
+    sonix_menu_row(body,"Add to queue",&icon_list_queue,SONIX_ADD_QUEUE);
+    sonix_menu_row(body,"View queue",&icon_list_music,SONIX_QUEUE);
+    sonix_menu_row(body,"View album",&icon_album,SONIX_ALBUM);
+    sonix_menu_row(body,"View artist",&icon_artist,SONIX_ARTISTS);
+    sonix_menu_row(body,"Song information",&icon_music_note,SONIX_CREDITS);
+    sonix_menu_row(body,"Sleep timer",&icon_sleep_music_quick,SONIX_SLEEP);
+    sonix_menu_row(body,"Save album / Pin",&icon_album,SONIX_SAVE_ALBUM);
+    sonix_menu_row(body,"Follow artist / Pin",&icon_artist,SONIX_FOLLOW);
+    sonix_menu_row(body,config_get_bool("player","inline_lyrics",true)?"Lyric preview: On":"Lyric preview: Off",&icon_files_text,SONIX_INLINE);
+    sonix_menu_row(body,"Full lyrics",&icon_files_text,SONIX_LYRICS);
+    sonix_menu_row(body,"Reshuffle",&icon_shuffle,SONIX_RESHUFFLE);
+    lv_obj_t *close=sonix_text_button(sonix_modal,"Close",w,52,SONIX_CLOSE);
+    lv_obj_align(close,LV_ALIGN_BOTTOM_MID,0,-4);
 }
 
 static void sonix_artist_open(void) {
@@ -4828,6 +4900,10 @@ static void sonix_inline_refresh(double seconds) {
         cover_show(current_cover.pixels != NULL);
     }
     lv_obj_set_hidden(sonix_inline, !visible || lyrics_progress != 0);
+    if(sonix_lyrics_hint) {
+        lv_obj_set_hidden(sonix_lyrics_hint,visible);
+        lv_label_set_text(sonix_lyrics_hint,lyrics_has_words()?"Tap to read the lyrics":lyrics_loaded?"No local lyrics for this song":"Loading lyrics...");
+    }
     if (!visible) return;
     int line = lyrics_line_at(&lyrics_cur, (int32_t)(seconds * 1000.0));
     if (line == sonix_inline_line) return;
@@ -4836,7 +4912,7 @@ static void sonix_inline_refresh(double seconds) {
         int at = line + i - 1;
         const char *text = at >= 0 && at < lyrics_cur.count ? lyrics_cur.lines[at].text : "";
         lv_label_set_text(sonix_inline_lines[i], text);
-        lv_obj_set_style_text_color(sonix_inline_lines[i], i == 1 ? chrome_accent() : theme()->text_secondary, 0);
+        lv_obj_set_style_text_color(sonix_inline_lines[i], i == 1 ? lv_color_white() : lv_color_hex(0xc8c8c8), 0);
     }
 }
 
@@ -4845,38 +4921,79 @@ static void sonix_layout(void) {
     sonix_layout_active = layout_sonix_now;
     bool music = layout_sonix_now && !audiobook_mode && !podcast_mode && !radio_is_active();
     lv_obj_set_hidden(sonix_actions, !layout_sonix_now);
+    lv_obj_set_hidden(sonix_lyrics_card,!layout_sonix_now || lyrics_progress!=0);
+    lv_obj_set_hidden(sonix_background,!layout_sonix_now);
     lv_obj_set_hidden(sonix_repeat_btn, !music);
     if (!layout_sonix_now) {
+        lv_obj_set_hidden(queue_position_label,false);
         lv_obj_set_hidden(sonix_inline, true);
         return;
     }
+    sonix_tint();
+    lv_obj_set_style_bg_opa(cover_panel,LV_OPA_TRANSP,0);
+    lv_obj_set_style_bg_opa(player_menu,LV_OPA_TRANSP,0);
+    lv_obj_set_style_bg_image_opa(player_menu,LV_OPA_TRANSP,0);
+    lv_obj_set_style_bg_color(play_btn,lv_color_white(),0);
+    lv_obj_set_size(play_btn,76,76);
+    lv_obj_set_style_text_font(elapsed_label,&font_ui_16,0);
+    lv_obj_set_style_text_font(remaining_label,&font_ui_16,0);
+    lv_obj_set_hidden(queue_position_label,true);
+    lv_obj_set_height(progress_slider,4);
+    lv_obj_set_style_width(progress_slider,14,LV_PART_KNOB);
+    lv_obj_set_style_height(progress_slider,14,LV_PART_KNOB);
     lv_obj_set_style_pad_ver(player_menu, 10, 0);
-    lv_obj_set_style_pad_bottom(player_menu, 62, 0);
-    lv_obj_set_style_pad_gap(player_menu, 10, 0);
+    lv_obj_set_style_pad_bottom(player_menu, 146, 0);
+    lv_obj_set_style_pad_gap(player_menu, 6, 0);
     lv_obj_set_parent(more_btn_obj, cover_panel);
     lv_obj_align(more_btn_obj, LV_ALIGN_TOP_RIGHT, -16, back_btn_centre_y() - 28);
     lv_obj_move_foreground(more_btn_obj);
     lv_obj_set_hidden(format_label, true);
-    lv_obj_set_style_text_font(song_title_label, &font_ui_26, 0);
-    lv_obj_set_style_text_font(song_artist_label, &font_ui_22, 0);
+    lv_obj_set_style_text_font(song_title_label, &font_ui_24_bold, 0);
+    lv_obj_set_style_text_font(song_artist_label, &font_ui_18, 0);
     lv_obj_set_style_text_color(sonix_heading, theme()->text_secondary, 0);
     update_repeat_button();
     device_state_t state; device_state_get(&state);
     sonix_inline_refresh(state.progress_current_secs);
 }
 
+static void sonix_tint(void) {
+    if(!sonix_background || !layout_sonix_now) return;
+    lv_color_t top=album_tone?lv_color_darken(lv_color_hex(album_tone),LV_OPA_50):lv_color_hex(0x333333);
+    lv_obj_set_style_bg_color(sonix_background,top,0);
+    lv_obj_set_style_bg_grad_color(sonix_background,lv_color_hex(0x121212),0);
+    lv_obj_set_style_bg_grad_dir(sonix_background,LV_GRAD_DIR_VER,0);
+    if(sonix_lyrics_card) lv_obj_set_style_bg_color(sonix_lyrics_card,album_tone?lv_color_darken(lv_color_hex(album_tone),LV_OPA_30):lv_color_hex(0x364a3d),0);
+}
+
 static void sonix_actions_build(void) {
     int width = lv_obj_get_width(player_screen), height = lv_obj_get_height(player_screen);
+    sonix_background=lv_obj_create(player_screen);lv_obj_remove_style_all(sonix_background);
+    lv_obj_set_size(sonix_background,width,height);lv_obj_set_style_bg_opa(sonix_background,LV_OPA_COVER,0);
+    lv_obj_set_clickable(sonix_background,false);lv_obj_move_background(sonix_background);
+    sonix_lyrics_card=lv_obj_create(player_screen);lv_obj_remove_style_all(sonix_lyrics_card);
+    lv_obj_set_size(sonix_lyrics_card,width-40,94);lv_obj_set_pos(sonix_lyrics_card,20,height-100);
+    lv_obj_set_style_bg_opa(sonix_lyrics_card,LV_OPA_COVER,0);lv_obj_set_style_radius(sonix_lyrics_card,8,0);
+    lv_obj_set_scrollable(sonix_lyrics_card,false);lv_obj_set_clickable(sonix_lyrics_card,true);
+    lv_obj_add_event_cb(sonix_lyrics_card,sonix_action_cb,LV_EVENT_CLICKED,(void *)SONIX_LYRICS);
+    lv_obj_t *caption=lv_label_create(sonix_lyrics_card);lv_label_set_text(caption,"Lyrics");
+    lv_obj_set_style_text_font(caption,&font_ui_18,0);lv_obj_set_style_text_color(caption,lv_color_white(),0);lv_obj_set_pos(caption,14,8);
+    caption=lv_label_create(sonix_lyrics_card);lv_label_set_text(caption,"MORE  >");lv_obj_set_style_text_font(caption,&font_ui_14,0);
+    lv_obj_set_style_text_color(caption,lv_color_white(),0);lv_obj_align(caption,LV_ALIGN_TOP_RIGHT,-14,10);
+    sonix_lyrics_hint=lv_label_create(sonix_lyrics_card);
+    lv_obj_set_width(sonix_lyrics_hint,width-68);lv_obj_set_pos(sonix_lyrics_hint,14,43);
+    lv_obj_set_style_text_font(sonix_lyrics_hint,&font_ui_18,0);
+    lv_obj_set_style_text_color(sonix_lyrics_hint,lv_color_white(),0);
+    lv_label_set_text(sonix_lyrics_hint,"Loading lyrics...");
     sonix_actions = lv_obj_create(player_screen);
     lv_obj_remove_style_all(sonix_actions);
-    lv_obj_set_size(sonix_actions, width - 32, 52);
-    lv_obj_set_pos(sonix_actions, 16, height - 58);
+    lv_obj_set_size(sonix_actions, width - 32, 42);
+    lv_obj_set_pos(sonix_actions, 16, height - 146);
     lv_obj_set_flex_flow(sonix_actions, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(sonix_actions, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scrollable(sonix_actions, false);
-    sonix_text_button(sonix_actions, "+ Save", 132, 52, SONIX_PLAYLIST);
-    sonix_text_button(sonix_actions, "Lyrics", 132, 52, SONIX_LYRICS);
-    sonix_text_button(sonix_actions, "Queue", 132, 52, SONIX_QUEUE);
+    sonix_text_button(sonix_actions, "+ Save", 132, 40, SONIX_PLAYLIST);
+    sonix_text_button(sonix_actions, "Lyrics", 132, 40, SONIX_LYRICS);
+    sonix_text_button(sonix_actions, "Queue", 132, 40, SONIX_QUEUE);
     sonix_repeat_btn = lv_button_create(controls_row);
     lv_obj_remove_style_all(sonix_repeat_btn);
     lv_obj_set_size(sonix_repeat_btn, 56, 56);
@@ -4885,20 +5002,20 @@ static void sonix_actions_build(void) {
     lv_obj_add_event_cb(sonix_repeat_btn, sonix_repeat_cb, LV_EVENT_CLICKED, NULL);
     sonix_repeat_icon = lv_image_create(sonix_repeat_btn);
     lv_obj_center(sonix_repeat_icon);
-    sonix_inline = lv_obj_create(cover_panel);
+    sonix_inline = lv_obj_create(sonix_lyrics_card);
     lv_obj_remove_style_all(sonix_inline);
-    lv_obj_set_size(sonix_inline, width - 48, 96);
-    lv_obj_align(sonix_inline, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_set_size(sonix_inline, width - 68, 60);
+    lv_obj_align(sonix_inline, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_obj_set_flex_flow(sonix_inline, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(sonix_inline, 3, 0);
+    lv_obj_set_style_pad_row(sonix_inline, 0, 0);
     lv_obj_set_scrollable(sonix_inline, false);
     lv_obj_set_clickable(sonix_inline, true);
     lv_obj_add_event_cb(sonix_inline, sonix_action_cb, LV_EVENT_CLICKED, (void *)(intptr_t)SONIX_LYRICS);
     for (int i = 0; i < 3; i++) {
         sonix_inline_lines[i] = lv_label_create(sonix_inline);
-        lv_obj_set_width(sonix_inline_lines[i], width - 48);
-        lv_obj_set_style_text_font(sonix_inline_lines[i], &font_ui_22, 0);
-        lv_obj_set_style_text_align(sonix_inline_lines[i], LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_width(sonix_inline_lines[i], width - 68);
+        lv_obj_set_style_text_font(sonix_inline_lines[i], &font_ui_16, 0);
+        lv_obj_set_style_text_align(sonix_inline_lines[i], LV_TEXT_ALIGN_LEFT, 0);
         lv_label_set_long_mode(sonix_inline_lines[i], LV_LABEL_LONG_DOT);
         lv_label_set_text(sonix_inline_lines[i], "");
     }

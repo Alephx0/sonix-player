@@ -13,6 +13,9 @@ The latest offline integration adds separate priority/context queues, playlist
 membership, saved/pinned collections and indexed lyric search. See the
 [offline player guide](offline-player.md) for controls, evidence and remaining scope.
 
+The [latest UI update](reference-ui.md) follows the supplied mobile screenshots
+and includes actual simulator captures of the redesigned screens.
+
 ## Implemented workflow
 
 1. Home offers recent listening, recently added albums, favourites and playlists.
@@ -28,7 +31,7 @@ membership, saved/pinned collections and indexed lyric search. See the
 
 Search > Sources exposes provider capabilities, an online-search toggle, a
 persisted preferred-format order and a pause-all-transfers action. The new Sonix
-Now Playing layout uses inset centered artwork and green transport accents;
+Now Playing layout uses centered artwork, white transport controls and green active states;
 it is the default for a fresh 480×800 configuration. Existing saved layout choices
 are respected, and Music settings offers all four arrangements.
 
@@ -39,6 +42,7 @@ This fork does not implement a Spotify service client.
 
 ## Evidence and guides
 
+- [Screenshot-based UI update](reference-ui.md)
 - [Offline player features, controls and evidence](offline-player.md)
 - [Architecture and interfaces](architecture.md)
 - [Build, test and maintenance commands](development.md)
