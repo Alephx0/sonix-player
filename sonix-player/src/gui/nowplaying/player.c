@@ -326,7 +326,7 @@ static bool layout_alt_now;		// and whether the current source can use it
 static bool layout_studio_now;	// likewise for the third arrangement
 static bool layout_sonix_now;
 static lv_obj_t *sonix_cover_empty, *sonix_heading;
-static lv_obj_t *sonix_actions, *sonix_repeat_btn, *sonix_repeat_icon, *sonix_save_icon;
+static lv_obj_t *sonix_actions, *sonix_repeat_btn, *sonix_repeat_icon;
 static lv_obj_t *sonix_inline, *sonix_inline_lines[3];
 static lv_obj_t *sonix_modal, *sonix_background, *sonix_lyrics_card, *sonix_lyrics_hint;
 static void sonix_tint(void);
@@ -3870,11 +3870,7 @@ static void update_fav_button(void) {
 	}
 	lv_obj_set_style_image_recolor_opa(fav_btn_icon, LV_OPA_COVER, 0);
     if(layout_sonix_now) {lv_obj_set_size(fav_btn_icon,30,30);lv_image_set_inner_align(fav_btn_icon,LV_IMAGE_ALIGN_CONTAIN);}
-    if(layout_sonix_now && sonix_save_icon) {
-        lv_image_set_src(sonix_save_icon,starred?&icon_circle_check:&icon_plus);
-        lv_obj_set_style_image_recolor(sonix_save_icon,lv_color_hex(starred?0x1ed760:0xffffff),0);
-        lv_obj_set_style_image_recolor_opa(sonix_save_icon,255,0);
-    }
+
 }
 
 // The outcome of a Qobuz star, from the qobuzsync worker. Success says
@@ -4678,7 +4674,12 @@ static void sonix_action_cb(lv_event_t *e) {
         else if (lyrics_has_words()) {
             sonix_expanded = false;
             lyrics_commit(true);
-        } else gui_notify_popup(lyrics_loaded ? "No local lyrics. Add an LRC or lyric text beside this track." : "Local lyrics are still loading.");
+        } else {
+            lv_obj_t *body=bottomsheet_open(200,NULL);
+            lv_obj_t *l=lv_label_create(body);lv_label_set_text(l,lyrics_loaded?"No lyrics available for this song":"Lyrics are still loading");
+            lv_obj_set_style_text_font(l,&font_ui_20,0);lv_obj_set_style_text_color(l,lv_color_hex(0xb3b3b3),0);
+            lv_obj_set_width(l,lv_obj_get_width(body)-48);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(l);
+        }
         break;
     case SONIX_RESHUFFLE:
         playlist_reshuffle();
@@ -4861,6 +4862,7 @@ static void sonix_inline_refresh(double seconds) {
         cover_show(current_cover.pixels != NULL);
     }
     lv_obj_set_hidden(sonix_inline, !visible || lyrics_progress != 0);
+    lv_obj_set_hidden(sonix_lyrics_card,!visible || lyrics_progress!=0);
     if(sonix_lyrics_hint) {
         lv_obj_set_hidden(sonix_lyrics_hint,visible);
         lv_label_set_text(sonix_lyrics_hint,lyrics_has_words()?"Tap to read the lyrics":lyrics_loaded?"No local lyrics for this song":"Loading lyrics...");
@@ -4882,7 +4884,7 @@ static void sonix_layout(void) {
     sonix_layout_active = layout_sonix_now;
     bool music = layout_sonix_now && !audiobook_mode && !podcast_mode && !radio_is_active();
     lv_obj_set_hidden(sonix_actions, !layout_sonix_now);
-    lv_obj_set_hidden(sonix_lyrics_card,!layout_sonix_now || lyrics_progress!=0);
+    lv_obj_set_hidden(sonix_lyrics_card,!sonix_inline_visible || lyrics_progress!=0);
     lv_obj_set_hidden(sonix_background,!layout_sonix_now);
     lv_obj_set_hidden(sonix_repeat_btn, !music);
     if (!layout_sonix_now) {
@@ -4896,6 +4898,9 @@ static void sonix_layout(void) {
     lv_obj_set_style_bg_image_opa(player_menu,LV_OPA_TRANSP,0);
     lv_obj_set_style_bg_color(play_btn,lv_color_white(),0);
     lv_obj_set_size(play_btn,76,76);
+    lv_obj_set_style_pad_all(play_btn,0,0);lv_obj_center(play_btn_icon);
+    lv_obj_set_style_pad_all(prev_btn_obj,0,0);lv_obj_center(prev_icon);
+    lv_obj_set_style_pad_all(next_btn_obj,0,0);lv_obj_center(next_icon);
     lv_obj_set_style_text_font(elapsed_label,&font_ui_16,0);
     lv_obj_set_style_text_font(remaining_label,&font_ui_16,0);
     lv_obj_set_hidden(queue_position_label,true);
@@ -4923,7 +4928,7 @@ static void sonix_tint(void) {
     lv_obj_set_style_bg_color(sonix_background,top,0);
     lv_obj_set_style_bg_grad_color(sonix_background,lv_color_hex(0x121212),0);
     lv_obj_set_style_bg_grad_dir(sonix_background,LV_GRAD_DIR_VER,0);
-    if(sonix_lyrics_card) lv_obj_set_style_bg_color(sonix_lyrics_card,album_tone?lv_color_darken(lv_color_hex(album_tone),LV_OPA_30):lv_color_hex(0x364a3d),0);
+    if(sonix_lyrics_card) lv_obj_set_style_bg_color(sonix_lyrics_card,lv_color_hex(0x202322),0);
 }
 
 static void sonix_actions_build(void) {
@@ -4952,12 +4957,12 @@ static void sonix_actions_build(void) {
     lv_obj_set_flex_flow(sonix_actions, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(sonix_actions, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scrollable(sonix_actions, false);
-    const lv_image_dsc_t *glyphs[]={&icon_plus,&icon_files_text,&icon_list_music};
-    const int actions[]={SONIX_PLAYLIST,SONIX_LYRICS,SONIX_QUEUE};
-    for(int i=0;i<3;i++) {
-        lv_obj_t *b=sonix_text_button(sonix_actions,"",96,40,actions[i]);
-        lv_obj_t *im=lv_image_create(b);lv_image_set_src(im,glyphs[i]);lv_obj_set_size(im,28,28);
-        if(i==0) sonix_save_icon=im;
+    const lv_image_dsc_t *glyphs[]={&icon_files_text,&icon_list_music};
+    const int actions[]={SONIX_LYRICS,SONIX_QUEUE};
+    for(int i=0;i<2;i++) {
+        lv_obj_t *b=sonix_text_button(sonix_actions,"",48,44,actions[i]);
+        lv_obj_set_style_pad_all(b,0,0);
+        lv_obj_t *im=lv_image_create(b);lv_image_set_src(im,glyphs[i]);lv_obj_set_size(im,26,26);
         lv_image_set_inner_align(im,LV_IMAGE_ALIGN_CONTAIN);lv_obj_center(im);
     }
     sonix_repeat_btn = lv_button_create(controls_row);
@@ -5208,62 +5213,61 @@ void player_refresh_now_playing(void) {
 // the sheet: dragging the player in and out
 // ---------------------------------------------------------------------------
 
-// How far across the screen the drag has to get before letting go opens (or
+// How far down the screen the drag has to get before letting go opens (or
 // closes) it rather than snapping back. A third is enough to feel deliberate
-// without demanding the whole width.
+// without demanding the whole height.
 #define SHEET_COMMIT_FRACTION 3
 
 #define SHEET_ANIM_MS 220
 
-// Sideways movement past this is a drag, not a tap.
+// Vertical movement past this is a drag, not a tap.
 #define DRAG_COMMIT_PX 10
 
-static int sheet_width;
+static int sheet_height;
 static lv_obj_t *sheet_under; // the page the sheet first slid over
 
 // Where the sheet was when the finger went down, and where the finger was.
-static int drag_origin_x;
+static int drag_origin_y;
 static lv_point_t drag_start_point;
 static bool dragging;
 
-// True once a gesture has moved far enough sideways to count as a drag. Read
+// True once a gesture has moved far enough vertically to count as a drag. Read
 // by the tap handlers on the pages behind, so that swiping across a menu tile
 // does not also select it.
 static bool drag_committed;
 
-static void sheet_anim_x_cb(void *obj, int32_t value) {
-	lv_obj_set_x((lv_obj_t *)obj, (int)value);
-	// The chevron belongs to the sheet while it moves: ride its edge, and
-	// snap back into the page's corner once the sheet is fully away.
-	back_btn_translate(value >= sheet_width ? 0 : value);
+static void sheet_anim_y_cb(void *obj, int32_t value) {
+	lv_obj_set_y((lv_obj_t *)obj, (int)value);
+	// Keep the shared back control at its normal horizontal position.
+	back_btn_translate(0);
 }
 
-// Moves the sheet to `x` (0 = fully open, sheet_width = fully out of the way).
-static void sheet_move_to(int x, bool animate) {
-	if (x < 0) {
-		x = 0;
+// Moves the sheet to `y` (0 = fully open, sheet_height = fully out of the way).
+static void sheet_move_to(int y, bool animate) {
+	if (y < 0) {
+		y = 0;
 	}
-	if (x > sheet_width) {
-		x = sheet_width;
+	if (y > sheet_height) {
+		y = sheet_height;
 	}
 
 	// Never race a slide that is still running. A slide left to finish after a
 	// new one has started parks the sheet off screen while everything else
 	// believes it is open -- the page underneath showing, no status bar, and no
 	// way back to the player.
-	lv_anim_delete(player_screen, sheet_anim_x_cb);
+	lv_anim_delete(player_screen, sheet_anim_y_cb);
 
 	if (!animate) {
-		lv_obj_set_x(player_screen, x);
-		back_btn_translate(x >= sheet_width ? 0 : x);
+		lv_obj_set_y(player_screen, y);
+		back_btn_translate(0);
 		return;
 	}
 
 	lv_anim_t a;
 	lv_anim_init(&a);
 	lv_anim_set_var(&a, player_screen);
-	lv_anim_set_exec_cb(&a, sheet_anim_x_cb);
-	lv_anim_set_values(&a, lv_obj_get_x(player_screen), x);
+	lv_anim_set_exec_cb(&a, sheet_anim_y_cb);
+	lv_anim_set_values(&a, lv_obj_get_y(player_screen), y);
 	lv_anim_set_duration(&a, SHEET_ANIM_MS);
 	lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
 	lv_anim_start(&a);
@@ -5375,6 +5379,7 @@ static void sheet_hidden_anim_ready_cb(lv_anim_t *a) {
 
 void player_sheet_close(bool animate) {
 	bool was_open = sheet_open;
+    lv_anim_delete(player_screen,sheet_anim_y_cb);
 	sheet_open = false;
 	smooth_timer_sync();
 	back_btn_player_mode(false);
@@ -5394,7 +5399,7 @@ void player_sheet_close(bool animate) {
 	medialist_refresh_visible();
 
 	if (!animate) {
-		lv_obj_set_x(player_screen, sheet_width);
+		lv_obj_set_y(player_screen, sheet_height);
 		back_btn_translate(0);
 		lv_obj_set_hidden(player_screen, true);
 		back_btn_sync_visibility();
@@ -5404,8 +5409,8 @@ void player_sheet_close(bool animate) {
 	lv_anim_t a;
 	lv_anim_init(&a);
 	lv_anim_set_var(&a, player_screen);
-	lv_anim_set_exec_cb(&a, sheet_anim_x_cb);
-	lv_anim_set_values(&a, lv_obj_get_x(player_screen), sheet_width);
+	lv_anim_set_exec_cb(&a, sheet_anim_y_cb);
+	lv_anim_set_values(&a, lv_obj_get_y(player_screen), sheet_height);
 	lv_anim_set_duration(&a, SHEET_ANIM_MS);
 	lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
 	lv_anim_set_completed_cb(&a, sheet_hidden_anim_ready_cb);
@@ -5438,7 +5443,7 @@ static void sheet_drag_cb(lv_event_t *e) {
 		}
 
 		lv_indev_get_point(indev, &drag_start_point);
-		drag_origin_x = opening ? sheet_width : 0;
+		drag_origin_y = opening ? sheet_height : 0;
 		dragging = true;
 
 		drag_committed = false;
@@ -5447,7 +5452,7 @@ static void sheet_drag_cb(lv_event_t *e) {
 			// It has to be on screen to be dragged, even if only by a pixel.
 			lv_obj_set_hidden(player_screen, false);
 			lv_obj_move_background(player_screen);
-			lv_obj_set_x(player_screen, sheet_width);
+			lv_obj_set_y(player_screen, sheet_height);
 		}
 		return;
 	}
@@ -5458,38 +5463,38 @@ static void sheet_drag_cb(lv_event_t *e) {
 
 	lv_point_t point;
 	lv_indev_get_point(indev, &point);
-	int dx = point.x - drag_start_point.x;
+	int vertical = point.y - drag_start_point.y;
 
 	if (code == LV_EVENT_PRESSING) {
-		// Vertical scrolling must still work: the moment LVGL is scrolling
+		// Internal scrolling must still work: the moment LVGL is scrolling
 		// something this press is a scroll, and once the movement reads as
-		// vertical it stays a scroll -- no more sideways shimmy of the page
+		// horizontal it stays a scroll -- no more vertical shimmy of the page
 		// during a fast flick.
 		if (!drag_committed) {
 			if (lv_indev_get_scroll_obj(indev)) {
 				dragging = false;
 				return;
 			}
-			int dy = point.y - drag_start_point.y;
-			if (LV_ABS(dy) >= DRAG_COMMIT_PX && LV_ABS(dy) > LV_ABS(dx)) {
+			int horizontal = point.x - drag_start_point.x;
+			if (LV_ABS(horizontal) >= DRAG_COMMIT_PX && LV_ABS(horizontal) > LV_ABS(vertical)) {
 				dragging = false;
 				return;
 			}
-			if (LV_ABS(dx) < DRAG_COMMIT_PX || LV_ABS(dx) < 2 * LV_ABS(dy)) {
+			if (LV_ABS(vertical) < DRAG_COMMIT_PX || LV_ABS(vertical) < 2 * LV_ABS(horizontal)) {
 				return;
 			}
 			drag_committed = true;
 		}
 
-		sheet_move_to(drag_origin_x + dx, false);
+		sheet_move_to(drag_origin_y + vertical, false);
 		return;
 	}
 
 	if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
 		dragging = false;
 
-		int travelled = opening ? -dx : dx;
-		bool commit = travelled > (sheet_width / SHEET_COMMIT_FRACTION);
+		int travelled = opening ? -vertical : vertical;
+		bool commit = travelled > (sheet_height / SHEET_COMMIT_FRACTION);
 
 		if (opening) {
 			commit ? player_sheet_open(true) : player_sheet_close(true);
@@ -5588,14 +5593,14 @@ void player_init(gui_config_t *cfg) {
 
 	lv_obj_add_style(player_screen, &theme_style_screen, 0);
 
-	// The player is a panel parked just off the right edge (see player.h).
-	sheet_width = (int)cfg->screen_width;
+	// The player is a panel parked just below the bottom edge (see player.h).
+	sheet_height = (int)cfg->screen_height;
 	lv_obj_set_size(player_screen, cfg->screen_width, cfg->screen_height);
 	lv_obj_set_style_pad_all(player_screen, 0, 0);
 	lv_obj_set_style_border_width(player_screen, 0, 0);
 	lv_obj_set_style_radius(player_screen, 0, 0);
 	lv_obj_set_scrollable(player_screen, false);
-	lv_obj_set_pos(player_screen, sheet_width, 0);
+	lv_obj_set_pos(player_screen, 0, sheet_height);
 	lv_obj_set_hidden(player_screen, true);
 
 

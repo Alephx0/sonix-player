@@ -4956,6 +4956,7 @@ bool medialist_step_back_to_player(void) {
 }
 
 void medialist_open(const char *title, library_list_t kind, library_filter_t filter, const char *filter_value) {
+    library_home_touch(kind,filter,filter_value,title);
 	last_stacked = NULL;
 	last_unchanged = NULL;
 

@@ -9,8 +9,10 @@ references in the native 480 x 800 LVGL simulator.
   song, album, artist and playlist results use available release artwork from
   the card, with neutral fallbacks. Decoding stays on the cover worker.
 - Now Playing has icon actions for playlist membership, lyrics and queue.
-  Save controls show a green check when the song belongs to any playlist,
-  including Liked Songs. Tapping either opens the membership picker directly.
+  The title-adjacent save control shows a green check when the song belongs to
+  any playlist, including Liked Songs, and opens the membership picker directly.
+  The [Home/player update](home-dashboard.md) removes the duplicate bottom save
+  control and places lyrics and queue at opposite sides beneath transport.
 - Queue, song options, playlist membership and artist selection share one modal
   layer. Entry/exit animate vertical position and scrim opacity for 220 ms.
   Replacement flows keep the same layer without briefly exposing the player.

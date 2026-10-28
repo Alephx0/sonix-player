@@ -1,0 +1,15 @@
+Synthetic UI fixture: /home/justi/sonix-r1-build/artifacts/home-fixture-cgz8elkl/sd/Music/cover.png
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+thread: library update runs below the interface (nice 10)
+config: /home/justi/sonix-r1-build/artifacts/home-fixture-cgz8elkl/sd/config.ini not there yet, starting from defaults
+library: /home/justi/sonix-r1-build/artifacts/home-fixture-cgz8elkl/sd/.local/library.db open, 0 tracks indexed
+library: play of '/home/justi/sonix-r1-build/artifacts/home-fixture-cgz8elkl/sd/Music/track0.wav' counted
+library: play of '/home/justi/sonix-r1-build/artifacts/home-fixture-cgz8elkl/sd/Music/track0.wav' counted
+library: play of '/home/justi/sonix-r1-build/artifacts/home-fixture-cgz8elkl/sd/Music/track0.wav' counted
+library: play of '/home/justi/sonix-r1-build/artifacts/home-fixture-cgz8elkl/sd/Music/track0.wav' counted
+library: /home/justi/sonix-r1-build/artifacts/home-fixture-cgz8elkl/sd/.local/library.db open, 5 tracks indexed
+PASS Home: cold-start discovery, rolling 30-day qualified counts, stale-play exclusion, collection access ranking, album resume position, import date and restart persistence
+Fixture card: /home/justi/sonix-r1-build/artifacts/home-fixture-cgz8elkl/sd

@@ -86,6 +86,7 @@ void device_state_restore_list(const char *const *list, int count, int start_ind
 // copy of every path. Takes ownership of `ix`. False when the list could not be
 // started, and then nothing has changed.
 bool device_state_play_index(library_index_t *ix, int start_index);
+bool device_state_play_index_at(library_index_t *ix,int start_index,double position);
 
 // Play from an explicit list of full paths: a playlist file, a streaming album,
 // anything with no query behind it. The queue is the list itself, so next/prev

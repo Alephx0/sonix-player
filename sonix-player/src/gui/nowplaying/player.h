@@ -83,8 +83,8 @@ void player_output_unplugged(const char *what);
 // The player as a sheet
 //
 // The player is not a page you navigate to but a panel that lives just off the
-// right edge of the screen and is pulled across with a finger: drag left on
-// the Music page and it slides in, drag right and it goes back. That only
+// bottom edge of the screen and is pulled upward with a finger: drag up on
+// an attached surface to open it, drag down to dismiss it. That only
 // works if it can be drawn on top of whatever is behind it, so it is an object
 // on the top layer rather than an LVGL screen.
 // ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ bool player_current_podcast_feed(long long *id_out, podcast_feed_t *feed_out);
 
 bool player_sheet_is_open(void);
 
-// True while the gesture in progress has been claimed as a sideways drag. The
+// True while the gesture in progress has been claimed as a vertical drag. The
 // tap handlers on the pages behind check this so that swiping the player in
 // across a button does not also press it.
 bool player_sheet_drag_active(void);
@@ -114,8 +114,8 @@ void player_sheet_open(bool animate);
 void player_sheet_close(bool animate);
 
 // Makes `obj` a place the sheet can be dragged from. `opening` picks the
-// direction: true for a surface behind the sheet (drag left to bring it in),
-// false for the sheet itself (drag right to push it away).
+// direction: true for a surface behind the sheet (drag up to bring it in),
+// false for the sheet itself (drag down to push it away).
 void player_sheet_attach_drag(lv_obj_t *obj, bool opening);
 
 // Boot-time "Remember track": loads the remembered track, paused at position.

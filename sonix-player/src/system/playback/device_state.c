@@ -168,6 +168,9 @@ void device_state_remember_note(void) {
 	if (remember_should_write(&remember, state.current_file, state.status, state.progress_current_secs,
 							  remember_now_ms())) {
 		library_playback_state_save(state.current_file, state.progress_current_secs);
+        library_index_spec_t home_spec;
+        if(playlist_library_spec(&home_spec) && !playlist_is_priority(playlist_current_index()))
+            library_home_resume_save(&home_spec,state.current_file,state.progress_current_secs);
 	}
 }
 
@@ -202,6 +205,9 @@ void device_state_remember_flush(void) {
 	}
 	remember.restore_pos = -1.0;
 	library_playback_state_save(state.current_file, state.progress_current_secs);
+        library_index_spec_t home_spec;
+        if(playlist_library_spec(&home_spec) && !playlist_is_priority(playlist_current_index()))
+            library_home_resume_save(&home_spec,state.current_file,state.progress_current_secs);
 	snprintf(remember.file, sizeof(remember.file), "%s", state.current_file);
 	remember.status = state.status;
 	remember.pos = state.progress_current_secs;
@@ -856,7 +862,13 @@ void device_state_play_file(const char *filepath) {
 
 // Starts playback from an explicit list of paths: the queue becomes exactly
 // that list, so next/prev walk it. What the library index pages call.
-bool device_state_play_index(library_index_t *ix, int start_index) {
+bool device_state_play_index(library_index_t *ix, int start_index) {return device_state_play_index_at(ix,start_index,-1.0);}
+bool device_state_play_index_at(library_index_t *ix,int start_index,double position) {
+    device_state_remember_flush();
+    library_index_spec_t home_spec;library_index_describe(ix,&home_spec);
+    char title[256];snprintf(title,sizeof(title),"%s",home_spec.value);
+    if(home_spec.filter==LIBRARY_FILTER_ALBUM) library_album_title(home_spec.value,title,sizeof(title));
+    library_home_touch(home_spec.kind,home_spec.filter,home_spec.value,title);
 	if (!playlist_load_index(ix, start_index)) {
 		return false;
 	}
@@ -865,7 +877,8 @@ bool device_state_play_index(library_index_t *ix, int start_index) {
 	if (!playlist_current_path(path, sizeof(path))) {
 		return false;
 	}
-	load_and_play(path);
+	load_and_play_at(path,position);
+    library_home_resume_save(&home_spec,path,position<0?0:position);
 	return true;
 }
 

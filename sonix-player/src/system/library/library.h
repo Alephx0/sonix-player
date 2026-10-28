@@ -270,6 +270,8 @@ typedef enum {
 	// those albums: an album whose tracks carry different years is filed under
 	// the latest of them, here as in LIBRARY_ORDER_YEAR. For the handles only.
 	LIBRARY_FILTER_YEAR,
+    LIBRARY_FILTER_HOME_REPEAT,
+    LIBRARY_FILTER_HOME_REDISCOVER,
 } library_filter_t;
 
 // Streams the whole result set, sorted by the collation, one row per call:
@@ -812,4 +814,15 @@ typedef struct {
     int category;
 } library_release_t;
 int library_discography(const char *artist,int category,int offset,int count,library_release_t *out);
+typedef struct {
+    library_index_spec_t spec;
+    char title[256], path[512];
+    double position;
+    long long recent, added;
+    int visits;
+} library_home_context_t;
+void library_home_touch(library_list_t kind,library_filter_t filter,const char *value,const char *title);
+void library_home_resume_save(const library_index_spec_t *spec,const char *path,double position);
+int library_home_added(library_home_context_t *out,int capacity);
+int library_home_contexts(library_home_context_t *out,int capacity,bool frequent);
 #endif /* LIBRARY_H */

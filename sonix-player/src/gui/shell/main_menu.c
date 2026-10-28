@@ -1,3 +1,5 @@
+#include "src/gui/library/homeview.h"
+#include "src/gui/shell/bottomsheet.h"
 #include "src/system/library/playlists.h"
 #include "src/gui/shell/toast.h"
 #include "main_menu.h"
@@ -54,8 +56,6 @@ static int selected;
 static cover_image_t mini_image;
 static char mini_path[512];
 static bool mini_has_art;
-static unsigned home_revision;
-static long long home_history;
 
 enum { HOME, SEARCH, LIBRARY, DOWNLOADS, PROVIDERS };
 enum { FILTER_ALL, FILTER_LOCAL, FILTER_ONLINE };
@@ -188,159 +188,13 @@ static lv_obj_t *route(lv_obj_t *parent, const char *title, const char *subtitle
     return o;
 }
 
-typedef struct { char path[512], title[256]; } home_item_t;
-static home_item_t home_items[6];
-static int home_count;
-
-typedef struct {
-    char value[512], title[256], path[512], artist[256];
-    lv_obj_t *art;
-    cover_image_t image;
-    bool requested, settled, loaded;
-} home_album_t;
-static home_album_t home_albums[COVERLOADER_HOME_COUNT];
-static int home_album_count;
-
-static void home_art_drop(void) {
-    for (int i = 0; i < home_album_count; i++) {
-        home_album_t *a = &home_albums[i];
-        coverloader_release(COVERLOADER_HOME_BASE + i);
-        if (a->loaded) {
-            lv_image_set_src(a->art, &icon_album);
-            lv_obj_set_size(a->art, 56, 56);
-            lv_obj_set_pos(a->art, 44, 38);
-            lv_obj_set_style_image_recolor_opa(a->art, LV_OPA_COVER, 0);
-            cover_free(&a->image);
-        }
-        a->requested = a->settled = a->loaded = false;
-    }
-}
-
-static void home_art_update(void) {
-    for (int i = 0; i < home_album_count; i++) {
-        home_album_t *a = &home_albums[i];
-        if (a->settled || !a->path[0]) continue;
-        if (!a->requested) {
-            coverloader_request(COVERLOADER_HOME_BASE + i, a->path, 112);
-            a->requested = true;
-        }
-        bool finished = false;
-        if (coverloader_take(COVERLOADER_HOME_BASE + i, &a->image, &finished)) {
-            lv_image_set_src(a->art, &a->image.dsc);
-            lv_obj_set_size(a->art, 112, 112);
-            lv_obj_set_pos(a->art, 16, 10);
-            lv_obj_set_style_image_recolor_opa(a->art, LV_OPA_TRANSP, 0);
-            a->loaded = true;
-        }
-        if (finished) a->settled = true;
-    }
-}
-
-static bool home_album_collect(const char *name, const char *path, const char *artist, void *unused) {
-    (void)unused;
-    if (home_album_count == COVERLOADER_HOME_COUNT) return false;
-    home_album_t *a = &home_albums[home_album_count++];
-    memset(a, 0, sizeof(*a));
-    snprintf(a->value, sizeof(a->value), "%s", name ? name : "");
-    library_album_title(a->value, a->title, sizeof(a->title));
-    snprintf(a->path, sizeof(a->path), "%s", path ? path : "");
-    snprintf(a->artist, sizeof(a->artist), "%s", artist ? artist : "");
-    return true;
-}
-
-static void home_album_cb(lv_event_t *e) {
-    home_album_t *a = lv_event_get_user_data(e);
-    if (tapped()) medialist_open(a->title, LIBRARY_LIST_TRACKS, LIBRARY_FILTER_ALBUM, a->value);
-}
-
-static void home_track_cb(lv_event_t *e) {
-    home_item_t *item = lv_event_get_user_data(e);
-    if (!tapped()) return;
-    if (!gui_card_available()) { gui_notify_no_card(); return; }
-    if (access(item->path, R_OK) != 0) { gui_notify_popup("This track is no longer on the card."); return; }
-    player_play_file(item->path);
-    player_sheet_open(true);
-}
-
+static unsigned home_revision;
 static void home_build(void) {
-    lv_obj_t *p = page[HOME];
-    home_art_drop();
-    lv_obj_clean(p);
-    home_count = 0;
-    section(p, "Your music, within reach");
-    lv_obj_t *row = box(p, cfg->screen_width - 2 * PAD, 138, false);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(row, 12, 0);
-    lv_obj_set_scrollable(row, true);
-    lv_obj_set_scroll_dir(row, LV_DIR_HOR);
-    lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
-    const char *titles[] = {"Liked songs", "On repeat", "Playlists", "Albums"};
-    const lv_image_dsc_t *icons[] = {&icon_star_filled, &icon_repeat_all, &icon_list_music, &icon_album};
-    const int actions[] = {OPEN_FAVOURITES, OPEN_MOST_PLAYED, OPEN_PLAYLISTS, OPEN_ALBUMS};
-    for (int i = 0; i < 4; i++) {
-        lv_obj_t *c = button(row, NULL, 132, 132, action_cb, (void *)(intptr_t)actions[i]);
-        lv_obj_t *im = glyph(c, icons[i], 42);
-        lv_obj_set_pos(im, 16, 17);
-        lv_obj_set_style_image_recolor(im, i == 0 ? mint() : ink(), 0);
-        lv_obj_t *t = label(c, titles[i], &font_ui_18, 110, false);
-        lv_obj_set_pos(t, 12, 91);
-    }
-    home_album_count = 0;
-    library_index_t *albums = library_index_open(LIBRARY_LIST_ALBUMS, LIBRARY_FILTER_NONE, NULL,
-                                                  LIBRARY_ORDER_ADDED, true);
-    if (albums) {
-        library_index_window(albums, 0, COVERLOADER_HOME_COUNT, home_album_collect, NULL);
-        library_index_close(albums);
-    }
-    if (home_album_count) {
-        section(p, "Recently added albums");
-        lv_obj_t *albums_row = box(p, cfg->screen_width - 2 * PAD, 196, false);
-        lv_obj_set_flex_flow(albums_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_style_pad_column(albums_row, 12, 0);
-        lv_obj_set_scrollable(albums_row, true);
-        lv_obj_set_scroll_dir(albums_row, LV_DIR_HOR);
-        lv_obj_set_scrollbar_mode(albums_row, LV_SCROLLBAR_MODE_OFF);
-        for (int i = 0; i < home_album_count; i++) {
-            home_album_t *a = &home_albums[i];
-            lv_obj_t *card = button(albums_row, NULL, 144, 190, home_album_cb, a);
-            a->art = glyph(card, &icon_album, 56);
-            lv_obj_set_pos(a->art, 44, 38);
-            lv_obj_t *title = label(card, a->title, &font_ui_18, 124, false);
-            lv_obj_set_height(title, 25);
-            lv_obj_set_pos(title, 10, 132);
-            lv_obj_t *artist = label(card, a->artist, &font_ui_14, 124, true);
-            lv_obj_set_height(artist, 22);
-            lv_obj_set_pos(artist, 10, 160);
-        }
-    }
-    section(p, "Recently played");
-    library_history_item_t history[24];
-    int n = library_history_recent(history, 24);
-    for (int i = 0; i < n && home_count < 6; ++i) {
-        home_item_t item;
-        if (!library_history_entry(history[i].id, item.path, sizeof(item.path), item.title, sizeof(item.title))) continue;
-        bool duplicate = false;
-        for (int j = 0; j < home_count; j++) if (!strcmp(item.path, home_items[j].path)) duplicate = true;
-        if (duplicate) continue;
-        home_items[home_count] = item;
-        lv_obj_t *b = button(p, NULL, cfg->screen_width - 2 * PAD, 64, home_track_cb, &home_items[home_count++]);
-        lv_obj_t *im = glyph(b, &icon_music2, 26);
-        lv_obj_set_pos(im, 16, 19);
-        lv_obj_t *t = label(b, item.title, &font_ui_20, cfg->screen_width - 116, false);
-        lv_obj_set_height(t, 28);
-        lv_obj_set_pos(t, 58, 19);
-    }
-    if (!home_count) {
-        lv_obj_t *empty = label(p, "Play something you love. Your listening history will appear here.", &font_ui_18,
-                               cfg->screen_width - 2 * PAD, true);
-        lv_label_set_long_mode(empty, LV_LABEL_LONG_WRAP);
-    }
-    section(p, "Find your next listen");
-    route(p, "Online discovery", "Independent releases and openly licensed audio", &icon_search, OPEN_DISCOVERY);
-    route(p, "Browse your card", "Music, folders and downloaded files", &icon_folder, OPEN_BROWSE);
-    home_revision = library_revision(LIBRARY_LIST_TRACKS);
-    home_history = library_history_revision();
+    homeview_build(page[HOME],cfg);
+    home_revision=library_revision(LIBRARY_LIST_TRACKS);
 }
+static void home_art_drop(void) {homeview_art_drop();}
+static void home_art_update(void) {homeview_art_update();}
 
 static void library_build(void) {
     lv_obj_t *p = page[LIBRARY];
@@ -981,7 +835,14 @@ static void poll_cb(lv_timer_t *timer) {
     if (player_sheet_is_open()) return;
     if(mini && lv_screen_active()==lv_obj_get_parent(mini)) mini_update();
     if (lv_screen_active() != main_menu_screen) return;
-    if (selected == HOME) home_art_update();
+    if (selected == HOME) {
+        /* Apply a completed import only at the top of an idle feed. A user
+         * browsing a shelf keeps its order until returning to Home. */
+        if (home_revision!=library_revision(LIBRARY_LIST_TRACKS) && !library_scan_running()
+            && !bottomsheet_active() && lv_obj_get_scroll_y(page[HOME])==0
+            && lv_display_get_inactive_time(NULL)>2000) home_build();
+        home_art_update();
+    }
     if (selected == DOWNLOADS) downloads_update();
 }
 
@@ -1011,7 +872,6 @@ static void show_page(int tab) {
     if (!page[tab]) {
         page[tab] = column(main_menu_screen, cfg->screen_width - 2 * PAD, body_height());
         lv_obj_set_pos(page[tab], PAD, cfg->top_bar_height + HEADER_H);
-        if (tab == HOME) home_build();
         if (tab == SEARCH) search_build();
         if (tab == LIBRARY) library_build();
         if (tab == DOWNLOADS) downloads_build();
@@ -1027,7 +887,7 @@ static void show_page(int tab) {
         lv_obj_set_style_image_recolor(nav_icon[i], active ? ink() : quiet(), 0);
         lv_obj_set_style_text_color(nav_label[i], active ? ink() : quiet(), 0);
     }
-    if (tab == HOME && (home_revision != library_revision(LIBRARY_LIST_TRACKS) || home_history != library_history_revision())) home_build();
+    if (tab == HOME) home_build();
     if (tab == DOWNLOADS) downloads_update();
     if(tab==LIBRARY) collectionview_refresh();
 }

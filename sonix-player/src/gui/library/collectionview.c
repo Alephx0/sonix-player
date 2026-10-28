@@ -113,7 +113,8 @@ static lv_obj_t *button(lv_obj_t *p, const char *s, int w, int h, lv_event_cb_t 
 	lv_obj_set_clickable(o, true);
 	if (s) {
 		lv_obj_t *l = text(o, s, w - 16, &font_ui_18, false);
-		lv_obj_center(l);
+		lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);
+        lv_obj_center(l);
 	}
 	lv_obj_add_event_cb(o, cb, LV_EVENT_CLICKED, u);
 	return o;

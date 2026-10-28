@@ -56,6 +56,11 @@ static void instant_refresh(void);
 #define FORMAT_APE 9
 
 static const char *const SCHEMA[] = {
+    "CREATE TABLE IF NOT EXISTS HOME_CONTEXT(kind INT,filter INT,value TEXT,title TEXT,path TEXT DEFAULT '',position REAL DEFAULT 0,recent INT DEFAULT 0,visits INT DEFAULT 0,PRIMARY KEY(kind,filter,value))",
+    "CREATE INDEX IF NOT EXISTS home_context_recent ON HOME_CONTEXT(recent DESC)",
+    "CREATE INDEX IF NOT EXISTS home_context_frequency ON HOME_CONTEXT(visits DESC,recent DESC)",
+    "CREATE TABLE IF NOT EXISTS HOME_PLAYS(path TEXT,day INT,plays INT,PRIMARY KEY(path,day))",
+    "CREATE INDEX IF NOT EXISTS home_plays_day ON HOME_PLAYS(day,path)",
 	"CREATE TABLE IF NOT EXISTS RELEASE_META(path TEXT COLLATE NOCASE PRIMARY KEY,date TEXT,type TEXT,owner TEXT)",
     "CREATE TABLE IF NOT EXISTS RELEASE_CREDIT(path TEXT COLLATE NOCASE,name TEXT COLLATE NOCASE,mbid TEXT,role INT)",
     "CREATE INDEX IF NOT EXISTS release_credit_name ON RELEASE_CREDIT(name,role,path)",
@@ -66,6 +71,11 @@ static const char *const SCHEMA[] = {
 	"sample_rate INT,bit_rate INT,bit INT,channel INT,format INT,quality TEXT COLLATE NOCASE,"
 	"album_pic_path TEXT COLLATE NOCASE,lrc_path TEXT COLLATE NOCASE,track_gain REAL,track_peak REAL,"
 	"album_artist TEXT COLLATE NOCASE,ctime INT,mtime INT,sortkey TEXT,disc INT,PRIMARY KEY(id, path, cue_id))",
+
+    "CREATE TABLE IF NOT EXISTS HOME_ADDED(path TEXT COLLATE NOCASE PRIMARY KEY,added INT)",
+    "INSERT OR IGNORE INTO HOME_ADDED SELECT path,ctime FROM MEDIA_TABLE",
+    "CREATE TRIGGER IF NOT EXISTS home_added_insert AFTER INSERT ON MEDIA_TABLE BEGIN "
+    "INSERT OR IGNORE INTO HOME_ADDED VALUES(new.path,CAST(strftime('%s','now') AS INT));END",
 
 	"CREATE TRIGGER IF NOT EXISTS release_meta_delete AFTER DELETE ON MEDIA_TABLE "
     "WHEN NOT EXISTS(SELECT 1 FROM MEDIA_TABLE WHERE path=old.path) BEGIN "
@@ -2224,6 +2234,11 @@ void library_note_play(const char *path) {
 		}
 		sqlite3_finalize(stmt);
 	}
+    if(db && sqlite3_prepare_v2(db,"INSERT INTO HOME_PLAYS SELECT ?1,CAST(strftime('%s','now') AS INT)/86400,1 WHERE EXISTS(SELECT 1 FROM MEDIA_TABLE WHERE path=?1) ON CONFLICT(path,day) DO UPDATE SET plays=plays+1",-1,&stmt,NULL)==SQLITE_OK) {
+        sqlite3_bind_text(stmt,1,path,-1,SQLITE_TRANSIENT);sqlite3_step(stmt);sqlite3_finalize(stmt);
+        exec("DELETE FROM HOME_PLAYS WHERE day<CAST(strftime('%s','now') AS INT)/86400-30");
+    }
+
 	pthread_mutex_unlock(&db_lock);
 }
 
@@ -2734,6 +2749,12 @@ static void list_sql(char *sql, size_t size, const char *select, library_list_t 
 	// the other by sorting the whole table into a temporary b-tree.
 	const char *by_name = list_uses_sortkey(kind) ? "sortkey" : "name COLLATE listorder";
 
+    if(kind==LIBRARY_LIST_TRACKS && filter==LIBRARY_FILTER_HOME_REPEAT) {
+        snprintf(sql,size,"SELECT %s FROM MEDIA_TABLE WHERE path IN (SELECT path FROM HOME_PLAYS WHERE day>=CAST(strftime('%%s','now') AS INT)/86400-29 GROUP BY path HAVING SUM(plays)>=2) ORDER BY (SELECT SUM(plays) FROM HOME_PLAYS h WHERE h.path=MEDIA_TABLE.path AND day>=CAST(strftime('%%s','now') AS INT)/86400-29) DESC,name",select);return;
+    }
+    if(kind==LIBRARY_LIST_TRACKS && filter==LIBRARY_FILTER_HOME_REDISCOVER) {
+        snprintf(sql,size,"SELECT %s FROM MEDIA_TABLE WHERE NOT EXISTS(SELECT 1 FROM PLAY_COUNTS c WHERE c.path=MEDIA_TABLE.path AND c.last_played>CAST(strftime('%%s','now') AS INT)-7776000) ORDER BY COALESCE((SELECT plays FROM PLAY_COUNTS c WHERE c.path=MEDIA_TABLE.path),0),name",select);return;
+    }
 	if (kind == LIBRARY_LIST_TRACKS) {
 		char order_sql[256];
 		track_order_sql(order_sql, sizeof(order_sql), order, col && value && filter == LIBRARY_FILTER_ALBUM, by_name);
@@ -8390,4 +8411,48 @@ int library_discography(const char *artist,int category,int offset,int count,lib
         sqlite3_finalize(st);
     }
     pthread_mutex_unlock(&db_lock);return n;
+}
+
+void library_home_touch(library_list_t kind,library_filter_t filter,const char *value,const char *title) {
+    if(!value || !*value || !title || (kind!=LIBRARY_LIST_PLAYLIST && !(kind==LIBRARY_LIST_TRACKS && filter==LIBRARY_FILTER_ALBUM))) return;
+    pthread_mutex_lock(&db_lock);sqlite3_stmt *st=NULL;
+    if(db && sqlite3_prepare_v2(db,"INSERT INTO HOME_CONTEXT(kind,filter,value,title,recent,visits) VALUES(?1,?2,?3,?4,strftime('%s','now'),1) ON CONFLICT(kind,filter,value) DO UPDATE SET title=excluded.title,recent=excluded.recent,visits=visits+1",-1,&st,NULL)==SQLITE_OK) {
+        sqlite3_bind_int(st,1,kind);sqlite3_bind_int(st,2,filter);sqlite3_bind_text(st,3,value,-1,SQLITE_TRANSIENT);sqlite3_bind_text(st,4,title,-1,SQLITE_TRANSIENT);sqlite3_step(st);sqlite3_finalize(st);
+    }
+    pthread_mutex_unlock(&db_lock);
+}
+void library_home_resume_save(const library_index_spec_t *spec,const char *path,double position) {
+    if(!spec || !spec->valid || !path || !*path || position<0 || (spec->kind!=LIBRARY_LIST_PLAYLIST && !(spec->kind==LIBRARY_LIST_TRACKS && spec->filter==LIBRARY_FILTER_ALBUM)))return;
+    pthread_mutex_lock(&db_lock);sqlite3_stmt *st=NULL;
+    if(db && sqlite3_prepare_v2(db,"UPDATE HOME_CONTEXT SET path=?4,position=?5,recent=strftime('%s','now') WHERE kind=?1 AND filter=?2 AND value=?3",-1,&st,NULL)==SQLITE_OK) {
+        sqlite3_bind_int(st,1,spec->kind);sqlite3_bind_int(st,2,spec->filter);sqlite3_bind_text(st,3,spec->value,-1,SQLITE_TRANSIENT);sqlite3_bind_text(st,4,path,-1,SQLITE_TRANSIENT);sqlite3_bind_double(st,5,position);sqlite3_step(st);sqlite3_finalize(st);
+    }
+    pthread_mutex_unlock(&db_lock);
+}
+int library_home_contexts(library_home_context_t *out,int capacity,bool frequent) {
+    if(!out || capacity<1)return 0;
+    if(capacity>24)capacity=24;
+    pthread_mutex_lock(&db_lock);sqlite3_stmt *st=NULL;int n=0;
+    const char *sql=frequent?"SELECT kind,filter,value,title,path,position,recent,visits FROM HOME_CONTEXT ORDER BY visits DESC,recent DESC LIMIT ?1":"SELECT kind,filter,value,title,path,position,recent,visits FROM HOME_CONTEXT WHERE path<>'' ORDER BY recent DESC LIMIT ?1";
+    if(db && sqlite3_prepare_v2(db,sql,-1,&st,NULL)==SQLITE_OK) {
+        sqlite3_bind_int(st,1,capacity);
+        while(n<capacity && sqlite3_step(st)==SQLITE_ROW) {
+            library_home_context_t *r=&out[n++];memset(r,0,sizeof(*r));r->spec.valid=true;
+            r->spec.kind=sqlite3_column_int(st,0);r->spec.filter=sqlite3_column_int(st,1);
+            snprintf(r->spec.value,sizeof(r->spec.value),"%s",sqlite3_column_text(st,2));snprintf(r->title,sizeof(r->title),"%s",sqlite3_column_text(st,3));snprintf(r->path,sizeof(r->path),"%s",sqlite3_column_text(st,4));r->position=sqlite3_column_double(st,5);r->recent=sqlite3_column_int64(st,6);r->visits=sqlite3_column_int(st,7);
+        }sqlite3_finalize(st);
+    }pthread_mutex_unlock(&db_lock);return n;
+}
+
+int library_home_added(library_home_context_t *out,int capacity) {
+    if(!out || capacity<1)return 0;
+    if(capacity>12)capacity=12;
+    pthread_mutex_lock(&db_lock);sqlite3_stmt *st=NULL;int n=0;
+    if(db && sqlite3_prepare_v2(db,"SELECT album || char(31) || album_key,album,MIN(m.path),MAX(a.added) FROM MEDIA_TABLE m JOIN HOME_ADDED a ON a.path=m.path WHERE album<>'' GROUP BY album,album_key ORDER BY MAX(a.added) DESC,album LIMIT ?1",-1,&st,NULL)==SQLITE_OK) {
+        sqlite3_bind_int(st,1,capacity);
+        while(n<capacity && sqlite3_step(st)==SQLITE_ROW) {
+            library_home_context_t *r=&out[n++];memset(r,0,sizeof(*r));r->spec.valid=true;r->spec.kind=LIBRARY_LIST_TRACKS;r->spec.filter=LIBRARY_FILTER_ALBUM;
+            snprintf(r->spec.value,sizeof(r->spec.value),"%s",sqlite3_column_text(st,0));snprintf(r->title,sizeof(r->title),"%s",sqlite3_column_text(st,1));snprintf(r->path,sizeof(r->path),"%s",sqlite3_column_text(st,2));r->added=sqlite3_column_int64(st,3);
+        }sqlite3_finalize(st);
+    }pthread_mutex_unlock(&db_lock);return n;
 }

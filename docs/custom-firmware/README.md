@@ -13,8 +13,8 @@ The latest offline integration adds separate priority/context queues, playlist
 membership, saved/pinned collections and indexed lyric search. See the
 [offline player guide](offline-player.md) for controls, evidence and remaining scope.
 
-The [latest UI update](reference-ui.md) follows the supplied mobile screenshots
-and includes actual simulator captures of the redesigned screens.
+The [latest Home and player update](home-dashboard.md) adds an offline dashboard,
+vertical Now Playing transition, integrated utility controls and conditional lyrics.
 
 ## Implemented workflow
 
@@ -42,6 +42,8 @@ This fork does not implement a Spotify service client.
 
 ## Evidence and guides
 
+- [Offline Home and vertical player](home-dashboard.md)
+- [Sliding panels, visual search and discography](sliding-panels.md)
 - [Screenshot-based UI update](reference-ui.md)
 - [Offline player features, controls and evidence](offline-player.md)
 - [Architecture and interfaces](architecture.md)
