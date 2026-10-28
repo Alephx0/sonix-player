@@ -4,6 +4,7 @@
 #include "src/system/library/playlists.h"
 #include "src/gui/shell/toast.h"
 #include "main_menu.h"
+#include "ui_probe.h"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -994,4 +995,5 @@ void main_menu_init(gui_config_t *config) {
     int last=(int)config_get_int("ui","last_tab",HOME);
     show_page(last>=HOME && last<=LIBRARY?last:HOME);
     lv_timer_create(poll_cb, 100, NULL);
+    ui_probe_init();
 }

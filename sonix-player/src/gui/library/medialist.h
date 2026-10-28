@@ -117,6 +117,8 @@ void medialist_notify_now_playing(void);
 // back into view without being loaded again: the player sheet sliding off it.
 // Nothing happens when the list has not changed or no list is on screen.
 void medialist_refresh_visible(void);
+/* Start the existing drag-to-reorder mode on the shared playlist page. */
+void medialist_edit_playlist(void);
 
 // The same track list, filled from an explicit set of paths rather than from
 // the index: what a playlist's contents are. There is no query behind it, so
@@ -135,5 +137,6 @@ void medialist_open_paths(const char *title, const char *const *paths, const cha
 // playlists page. The list keeps the name it was opened with, and would go on
 // writing to a file that no longer exists, so it is told the new one.
 void medialist_playlist_renamed(const char *old_name, const char *new_name);
+void medialist_playlist_deleted(const char *name);
 
 #endif /* MEDIALIST_H */

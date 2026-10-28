@@ -14,6 +14,7 @@ p.add_argument('repo',type=Path)
 p.add_argument('action',choices=['start','click','drag','shot','stop'])
 p.add_argument('args',nargs='*')
 p.add_argument('--card',type=Path,help='Optional isolated fixture card')
+p.add_argument('--preserve-config',action='store_true',help='Keep preferences when testing a restart')
 a=p.parse_args()
 repo=a.repo.resolve();out=repo/'artifacts/offline-ui';out.mkdir(parents=True,exist_ok=True)
 state_file=out/'session.json'
@@ -29,7 +30,8 @@ if a.action=='start':
     layout=int(a.args[0]) if a.args else 3
     if layout not in range(4):raise SystemExit('Layout must be 0, 1, 2 or 3')
     config=out/'device_config.ini'
-    config.write_text(f'[ui]\nlanguage=English\ntheme=dark\n[clock]\nconfigured=1\n[power]\nscreen_off_seconds=0\nstandby_mem=0\n[screen]\nplayer_layout_alt={layout}\n[player]\nremember_track=1\n')
+    if not a.preserve_config or not config.exists():
+        config.write_text(f'[ui]\nlanguage=English\ntheme=dark\n[clock]\nconfigured=1\n[power]\nscreen_off_seconds=0\nstandby_mem=0\n[screen]\nplayer_layout_alt={layout}\n[player]\nremember_track=1\n')
     env=dict(os.environ,DISPLAY='localhost:'+display,XAUTHORITY=str(auth),SONIX_PANEL='480x800',SONIX_SD_ROOT=str(a.card.resolve() if a.card else repo/'artifacts/offline-fixture/sd'),SONIX_CONFIG=str(config),SONIX_EBOOK_CONFIG=str(out/'ebook.ini'),SONIX_NO_MOUNT='1',SONIX_NO_SYSSERVER='1',SDL_VIDEODRIVER='x11',SDL_RENDER_DRIVER='software')
     alsa=out/'alsa.conf';alsa.write_text('pcm.!default { type pulse }\nctl.!default { type pulse }\n')
     env['ALSA_CONFIG_PATH']=str(alsa)
@@ -56,7 +58,14 @@ elif a.action=='drag':
 elif a.action=='stop':
     for key,expected in [('pid',b'sonix_player_host'),('xvfb',b'Xvfb')]:
         pid=state[key];proc=Path(f'/proc/{pid}/cmdline')
-        if proc.exists() and expected in proc.read_bytes():os.kill(pid,signal.SIGINT if key=='pid' else signal.SIGTERM)
+        if proc.exists() and expected in proc.read_bytes():
+            os.kill(pid,signal.SIGINT if key=='pid' else signal.SIGTERM)
+            # Let the application flush queue/config before taking away X11.
+            until=time.monotonic()+5
+            while proc.exists() and expected in proc.read_bytes() and time.monotonic()<until:
+                time.sleep(.05)
+            if proc.exists() and expected in proc.read_bytes():
+                raise SystemExit(f'{expected.decode()} did not stop; session state retained')
     state_file.unlink()
 if a.action!='stop':
     name=a.args[0] if a.action=='shot' and a.args else a.action

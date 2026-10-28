@@ -1,5 +1,7 @@
 #include "src/system/library/collections.h"
 #include "discography.h"
+#include "collectionview.h"
+#include "src/gui/shell/ui_metrics.h"
 #include "medialist.h"
 #include "src/gui/shell/main_menu.h"
 
@@ -628,6 +630,8 @@ static bool window_fill_cb(const char *name, const char *path, const char *artis
 // or a card coming back rewrites all of them. The handle notices; this is what
 // acts on it -- the same list, asked for again. Without it the page keeps a
 // handle that hands out nothing and never recovers.
+static void head_build(panel_t *p);
+
 static void panel_refresh_stale(panel_t *p) {
 	if (p->from_paths || !p->ix || !library_index_stale(p->ix)) {
 		return;
@@ -640,6 +644,10 @@ static void panel_refresh_stale(panel_t *p) {
 	p->count = library_index_count(fresh);
 	p->window_first = -1;
 	p->window_count = 0;
+    if (p->head && (p->kind == LIBRARY_LIST_PLAYLIST || p->kind == LIBRARY_LIST_FAVOURITES)) {
+        head_build(p);
+        lv_obj_align(p->empty, LV_ALIGN_TOP_MID, 0, p->head_height + 8);
+    }
 
 	// The rows underneath may have moved, so every pooled row has to be bound
 	// again, and the letters have to be counted again. A row that comes back
@@ -792,7 +800,7 @@ static int row_slot(panel_t *p, const row_t *row) { return p->slot_base + (int)(
 // ---------------------------------------------------------------------------
 // Where a row sits
 //
-static int row_height(const panel_t *p) {return reference_layout() && p->head ? 76 : ROW_HEIGHT;}
+static int row_height(const panel_t *p) {return reference_layout() && p->head ? UI_COLLECTION_TRACK_HEIGHT : ROW_HEIGHT;}
 static int row_pitch(const panel_t *p) {return row_height(p)+ROW_GAP;}
 
 // A row is ROW_PITCH below the one before it, and that is the whole of it on
@@ -2983,6 +2991,17 @@ static void reorder_clicked_cb(lv_event_t *e) {
 	}
 }
 
+void medialist_edit_playlist(void) {
+    panel_t *p = &panel_tracks;
+    if (p->kind != LIBRARY_LIST_PLAYLIST || p->reordering) return;
+    p->reordering = true;
+    p->reorder_moved = false;
+    reorder_icon_paint(p);
+    for (int i = 0; i < ROW_POOL; i++) row_apply_reorder_look(p, &p->rows[i]);
+    lv_obj_scroll_to_y(p->list, p->head_height, LV_ANIM_OFF);
+    window_update(p);
+}
+
 // Leaves the mode without asking, for the routes that are not the button:
 // walking off the page, the list being reloaded under it, a card going away.
 static void reorder_stop(panel_t *p) {
@@ -4254,7 +4273,7 @@ static void head_paint(panel_t *p) {
 	local_color(p->head_title, LV_STYLE_TEXT_COLOR, 0, t, p->tint_ink);
 	if (p->head_artist) {
 		// The artist in the accent, as the theme has it, or in the ink.
-		lv_obj_set_style_text_color(p->head_artist, t ? p->tint_ink : theme()->accent, 0);
+		lv_obj_set_style_text_color(p->head_artist, t ? p->tint_ink : reference_layout() ? lv_color_white() : theme()->accent, 0);
 	}
 	local_color(p->head_meta, LV_STYLE_TEXT_COLOR, 0, t, p->tint_dim);
 
@@ -4282,12 +4301,14 @@ static void head_paint(panel_t *p) {
 static void page_paint(panel_t *p) {
 	bool t = p->tinted;
 	local_color(p->screen, LV_STYLE_BG_COLOR, 0, t, p->tint_bg);
+    if (reference_layout() && !t) lv_obj_set_style_bg_color(p->screen, lv_color_hex(0x121212), 0);
     lv_obj_set_style_bg_grad_dir(p->screen,reference_layout()&&t?LV_GRAD_DIR_VER:LV_GRAD_DIR_NONE,0);
     if(reference_layout()&&t) {
         lv_obj_set_style_bg_grad_color(p->screen,lv_color_hex(0x121212),0);
         lv_obj_set_style_bg_main_stop(p->screen,0,0);lv_obj_set_style_bg_grad_stop(p->screen,180,0);
     }
 	local_color(p->head_bar, LV_STYLE_BG_COLOR, 0, t, p->tint_bg);
+    if (reference_layout() && !t) lv_obj_set_style_bg_color(p->head_bar, lv_color_hex(0x121212), 0);
 	local_color(p->title_label, LV_STYLE_TEXT_COLOR, 0, t, p->tint_ink);
 
 	for (int i = 0; i < ROW_POOL; i++) {
@@ -4481,8 +4502,8 @@ static lv_obj_t *head_play_button(lv_obj_t *parent, lv_event_cb_t cb, panel_t *p
 	lv_obj_add_event_cb(button, cb, LV_EVENT_CLICKED, p);
 
 	if(reference_layout()) {
-        lv_obj_set_size(button,64,64);lv_obj_set_style_pad_all(button,0,0);
-        lv_obj_t *image=lv_image_create(button);lv_image_set_src(image,&icon_play);lv_obj_set_size(image,28,28);
+        lv_obj_set_size(button,UI_COLLECTION_PLAY,UI_COLLECTION_PLAY);lv_obj_set_style_pad_all(button,0,0);
+        lv_obj_t *image=lv_image_create(button);lv_image_set_src(image,&icon_play);lv_obj_set_size(image,UI_COLLECTION_PLAY_GLYPH,UI_COLLECTION_PLAY_GLYPH);
         lv_image_set_inner_align(image,LV_IMAGE_ALIGN_CONTAIN);lv_obj_set_style_image_recolor_opa(image,LV_OPA_COVER,0);lv_obj_center(image);
         return button;
     }
@@ -4497,11 +4518,17 @@ static lv_obj_t *head_play_button(lv_obj_t *parent, lv_event_cb_t cb, panel_t *p
 // The head above an album's tracks: its cover, title, artist, genre and year,
 // and the three ways to start it. Built for the album being opened and thrown
 // away with it.
+static void head_options_cb(lv_event_t *e) {
+    panel_t *p = lv_event_get_user_data(e);
+    collectionview_collection_options(COLLECTION_PLAYLIST, p->playlist, p->title, "You");
+}
 static void head_build(panel_t *p) {
 	head_clear(p);
 
-	library_album_info_t info;
-	library_album_info(p->filter_value, &info);
+	library_album_info_t info = {0};
+    bool is_playlist = p->kind == LIBRARY_LIST_PLAYLIST || p->kind == LIBRARY_LIST_FAVOURITES;
+    if (is_playlist) snprintf(info.artist, sizeof(info.artist), "You");
+    else library_album_info(p->filter_value, &info);
 
 	int width = (int)p->cfg->screen_width - 2 * (int)p->cfg->padding;
 
@@ -4534,7 +4561,7 @@ static void head_build(panel_t *p) {
 	// The album glyph on a card until the picture arrives, and for good when
 	// the record has none.
 	p->head_cover = lv_image_create(p->head);
-	lv_obj_set_size(p->head_cover, reference_layout()?220:HEAD_COVER_SIZE, reference_layout()?220:HEAD_COVER_SIZE);
+	lv_obj_set_size(p->head_cover, reference_layout()?UI_COLLECTION_COVER:HEAD_COVER_SIZE, reference_layout()?UI_COLLECTION_COVER:HEAD_COVER_SIZE);
 	lv_obj_add_style(p->head_cover, &theme_style_card, 0);
 	lv_obj_set_style_pad_all(p->head_cover, 0, 0);
 	lv_image_set_inner_align(p->head_cover, reference_layout()?LV_IMAGE_ALIGN_CONTAIN:LV_IMAGE_ALIGN_CENTER);
@@ -4552,7 +4579,9 @@ static void head_build(panel_t *p) {
 	}
 
 	char meta[200] = "";
-	if (info.genre[0] && info.year > 0) {
+	if (is_playlist) {
+        snprintf(meta, sizeof(meta), "Playlist \xC2\xB7 %d %s", p->count, p->count == 1 ? "song" : "songs");
+    } else if (info.genre[0] && info.year > 0) {
 		snprintf(meta, sizeof(meta), "%s \xC2\xB7 %d", info.genre, info.year);
 	} else if (info.genre[0]) {
 		snprintf(meta, sizeof(meta), "%s", info.genre);
@@ -4576,14 +4605,26 @@ static void head_build(panel_t *p) {
 	lv_obj_set_event_bubble(buttons, true);
 	p->head_buttons[0] = head_glyph_button(buttons, &icon_shuffle, head_shuffle_cb, p);
 	p->head_buttons[1] = head_play_button(buttons, head_play_cb, p);
-	p->head_buttons[2] = head_glyph_button(buttons, &icon_list_queue, head_queue_cb, p);
+	p->head_buttons[2] = head_glyph_button(buttons, p->kind == LIBRARY_LIST_PLAYLIST ? &icon_ellipsis_vertical : &icon_list_queue,
+        p->kind == LIBRARY_LIST_PLAYLIST ? head_options_cb : head_queue_cb, p);
+    if (!p->count) {
+        lv_obj_add_state(p->head_buttons[0], LV_STATE_DISABLED);
+        lv_obj_add_state(p->head_buttons[1], LV_STATE_DISABLED);
+        lv_obj_set_style_opa(p->head_buttons[0], LV_OPA_30, LV_STATE_DISABLED);
+        lv_obj_set_style_opa(p->head_buttons[1], LV_OPA_30, LV_STATE_DISABLED);
+        if (p->kind != LIBRARY_LIST_PLAYLIST) {
+            lv_obj_add_state(p->head_buttons[2], LV_STATE_DISABLED);
+            lv_obj_set_style_opa(p->head_buttons[2], LV_OPA_30, LV_STATE_DISABLED);
+        }
+    }
     if(reference_layout()) {
         lv_obj_set_flex_align(buttons,LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
         lv_obj_set_ignore_layout(p->head_buttons[1],true);
         lv_obj_align(p->head_buttons[1],LV_ALIGN_RIGHT_MID,-4,0);
-        lv_obj_set_height(buttons,68);
+        lv_obj_set_height(buttons,UI_COLLECTION_ACTION_HEIGHT);
     }
-	head_paint(p);
+	/* Paint the whole page even on its first opening, before any artwork arrives. */
+	page_paint(p);
 
 	// The real height of all that, for the rows to start under. The screen may
 	// never have been laid out yet -- it is built hidden -- so it is laid out
@@ -4739,13 +4780,15 @@ static void album_extras_clear(panel_t *p) {
 // one disc, and the head when the alternative album view is on. The head
 // first, because the headings are placed under it.
 static void album_extras_build(panel_t *p) {
-	if (!panel_is_album(p)) {
-		return;
-	}
-	if (album_head) {
-		head_build(p);
-	}
-	album_places_load(p);
+	bool playlist_head = reference_layout() && (p->kind == LIBRARY_LIST_PLAYLIST || p->kind == LIBRARY_LIST_FAVOURITES);
+    if (!panel_is_album(p) && !playlist_head) return;
+    if (album_head || playlist_head) head_build(p);
+    if (panel_is_album(p)) album_places_load(p);
+    if (playlist_head) {
+        lv_label_set_text(p->empty, p->kind == LIBRARY_LIST_FAVOURITES ? "Save songs from their playlist menu" : "Use the menu to add songs");
+        lv_obj_set_width(p->empty, lv_pct(90));
+        lv_obj_align(p->empty, LV_ALIGN_TOP_MID, 0, p->head_height + 8);
+    }
 
 	// Building the head moves the list up to the status bar. On a list that
 	// was scrolled to its end, LVGL pulls the scroll back to fit, and the
@@ -5041,7 +5084,8 @@ void medialist_open(const char *title, library_list_t kind, library_filter_t fil
 
 	// One album under the head: the head's own buttons are the circle-play
 	// menu's choices, so the corner does not offer them a second time.
-	if (album_head && kind == LIBRARY_LIST_TRACKS && filter == LIBRARY_FILTER_ALBUM) {
+	if ((album_head && kind == LIBRARY_LIST_TRACKS && filter == LIBRARY_FILTER_ALBUM) ||
+        (reference_layout() && (kind == LIBRARY_LIST_PLAYLIST || kind == LIBRARY_LIST_FAVOURITES))) {
 		want_play = false;
 	}
 
@@ -5113,6 +5157,7 @@ void medialist_open(const char *title, library_list_t kind, library_filter_t fil
 	// wrapped inside the page, since a translation can run wider than the
 	// screen; the usual one keeps the width of its own lines.
 	bool most_played = kind == LIBRARY_LIST_MOST_PLAYED;
+	lv_obj_align(p->empty, LV_ALIGN_TOP_MID, 0, 120);
 	lv_label_set_text(p->empty, tr(most_played ? "medialist_most_played_empty" : "library_empty_note"));
 	lv_obj_set_width(p->empty, most_played ? lv_pct(90) : LV_SIZE_CONTENT);
 
@@ -5272,6 +5317,13 @@ void medialist_playlist_renamed(const char *old_name, const char *new_name) {
 	// The heading is the playlist's name here, and the list is still on screen
 	// behind the page the rename was typed on.
 	lv_label_set_text(p->title_label, new_name);
+    if (p->head && p->kind == LIBRARY_LIST_PLAYLIST) head_build(p);
+}
+
+void medialist_playlist_deleted(const char *name) {
+    panel_t *p = &panel_tracks;
+    if (name && p->kind == LIBRARY_LIST_PLAYLIST && !strcmp(name, p->playlist) &&
+        lv_screen_active() == p->screen) switch_screen(main_menu_screen);
 }
 
 void medialist_init(gui_config_t *cfg) {

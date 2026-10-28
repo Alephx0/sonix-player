@@ -1,4 +1,5 @@
 #include "bottomsheet.h"
+#include "ui_metrics.h"
 #include "src/gui/shell/icons.h"
 #include "src/gui/shell/switcher.h"
 static lv_obj_t *overlay, *panel, *body;
@@ -29,7 +30,7 @@ static void animate(lv_obj_t *o, lv_anim_exec_xcb_t fn, int from, int to, bool e
 	lv_anim_set_var(&a, o);
 	lv_anim_set_exec_cb(&a, fn);
 	lv_anim_set_values(&a, from, to);
-	lv_anim_set_duration(&a, 220);
+	lv_anim_set_duration(&a, UI_SHEET_TRANSITION_MS);
 	lv_anim_set_path_cb(&a, exit ? lv_anim_path_ease_in : lv_anim_path_ease_out);
 	if (exit && o == panel)
 		lv_anim_set_completed_cb(&a, finished);

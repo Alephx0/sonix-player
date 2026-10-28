@@ -1,0 +1,47 @@
+{
+  "actions": [
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-1mnq0k9h/sd"
+    ],
+    [
+      "click",
+      "400",
+      "770"
+    ],
+    [
+      "click",
+      "273",
+      "244"
+    ],
+    [
+      "shot",
+      "liked-songs"
+    ],
+    [
+      "click",
+      "119",
+      "457"
+    ],
+    [
+      "stop"
+    ]
+  ],
+  "checks": [
+    "liked-songs: native 480x800 render",
+    "liked-songs: empty collection uses the shared dark background",
+    "one centered collection cover",
+    "collection cover centered",
+    "one collection play control",
+    "shared native collection destination",
+    "empty liked collection cannot enqueue a nonexistent song"
+  ],
+  "screenshots": [
+    "liked-songs.png"
+  ],
+  "metrics": {},
+  "baseline": "No approved baseline supplied",
+  "result": "PASS"
+}

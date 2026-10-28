@@ -468,6 +468,8 @@ static void delete_confirm(lv_event_t *e) {
 	bool ok = menu_item.kind == COLLECTION_FOLDER || playlists_delete(menu_item.key);
 	if (ok) {
 		collections_forget(menu_item.kind, menu_item.key);
+		if (menu_item.kind == COLLECTION_PLAYLIST)
+			medialist_playlist_deleted(menu_item.key);
 		if (!strcmp(folder, menu_item.key))
 			folder[0] = 0;
 	} else
@@ -510,7 +512,7 @@ static void playlist_action(lv_event_t *e) {
 	}
 	char name[512];
 	snprintf(name, sizeof(name), "%s", menu_item.key);
-	bottomsheet_close(false);
+	if (action != 1) bottomsheet_close(false);
 	if (action == 1 || action == 2) {
 		playlistview_open(name, action == 2);
 		if (action == 1)

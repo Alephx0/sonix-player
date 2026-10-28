@@ -9,6 +9,11 @@ Baseline: `Jepl4r/sonix-player@fe94fe796d93c6efa50d1107a734864c9c6a03d5`.
 Fork: [Alephx0/sonix-player](https://github.com/Alephx0/sonix-player), branch
 `feature/r1-discovery`. Original Sonix code and licensing remain in place.
 
+The [shared collection update](shared-collections.md) unifies album and playlist
+browsing and adds a repeatable native simulator regression harness. Current UI
+rules are consolidated in [UI_SPEC](../UI_SPEC.md), [DESIGN_SYSTEM](../DESIGN_SYSTEM.md),
+[UI_TEST_MATRIX](../UI_TEST_MATRIX.md), and [UI_DECISIONS](../UI_DECISIONS.md).
+
 The latest offline integration adds separate priority/context queues, playlist
 membership, saved/pinned collections and indexed lyric search. See the
 [offline player guide](offline-player.md) for controls, evidence and remaining scope.

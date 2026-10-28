@@ -1,0 +1,424 @@
+{
+  "actions": [
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-1mnq0k9h/sd"
+    ],
+    [
+      "shot",
+      "album"
+    ],
+    [
+      "shot",
+      "playlist"
+    ],
+    [
+      "click",
+      "102",
+      "457"
+    ],
+    [
+      "shot",
+      "playlist-menu"
+    ],
+    [
+      "click",
+      "240",
+      "48"
+    ],
+    [
+      "click",
+      "102",
+      "457"
+    ],
+    [
+      "drag",
+      "240",
+      "74",
+      "240",
+      "285"
+    ],
+    [
+      "shot",
+      "playlist-empty"
+    ],
+    [
+      "click",
+      "429",
+      "457"
+    ],
+    [
+      "shot",
+      "playlist-long"
+    ],
+    [
+      "shot",
+      "playlist-large"
+    ],
+    [
+      "drag",
+      "200",
+      "600",
+      "200",
+      "260"
+    ],
+    [
+      "shot",
+      "playlist-scrolled"
+    ],
+    [
+      "shot",
+      "album-missing-art"
+    ],
+    [
+      "click",
+      "102",
+      "457"
+    ],
+    [
+      "click",
+      "240",
+      "48"
+    ],
+    [
+      "click",
+      "102",
+      "457"
+    ],
+    [
+      "click",
+      "240",
+      "48"
+    ],
+    [
+      "click",
+      "102",
+      "457"
+    ],
+    [
+      "click",
+      "240",
+      "48"
+    ],
+    [
+      "pointer",
+      "mousemove",
+      "102",
+      "457",
+      "click",
+      "1",
+      "sleep",
+      ".05",
+      "mousemove",
+      "240",
+      "48",
+      "click",
+      "1",
+      "sleep",
+      ".3"
+    ],
+    [
+      "pointer",
+      "mousemove",
+      "102",
+      "457",
+      "click",
+      "1",
+      "sleep",
+      ".05",
+      "mousemove",
+      "240",
+      "48",
+      "click",
+      "1",
+      "sleep",
+      ".3"
+    ],
+    [
+      "pointer",
+      "mousemove",
+      "102",
+      "457",
+      "click",
+      "1",
+      "sleep",
+      ".05",
+      "mousemove",
+      "240",
+      "48",
+      "click",
+      "1",
+      "sleep",
+      ".3"
+    ],
+    [
+      "pointer",
+      "mousemove",
+      "102",
+      "457",
+      "click",
+      "1",
+      "sleep",
+      ".05",
+      "mousemove",
+      "240",
+      "48",
+      "click",
+      "1",
+      "sleep",
+      ".3"
+    ],
+    [
+      "pointer",
+      "mousemove",
+      "102",
+      "457",
+      "click",
+      "1",
+      "sleep",
+      ".05",
+      "mousemove",
+      "240",
+      "48",
+      "click",
+      "1",
+      "sleep",
+      ".3"
+    ],
+    [
+      "click",
+      "429",
+      "457"
+    ],
+    [
+      "drag",
+      "240",
+      "65",
+      "240",
+      "610"
+    ],
+    [
+      "click",
+      "102",
+      "457"
+    ],
+    [
+      "shot",
+      "playlist-playing-menu"
+    ],
+    [
+      "click",
+      "240",
+      "48"
+    ],
+    [
+      "click",
+      "102",
+      "457"
+    ],
+    [
+      "click",
+      "240",
+      "247"
+    ],
+    [
+      "shot",
+      "playlist-edit"
+    ],
+    [
+      "drag",
+      "429",
+      "417",
+      "429",
+      "501",
+      "0.65"
+    ],
+    [
+      "click",
+      "102",
+      "457"
+    ],
+    [
+      "click",
+      "240",
+      "183"
+    ],
+    [
+      "click",
+      "216",
+      "316"
+    ],
+    [
+      "click",
+      "448",
+      "80"
+    ],
+    [
+      "shot",
+      "playlist-added"
+    ],
+    [
+      "click",
+      "102",
+      "457"
+    ],
+    [
+      "click",
+      "240",
+      "311"
+    ],
+    [
+      "click",
+      "240",
+      "48"
+    ],
+    [
+      "click",
+      "43",
+      "457"
+    ],
+    [
+      "drag",
+      "240",
+      "65",
+      "240",
+      "610"
+    ],
+    [
+      "click",
+      "400",
+      "770"
+    ],
+    [
+      "click",
+      "132",
+      "129"
+    ],
+    [
+      "shot",
+      "library-playlists"
+    ],
+    [
+      "click",
+      "273",
+      "244"
+    ],
+    [
+      "shot",
+      "liked-songs"
+    ],
+    [
+      "click",
+      "400",
+      "770"
+    ],
+    [
+      "stop"
+    ],
+    [
+      "start",
+      "3",
+      "--card",
+      "/home/justi/sonix-r1-build/artifacts/ui-collections-1mnq0k9h/sd",
+      "--preserve-config"
+    ],
+    [
+      "stop"
+    ]
+  ],
+  "checks": [
+    "album: native 480x800 render",
+    "one centered collection cover",
+    "collection cover centered",
+    "one collection play control",
+    "shared native collection destination",
+    "playlist: native 480x800 render",
+    "one centered collection cover",
+    "collection cover centered",
+    "one collection play control",
+    "shared native collection destination",
+    "album and playlist share artwork and transport geometry",
+    "opening collections does not start playback",
+    "playlist-menu: native 480x800 render",
+    "playlist action sheet opens",
+    "scrim dismisses sheet",
+    "handle swipe dismisses downward",
+    "playlist-empty: native 480x800 render",
+    "one centered collection cover",
+    "collection cover centered",
+    "one collection play control",
+    "shared native collection destination",
+    "empty playlist play cannot replace playback",
+    "playlist-long: native 480x800 render",
+    "one centered collection cover",
+    "collection cover centered",
+    "one collection play control",
+    "shared native collection destination",
+    "long title fits above controls",
+    "playlist-large: native 480x800 render",
+    "large playlist retains bounded widget pool",
+    "playlist-scrolled: native 480x800 render",
+    "album-missing-art: native 480x800 render",
+    "one centered collection cover",
+    "collection cover centered",
+    "one collection play control",
+    "shared native collection destination",
+    "repeated menu open",
+    "repeated menu close",
+    "repeated menu open",
+    "repeated menu close",
+    "repeated menu open",
+    "repeated menu close",
+    "rapid open/close leaves no stuck overlay",
+    "collection Play starts actual audio",
+    "Play establishes exactly the playlist context",
+    "playlist-playing-menu: native 480x800 render",
+    "sheet preserves active playback and position",
+    "playlist-edit: native 480x800 render",
+    "drag reorder persists exact playlist order",
+    "row dragging does not open or dismiss a sheet",
+    "nested Add songs stays in the modal flow",
+    "song selector persists playlist membership",
+    "playlist-added: native 480x800 render",
+    "adding songs does not replace playback",
+    "playlist menu adds six manual priority entries",
+    "collection shuffle preserves priority entries",
+    "Library navigation and active filter update underlying state",
+    "library-playlists: native 480x800 render",
+    "liked-songs: native 480x800 render",
+    "one centered collection cover",
+    "collection cover centered",
+    "one collection play control",
+    "shared native collection destination",
+    "Liked Songs shares collection layout without changing playback",
+    "Library tab and filter survive restart",
+    "shuffle and manual queue survive restart",
+    "playlist membership survives restart"
+  ],
+  "screenshots": [
+    "album.png",
+    "playlist.png",
+    "playlist-menu.png",
+    "playlist-empty.png",
+    "playlist-long.png",
+    "playlist-large.png",
+    "playlist-scrolled.png",
+    "album-missing-art.png",
+    "playlist-playing-menu.png",
+    "playlist-edit.png",
+    "playlist-added.png",
+    "library-playlists.png",
+    "liked-songs.png"
+  ],
+  "metrics": {
+    "host_rss_kib": 39680,
+    "idle_cpu_percent_one_core": 6.0,
+    "sample_seconds": 1.0,
+    "lvgl": "9.6.0",
+    "note": "SDL software rendering on host; not a measurement of R1 RAM or timing"
+  },
+  "baseline": "No approved baseline supplied",
+  "result": "PASS"
+}
