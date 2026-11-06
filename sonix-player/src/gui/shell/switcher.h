@@ -6,6 +6,7 @@
 
 void switch_screen(lv_obj_t *target_screen);
 void screen_history_reset(void); // forget the back-stack (back goes to the menu)
+bool switcher_in_history(lv_obj_t *screen); // a page that back will return to
 void switch_screen_no_history(lv_obj_t *target_screen); // load without recording
 void switch_screen_return_to(lv_obj_t *target_screen); // discard newer history and load
 

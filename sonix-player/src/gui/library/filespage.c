@@ -1115,7 +1115,7 @@ static void rebuild(void) {
 		lv_obj_set_style_text_align(empty_label, LV_TEXT_ALIGN_CENTER, 0);
 		lv_obj_set_width(empty_label, lv_pct(100));
 		lv_obj_add_style(empty_label, &theme_style_text_dim, 0);
-		lv_obj_set_style_text_font(empty_label, &font_ui_22, 0);
+		lv_obj_set_style_text_font(empty_label, settingsrow_note_font(), 0);
 		lv_obj_set_style_pad_top(empty_label, 80, 0);
 		return;
 	}

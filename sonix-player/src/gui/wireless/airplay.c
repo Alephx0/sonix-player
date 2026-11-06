@@ -258,7 +258,7 @@ void airplay_page_init(gui_config_t *cfg) {
 	artist_label = lv_label_create(container);
 	lv_obj_set_width(artist_label, lv_pct(100));
 	lv_obj_add_style(artist_label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(artist_label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(artist_label, settingsrow_note_font(), 0);
 	lv_obj_set_style_text_align(artist_label, LV_TEXT_ALIGN_CENTER, 0);
 	lv_obj_set_style_pad_top(artist_label, 6, 0);
 	scrolltext_apply(artist_label);

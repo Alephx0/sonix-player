@@ -51,7 +51,7 @@ typedef struct {
 } lastfm_status_t;
 
 // Reads the session and the queue and starts the worker. Call once, after
-// config_init() and streamkeys_init().
+// config_init(); credentials come from the lastfm config section.
 void lastfm_init(void);
 
 bool lastfm_available(void);

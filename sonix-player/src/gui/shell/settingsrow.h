@@ -22,6 +22,15 @@ int settingsrow_content_top(gui_config_t *cfg);
 // container the rows go into.
 lv_obj_t *settingsrow_page(lv_obj_t *screen, gui_config_t *cfg, const char *title);
 
+// In the reference layout, mounts the shell's mini-player and navigation on
+// `screen` whenever it is shown and shortens `list` to end above them. For
+// pages that build their own list viewport; settingsrow_page() does it itself.
+void settingsrow_footer(lv_obj_t *screen, lv_obj_t *list);
+
+// The face of the quiet explanatory notes under options: 16 px in the
+// reference layout, the shell's secondary size; 22 px in the legacy ones.
+const lv_font_t *settingsrow_note_font(void);
+
 // Narrows a heading to clear `buttons` controls in the page's top right corner.
 // The heading is built reserving room for one; a page with more has to say so,
 // or a long title runs underneath them. Harmless to call with 1, and 0 gives a
@@ -30,6 +39,8 @@ void settingsrow_title_corner_slots(lv_obj_t *title, gui_config_t *cfg, int butt
 
 // The heading a settingsrow_page() built, for a page whose title changes after
 // it is built (Language names itself in two languages and one of them moves).
+// Keeps a heading at the left instead of centred (a sheet's title).
+void settingsrow_title_left(lv_obj_t *title);
 lv_obj_t *settingsrow_page_title(lv_obj_t *screen);
 
 // Adds a row: name on the left, current value on the right. `value_out` may be
@@ -37,6 +48,10 @@ lv_obj_t *settingsrow_page_title(lv_obj_t *screen);
 lv_obj_t *settingsrow_add(lv_obj_t *parent, const char *name, lv_obj_t **value_out, lv_event_cb_t cb,
 						  void *user_data);
 
+// A Spotify settings category: the name over a quiet summary of what the page
+// it opens holds, an optional icon before it and a chevron after. 72 px.
+lv_obj_t *settingsrow_category(lv_obj_t *parent, const void *icon, const char *name, const char *summary,
+							   lv_event_cb_t cb, void *user_data);
 // The row's own name label, for the one row whose text is not a fixed tag: the
 // AirPods row, which says which model is connected. Everything else sets its
 // name once, at build time, from the language file.

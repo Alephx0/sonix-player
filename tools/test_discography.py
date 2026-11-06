@@ -15,6 +15,13 @@ for i,(album,date,kind,owner,performer,credits) in enumerate(fixtures):
     for k,v in tags.items():
         if v:args+=['-metadata',k+'='+v]
     subprocess.run(args+[str(card/f'Music/release{i}.flac')],check=True)
+# The explicit R1 fallback boundary is six versus seven local tracks.
+for t in range(13):
+    long=t<7
+    subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','anullsrc=r=44100:cl=mono','-t','5','-c:a','flac',
+                    '-metadata',f'title=Track {t+1}','-metadata','album='+('Long Untyped' if long else 'Six Untyped'),'-metadata','date=2022' if long else 'date=2021',
+                    '-metadata','albumartist=Nova','-metadata','artist=Nova',
+                    '-metadata','artists=Nova; GuestOne' if t==0 else 'artists=Nova',str(card/f'Music/release{6+t}.flac')],check=True)
 # A real ID3v2.4 tag tests multiple null-separated values and Picard tag names.
 def sync(n):return bytes([(n>>21)&127,(n>>14)&127,(n>>7)&127,n&127])
 def frame(k,v):
@@ -31,6 +38,7 @@ with tempfile.TemporaryDirectory(prefix='sonix-discography-') as temp:
     objects=[str(p) for p in objects if p!=player/'build_host/main.o']
     subprocess.run(['objcopy','--redefine-sym','main=sonix_application_main',str(player/'build_host/main.o'),str(work/'app_main.o')],check=True)
     libs=subprocess.check_output(['pkg-config','--libs','sdl2','freetype2','opusfile','wavpack'],text=True).split()
+    libs.insert(0, str(player / ".deps/webp/host/libwebpdecoder.a"))
     subprocess.run(['gcc','-DHOST_BUILD=1','-I'+str(player),'-c',str(player/'tests/discography.c'),'-o',str(work/'test.o')],check=True)
     subprocess.run(['g++','-o',str(work/'test'),str(work/'test.o'),*objects,str(work/'app_main.o'),*libs,'-lpthread','-lm','-ldl','-lasound'],check=True)
     subprocess.run([str(work/'test'),str(card)],cwd=player,check=True,timeout=60)

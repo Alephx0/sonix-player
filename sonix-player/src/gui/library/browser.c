@@ -21,6 +21,7 @@
 #include "src/gui/shell/gui.h"
 #include "src/gui/shell/icons.h"
 #include "src/gui/settings/musicsettings.h"
+#include "src/gui/library/collectionview.h"
 #include "src/gui/library/playlistpage.h"
 #include "src/gui/nowplaying/player.h"
 #include "src/gui/shell/settingsrow.h"
@@ -797,7 +798,12 @@ static void gather_done_cb(void *arg) {
 		playlistpage_add_favourites((const char *const *)g->paths, g->count);
 		break;
 	case SEND_PLAYLIST:
-		playlistpage_add_tracks((const char *const *)g->paths, g->count);
+		// The reference layout's shared Add to playlist sheet; the legacy
+		// picker page elsewhere.
+		if (theme_reference())
+			collectionview_add_tracks((const char *const *)g->paths, g->count);
+		else
+			playlistpage_add_tracks((const char *const *)g->paths, g->count);
 		break;
 	}
 	gather_free(g);

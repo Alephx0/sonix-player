@@ -7,6 +7,8 @@ bool search_index_schema(sqlite3 *db);
 void search_index_put(sqlite3 *db, int kind, const char *key, const char *name,
                       const char *path, const char *text);
 void search_index_drop(sqlite3 *db, int kind, const char *key);
+void search_index_clear(sqlite3 *db);
+bool search_index_has_path_index(sqlite3 *db);
 int search_index_query(sqlite3 *db, const char *query, int per_category,
                        library_instant_cb_t cb, void *user);
 #endif

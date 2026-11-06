@@ -79,21 +79,6 @@ void airplay_get_state(airplay_state_t *out);
 // there is something new rather than every tick.
 unsigned airplay_serial(void);
 
-// Hands the DAC back, so local playback -- a track on the card, Tidal, Qobuz --
-// can open it.
-//
-// It has to be asked for, because the receiver cannot tell on its own that a
-// sender has finished: shairport connects to the audio socket once, when it
-// starts, and holds it for as long as it lives. So "the stream is live" stays
-// true for the whole time AirPlay is switched on, and without this the PCM
-// opened for it is held -- silent, but held -- and a local track cannot open
-// the device.
-//
-// Refused while audio is actually arriving: a sender in the middle of a song
-// owns the output, which is the same rule that pauses a local track when a
-// sender starts, read the other way round. True means the device is free, or
-// about to be -- the hand-back happens on the AirPlay thread within a poll, and
-// the PCM open that follows retries for two seconds anyway.
 bool airplay_release_output(void);
 
 // Milliseconds since the last audio arrived, or -1 if none ever has. The stock

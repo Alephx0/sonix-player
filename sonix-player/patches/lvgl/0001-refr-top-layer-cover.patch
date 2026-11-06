@@ -1,0 +1,21 @@
+diff --git a/src/core/lv_refr.c b/src/core/lv_refr.c
+--- a/src/core/lv_refr.c
++++ b/src/core/lv_refr.c
+@@ -1069,6 +1069,17 @@ static void refr_configured_layer(lv_layer_t * layer)
+         lv_draw_buf_clear_ex(layer->draw_buf, &clear_area, layer);
+     }
+ 
++    /*An opaque object on the top layer (a sheet, a full-screen page kept
++     *there) hides the screens under it: start drawing from it, as is done
++     *for the screens, instead of drawing them all and painting over them.*/
++    lv_obj_t * top_layer_obj = lv_refr_get_top_obj(&layer->_clip_area, lv_display_get_layer_top(disp_refr));
++    if(top_layer_obj) {
++        refr_obj_and_children(layer, top_layer_obj);
++        refr_obj_and_children(layer, lv_display_get_layer_sys(disp_refr));
++        LV_PROFILER_REFR_END;
++        return;
++    }
++
+     lv_obj_t * top_act_scr = NULL;
+     lv_obj_t * top_prev_scr = NULL;
+ 

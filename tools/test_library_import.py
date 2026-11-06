@@ -20,15 +20,17 @@ with tempfile.TemporaryDirectory(prefix='sonix-library-') as temp:
             wav.setparams((1, 2, 44100, 4410, 'NONE', 'not compressed'))
             wav.writeframes(b'\x00\x00' * 4410)
     audio = work / 'first.wav'
-    audio.with_suffix('.wav.source.json').write_text(json.dumps({
-        'bytes': audio.stat().st_size, 'title': 'An imported title',
-        'artist': 'An independent artist', 'album': 'A licensed release'}))
+    # Embedded tags exercise the same local import path used by card scans.
+    tagged=work/'tagged.wav'
+    subprocess.run(['ffmpeg','-v','error','-i',str(audio),'-c:a','copy','-metadata','title=An imported title','-metadata','artist=An independent artist',str(tagged)],check=True)
+    tagged.replace(audio)
     objects = list((player / 'build_host').rglob('*.o')) + list((player / 'build_host').rglob('*.opp'))
     objects = [str(p) for p in objects if p != player / 'build_host/main.o']
     subprocess.run(['objcopy', '--redefine-sym', 'main=sonix_application_main',
                     str(player / 'build_host/main.o'), str(work / 'app_main.o')], check=True)
     objects.append(str(work / 'app_main.o'))
     libs = subprocess.check_output(['pkg-config', '--libs', 'sdl2', 'freetype2', 'opusfile', 'wavpack'], text=True).split()
+    libs.insert(0, str(player / ".deps/webp/host/libwebpdecoder.a"))
     subprocess.run(['gcc', '-DHOST_BUILD=1', '-I' + str(player), '-c', str(source),
                     '-o', str(work / 'test.o')], check=True)
     subprocess.run(['g++', '-o', str(work / 'test'), str(work / 'test.o'), *objects,

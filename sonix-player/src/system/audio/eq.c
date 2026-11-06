@@ -420,6 +420,20 @@ const eq_preset_t EQ_DEFAULT_PRESETS[] = {
 	{"eq_treble", {0, 0, 0, 0, 0, 1, 3, 5, 6, 7}},
 	{"eq_vocal", {-2, -2, -1, 2, 4, 4, 3, 1, 0, -1}},
 	{"eq_acoustic", {4, 3, 1, 0, 1, 1, 2, 3, 3, 2}},
+	/* Device round 4: the genres asked for and the other usual ones, shaped
+	 * after the long-standing music-player presets (bands 31 Hz .. 16 kHz). */
+	{"R&B", {3, 7, 6, 1, -2, -2, 2, 3, 3, 4}},
+	{"Hip-Hop", {5, 4, 2, 3, -1, -1, 2, -1, 2, 3}},
+	{"Electronic", {4, 4, 1, 0, -2, 2, 1, 1, 4, 5}},
+	{"Latin", {5, 3, 0, 0, -2, -2, -2, 0, 3, 5}},
+	{"Deep", {5, 4, 2, 1, 3, 3, 2, -2, -4, -5}},
+	{"Lounge", {-3, -2, -1, 2, 4, 3, 0, -2, 2, 1}},
+	{"Piano", {3, 2, 0, 3, 3, 2, 4, 5, 3, 4}},
+	{"Loudness", {6, 4, 0, 0, -2, 0, -1, -5, 5, 1}},
+	{"Spoken word", {-4, -1, 0, 1, 4, 5, 5, 4, 2, 0}},
+	{"Small speakers", {6, 4, 4, 3, 1, 0, -1, -2, -3, -4}},
+	{"Bass reducer", {-6, -5, -4, -3, -2, 0, 0, 0, 0, 0}},
+	{"Treble reducer", {0, 0, 0, 0, 0, -1, -3, -4, -5, -6}},
 };
 const int EQ_DEFAULT_PRESET_COUNT = (int)(sizeof(EQ_DEFAULT_PRESETS) / sizeof(EQ_DEFAULT_PRESETS[0]));
 
@@ -645,30 +659,6 @@ void peq_set_preamp(int tenths) {
 	config_save();
 }
 
-// ---------------------------------------------------------------------------
-// Parametric presets
-//
-// A preset is a text file in the Equalizer APO format that AutoEq publishes
-// for every headphone ("ParametricEQ.txt"), so a file downloaded from AutoEq,
-// written by Equalizer APO or exported by REW loads as it is, and a preset
-// saved here opens in any of them:
-//
-//     Preamp: -6.2 dB
-//     Filter 1: ON LSC Fc 105 Hz Gain 6.5 dB Q 0.70
-//     Filter 2: ON PK Fc 162 Hz Gain -2.8 dB Q 0.60
-//     ...
-//
-// They live in <card>/PEQ, a folder the user can see and copy files into.
-// Presets from before live in <card>/.local/peq as .ini files of this
-// program's own; they are rewritten in the new form the first time the card
-// is seen.
-//
-// The filters are the same arithmetic as APO's: RBJ biquads, and shelves that
-// take their width from Q (APO's LSC and HSC). What APO has and this chain
-// does not -- band-pass, notch, all-pass, more than PEQ_BANDS filters, a
-// different curve per channel -- is left out and counted, so the page can
-// say so.
-// ---------------------------------------------------------------------------
 
 static char peq_legacy_dir[512];
 
@@ -1061,9 +1051,6 @@ static int compare_names(const void *a, const void *b) {
 	return strcasecmp(*(const char *const *)a, *(const char *const *)b);
 }
 
-// In alphabetical order: a folder of AutoEq downloads is a list of headphone
-// names, and in the order the card happens to store them it cannot be searched
-// by eye.
 #define PEQ_LIST_MAX 512
 
 int peq_preset_for_each(peq_preset_name_cb_t cb, void *user) {

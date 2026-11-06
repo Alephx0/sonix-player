@@ -11,6 +11,7 @@
 #include "src/gui/shell/gridpage.h"
 #include "src/gui/shell/gui.h"
 #include "src/gui/shell/icons.h"
+#include "src/gui/shell/main_menu.h"
 #include "src/gui/library/medialist.h"
 #include "src/gui/settings/musicsettings.h"
 #include "src/gui/library/playlistpage.h"
@@ -41,7 +42,12 @@ static void open_most_played(void) {
 	medialist_open(tr("music_most_played"), LIBRARY_LIST_MOST_PLAYED, LIBRARY_FILTER_NONE, NULL);
 }
 static void open_browse(void) { switch_screen(browser_screen); }
-static void open_playlists(void) { playlistpage_open(); }
+static void open_playlists(void) {
+	if (theme_reference())
+		main_menu_open_library(1); // the playlists live in Your Library
+	else
+		playlistpage_open();
+}
 
 static lv_obj_t *tile_grid;
 static gui_config_t *grid_cfg;
@@ -256,7 +262,10 @@ void music_rebuild_tiles(void) {
 
 static void search_cb(lv_event_t *e) {
 	(void)e;
-	search_open();
+	if (theme_reference())
+		main_menu_open_search();
+	else
+		search_open();
 }
 
 // With no tracks indexed the tiles would all open empty lists: the page says
@@ -365,7 +374,7 @@ void music_init(gui_config_t *cfg) {
 	coverflow_attach_edge(grid, cfg);
 
 	// Two buttons in the corner, so the heading has to be told to clear them.
-	settingsrow_title_corner_slots(settingsrow_title(music_screen, cfg, "music"), cfg, 2);
+	settingsrow_title_corner_slots(settingsrow_title(music_screen, cfg, theme_reference() ? "Browse music" : "music"), cfg, 2);
 
 	lv_obj_t *settings_btn = corner_button(cfg, 0, &icon_music_settings);
 	lv_obj_add_event_cb(settings_btn, switch_screen_cb, LV_EVENT_CLICKED, musicsettings_screen);

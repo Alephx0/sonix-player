@@ -40,7 +40,7 @@ static void refresh_pills(void) {
 		bool on = i == pal;
 		lv_obj_set_style_bg_color(palette_pills[i], on ? theme()->accent : theme()->surface_pressed, 0);
 		lv_obj_set_style_text_color(lv_obj_get_child(palette_pills[i], 0),
-									on ? lv_color_white() : theme()->text_primary, 0);
+									on ? theme()->accent_ink : theme()->text_primary, 0);
 	}
 	for (int i = 0; i < 4; i++) {
 		if (!shader_pills[i]) {
@@ -49,7 +49,7 @@ static void refresh_pills(void) {
 		bool on = i == sh;
 		lv_obj_set_style_bg_color(shader_pills[i], on ? theme()->accent : theme()->surface_pressed, 0);
 		lv_obj_set_style_text_color(lv_obj_get_child(shader_pills[i], 0),
-									on ? lv_color_white() : theme()->text_primary, 0);
+									on ? theme()->accent_ink : theme()->text_primary, 0);
 	}
 }
 

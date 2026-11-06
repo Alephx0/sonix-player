@@ -5,8 +5,7 @@
 #include <stdint.h>
 
 // ---------------------------------------------------------------------------
-// The shape of a track, for the player's alternative layout to draw instead of
-// a progress bar.
+// The shape of a track, for the player's optional waveform progress control.
 //
 // One byte per column, 0..255, how loud that slice of the track is on average
 // -- not its loudest sample, which on any modern master is full scale in every
@@ -25,8 +24,8 @@
 // the same and only the caller knows which it is showing.
 //
 // The decode is real work and the device has one core, so the worker is
-// deliberately timid: SCHED_IDLE, one track at a time, and dropped the moment
-// the track changes. It also waits for the audio side to be left alone for a
+// deliberately timid: SCHED_IDLE, one track at a time, with current playback
+// taking priority over one upcoming track. It waits for the audio side to be left alone for a
 // few seconds before it reads anything, and stops when a track starts or a PCM
 // opens: a whole file read off the card at that moment takes the free memory a
 // USB DAC's driver is allocating its buffers from. And it hands the file's
@@ -47,8 +46,13 @@ void waveform_set_cache_dir(const char *sd_root);
 // Starts the worker. Safe to call more than once.
 void waveform_start(void);
 
-// The track the player is showing. Answers from the cache at once when it has
-// it, and otherwise puts the worker to work on it. Calling it with a different
+// Prepare during mini-player playback, before Now Playing is opened. At most
+// one upcoming track is prefetched after the current answer is ready. No IO on
+// the caller; a new current track always takes priority over lookahead.
+void waveform_prepare(const char *path, const char *next);
+
+// The track the player is showing. Answers from prepared memory at once when
+// available, otherwise asks the worker to load the cache or decode. Calling with a different
 // path abandons whatever was being computed: nobody is going to look at the old
 // one.
 //

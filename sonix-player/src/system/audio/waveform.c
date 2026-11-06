@@ -90,6 +90,7 @@ static char computing[1024]; // what the worker picked up
 static char have_path[1024]; // what `have_bars` belongs to
 static uint8_t have_bars[WAVEFORM_BARS];
 static bool have_answer;
+static char ahead[1024], ahead_done[1024];
 // The columns of the track being worked out that are already done, so the page
 // can draw them while the rest of the file is still being read.
 static char partial_path[1024]; // what `partial_bars` belongs to
@@ -288,7 +289,8 @@ typedef enum {
 // gets the core.
 static bool still_wanted(const char *path) {
 	pthread_mutex_lock(&lock);
-	bool same = strcmp(wanted, path) == 0;
+	bool same = strcmp(wanted, path) == 0 ||
+	            (!strcmp(wanted, have_path) && !strcmp(ahead, path));
 	pthread_mutex_unlock(&lock);
 	return same;
 }
@@ -604,10 +606,11 @@ static void *worker_main(void *arg) {
 		char path[sizeof(wanted)];
 
 		pthread_mutex_lock(&lock);
-		while (!wanted[0] || strcmp(wanted, have_path) == 0) {
+		while (!wanted[0] || (!strcmp(wanted, have_path) &&
+		       (!ahead[0] || !strcmp(ahead, wanted) || !strcmp(ahead, ahead_done)))) {
 			pthread_cond_wait(&wake, &lock);
 		}
-		snprintf(path, sizeof(path), "%s", wanted);
+		snprintf(path, sizeof(path), "%s", strcmp(wanted, have_path) ? wanted : ahead);
 		snprintf(computing, sizeof(computing), "%s", path);
 		pthread_mutex_unlock(&lock);
 
@@ -652,6 +655,8 @@ static void *worker_main(void *arg) {
 				have_answer = false;
 			}
 		}
+		if (outcome != WAVE_BUILD_CANCELLED && !strcmp(ahead, path))
+			snprintf(ahead_done, sizeof(ahead_done), "%s", path);
 		// A cancelled job writes nothing at all -- not even the path. The wait
 		// at the top of this loop only sleeps while the wanted track already
 		// has an answer, so leaving have_path unset is what lets the work start
@@ -702,6 +707,18 @@ void waveform_start(void) {
 	if (start) {
 		pthread_detach(worker);
 	}
+}
+
+void waveform_prepare(const char *path, const char *next) {
+	path = path ? path : "";
+	next = next ? next : "";
+	pthread_mutex_lock(&lock);
+	bool changed = strcmp(wanted, path) || strcmp(ahead, next);
+	if (strcmp(ahead, next)) ahead_done[0] = '\0';
+	snprintf(wanted, sizeof(wanted), "%s", path);
+	snprintf(ahead, sizeof(ahead), "%s", next);
+	if (changed) pthread_cond_signal(&wake);
+	pthread_mutex_unlock(&lock);
 }
 
 int waveform_get(const char *path, uint8_t *out) {

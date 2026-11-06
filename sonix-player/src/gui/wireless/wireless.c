@@ -4,11 +4,11 @@
 
 #include "src/gui/wireless/airplay.h"
 #include "src/gui/bluetooth/btsettings.h"
-#include "src/gui/wireless/dlna.h"
 #include "src/gui/shell/gridpage.h"
 #include "src/gui/wireless/sonixlink.h"
 #include "src/gui/shell/icons.h"
 #include "src/gui/shell/settingsrow.h"
+#include "src/gui/shell/theme.h"
 #include "src/gui/wireless/wifisettings.h"
 #include "src/gui/wireless/wifitransfer.h"
 
@@ -21,7 +21,6 @@ void wireless_init(gui_config_t *cfg) {
 		{"airplay", &icon_menu_airplay, &airplay_screen, NULL},
 		{"transfer", &icon_menu_wifi_transfer, &wifitransfer_screen, NULL},
 		{"sonixlink", &icon_menu_sonixlink, &sonixlink_screen, NULL},
-		{"dlna", &icon_menu_dlna, &dlna_screen, NULL},
 	};
 
 	// Two columns and three rows' worth of tile, like the Music section, so a
@@ -29,5 +28,6 @@ void wireless_init(gui_config_t *cfg) {
 	// exactly.
 	gridpage_build(wireless_screen, cfg, entries, (int)(sizeof(entries) / sizeof(entries[0])), 2, 3, true);
 
-	settingsrow_title(wireless_screen, cfg, "wireless");
+	// "Devices" in the reference layout, the name the shell's device menu uses.
+	settingsrow_title(wireless_screen, cfg, theme_reference() ? "Devices" : "wireless");
 }

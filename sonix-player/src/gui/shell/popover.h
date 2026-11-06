@@ -14,9 +14,6 @@ typedef struct {
 	const char *label;
 	void (*action)(void *user); // called after the popover has closed
 	void *user;
-	// A tick at the right of the row, for when the menu is not a list of
-	// actions but a choice between alternatives (Qobuz audio quality): there
-	// the current entry has to be visible.
 	bool checked;
 } popover_item_t;
 
@@ -28,5 +25,8 @@ void popover_show(lv_obj_t *anchor, const popover_item_t *items, int count);
 
 // Closes it (the veil tap and every item do this on their own).
 void popover_close(void);
+
+// The same, headed by a title in the reference layout's sheet ("Sleep timer").
+void popover_show_titled(lv_obj_t *anchor, const char *title, const popover_item_t *items, int count);
 
 #endif /* POPOVER_H */

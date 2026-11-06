@@ -2,7 +2,6 @@
 
 #include "src/system/library/cue.h"
 
-#include "src/system/decode/growfile.h"
 
 #include "src/system/core/utils.h"
 
@@ -390,62 +389,6 @@ static bool adts_from_kept(adts_state_t *s, const char *path) {
 	return ok;
 }
 
-// ---------------------------------------------------------------------------
-// Files that are still downloading
-//
-// A Qobuz track starts playing while it arrives. dr_flac and dr_mp3 can read
-// through callbacks instead of from a path, and that is all it takes:
-// growfile.c answers a read by waiting for the missing piece instead of
-// reporting end of file as soon as it reaches the end of what is there.
-//
-// There are two sets of adapters only because the two libraries have two
-// enumerations for the seek origin; they mean the same thing.
-// ---------------------------------------------------------------------------
-
-static size_t grow_read_flac(void *user, void *out, size_t bytes) {
-	return growfile_read((growfile_t *)user, out, bytes);
-}
-
-static drflac_bool32 grow_seek_flac(void *user, int offset, drflac_seek_origin origin) {
-	// DRFLAC_SEEK_END never arrives on a growing file -- the end is not
-	// written yet -- and refusing it is the right answer: dr_flac falls back
-	// on what it already knows.
-	if (origin == DRFLAC_SEEK_END) {
-		return DRFLAC_FALSE;
-	}
-	return growfile_seek((growfile_t *)user, (long)offset, origin == DRFLAC_SEEK_CUR ? 1 : 0) ? DRFLAC_TRUE
-																							 : DRFLAC_FALSE;
-}
-
-static drflac_bool32 grow_tell_flac(void *user, drflac_int64 *cursor) {
-	if (!cursor) {
-		return DRFLAC_FALSE;
-	}
-	*cursor = growfile_tell((growfile_t *)user);
-	return DRFLAC_TRUE;
-}
-
-static size_t grow_read_mp3(void *user, void *out, size_t bytes) {
-	return growfile_read((growfile_t *)user, out, bytes);
-}
-
-static drmp3_bool32 grow_seek_mp3(void *user, int offset, drmp3_seek_origin origin) {
-	if (origin == DRMP3_SEEK_END) {
-		return DRMP3_FALSE;
-	}
-	return growfile_seek((growfile_t *)user, (long)offset, origin == DRMP3_SEEK_CUR ? 1 : 0) ? DRMP3_TRUE
-																							: DRMP3_FALSE;
-}
-
-static drmp3_bool32 grow_tell_mp3(void *user, drmp3_int64 *cursor) {
-	if (!cursor) {
-		return DRMP3_FALSE;
-	}
-	*cursor = growfile_tell((growfile_t *)user);
-	return DRMP3_TRUE;
-}
-
-// ---------------------------------------------------------------------------
 // The MP3 frame index
 //
 // Without an index, seeking inside an MP3 costs a full decode from the current
@@ -564,7 +507,6 @@ struct decoder {
 
 	// Non-NULL when the file was still being written at open. Closed after the
 	// decoder, which reads through it right up to the end.
-	growfile_t *growing;
 
 	// One track of a CUE sheet: a window onto a file that holds a whole disc.
 	// The window is applied at this boundary rather than in each format's
@@ -619,13 +561,6 @@ static off_t past_id3(FILE *f) {
 	return at;
 }
 
-// What the first bytes of a file say it holds, for a file whose name says
-// something else: an .m4a saved as .mp3 by a download site, Opus in a file
-// named .ogg, a FLAC renamed by hand. Only a positive match counts -- a
-// container's signature where it belongs, past any ID3v2 tags in front -- and
-// DECODE_FORMAT_UNKNOWN leaves the decision to the name. `by_sync` is set when
-// the match is only an MPEG frame header, which is weaker evidence than a
-// signature and is taken only against a name that promises a container.
 static decode_format_t sniff_format(const char *filepath, bool *by_sync) {
 	*by_sync = false;
 	FILE *f = fopen(filepath, "rb");
@@ -920,16 +855,8 @@ static bool alac_fill(decoder_t *dec) {
 // The MP3 frame index (see the comment above mp3_index_t)
 // ---------------------------------------------------------------------------
 
-// How many bytes of the file can be read right now. For an ordinary file its
-// size; for one still downloading, how far it has got -- past that there is
-// nothing, and reading it would mean waiting.
 static long mp3_available_bytes(decoder_t *dec) {
-	if (dec->growing) {
-		long done = 0, total = 0;
-		if (growfile_span(dec->growing, &done, &total) && total > 0) {
-			return done;
-		}
-	}
+	
 	FILE *f = fopen(dec->file, "rb");
 	if (!f) {
 		return 0;
@@ -963,8 +890,6 @@ typedef struct {
 
 #define MP3_DROP_EVERY (1024 * 1024)
 
-// Returns a pointer to the `want` bytes starting at `pos`, or NULL when they
-// are not there (end of file, or end of what has been downloaded).
 static const unsigned char *mp3_window_at(mp3_window_t *w, long pos, size_t want, long avail) {
 	if (want > sizeof(w->buf) || pos < 0 || pos + (long)want > avail) {
 		return NULL;
@@ -1292,7 +1217,7 @@ static void mp3_index_keep(const file_version_t *before, long start, const drmp3
 // The kept index, when it was built on this very file: installed, and true.
 static bool mp3_index_from_kept(decoder_t *dec) {
 	file_version_t version;
-	if (dec->growing || !file_version_read(dec->file, &version)) {
+	if (!file_version_read(dec->file, &version)) {
 		return false;
 	}
 	drmp3_seek_point *copy = NULL;
@@ -1333,7 +1258,7 @@ static bool mp3_index_build(decoder_t *dec) {
 	}
 
 	file_version_t before;
-	bool keep = !dec->growing && file_version_read(dec->file, &before);
+	bool keep = file_version_read(dec->file, &before);
 	drmp3_seek_point *pts = NULL;
 	drmp3_uint32 count = 0;
 	long scanned = 0;
@@ -1372,7 +1297,7 @@ typedef struct {
 	char path[sizeof(((decoder_t *)0)->file)];
 	long start, avail;
 	uint64_t delay, spacing;
-	bool keep;			   // a whole file, not one still downloading: the table outlives the decoder
+	bool keep;			   // persist the frame index beyond this decoder
 	file_version_t before; // the file as it was when the scan began
 } mp3_async_job_t;
 
@@ -1431,7 +1356,7 @@ static void mp3_index_async(decoder_t *dec, long start, long avail) {
 	job->avail = avail;
 	job->delay = dec->impl.mp3->delayInPCMFrames;
 	job->spacing = mp3_spacing(dec->sample_rate, dec->total_pcm_frames);
-	job->keep = !dec->growing && file_version_read(dec->file, &job->before);
+	job->keep = file_version_read(dec->file, &job->before);
 	ix->cancel = 0;
 	ix->done = false;
 	if (pthread_create(&ix->thread, NULL, mp3_index_thread, job) != 0) {
@@ -1710,7 +1635,7 @@ static bool mp3_probe_cbr(decoder_t *dec, long start, long avail) {
 // A short file needs nothing either: its first seek builds the whole index in
 // place, as for any file, and keeps it.
 static void mp3_cue_prepare(decoder_t *dec) {
-	if (dec->growing || mp3_index_from_kept(dec)) {
+	if (mp3_index_from_kept(dec)) {
 		return;
 	}
 	long avail = mp3_available_bytes(dec);
@@ -1760,12 +1685,6 @@ static int mp3_first_frame_kbps(decoder_t *dec) {
 	return kbps;
 }
 
-// The average bitrate of the first frames, walking header to header inside the
-// part already on disk. On a CBR it is the bitrate, identical to the first
-// frame's; on a VBR the first frame alone lies -- encoders nearly always start
-// on a quiet passage, hence at the bottom of the scale -- and a hundred frames
-// are enough not to be badly wrong. Costs one read of 256 KB already
-// downloaded.
 #define MP3_HEAD_FRAMES 200
 #define MP3_HEAD_BYTES (256 * 1024)
 
@@ -1842,43 +1761,6 @@ static int mp3_probe_bitrate(decoder_t *dec) {
 		return 0;
 	}
 	return mp3_first_frame_kbps(dec);
-}
-
-// How long a still-downloading MP3 is, without reading all of it.
-//
-// drmp3_get_pcm_frame_count() has two routes. With a Xing/Info header the total
-// is written inside and the answer is immediate and exact. Without one, dr_mp3
-// reads the stream end to end, frame by frame -- and on a downloading file
-// those reads wait for the network, so counting means waiting for the whole
-// download, minutes on an hour-long podcast episode (feeds very often carry no
-// Xing header). A stalled download makes it worse: the count gives up halfway
-// and reports a duration proportional to what had arrived.
-//
-// So while the file is growing and the total is written nowhere, it is
-// estimated: total bytes (the server's Content-Length) divided by the bitrate
-// of the first header. Exact on a CBR, an approximation on a VBR without Xing.
-static uint64_t mp3_growing_estimate(decoder_t *dec) {
-	long done = 0;
-	long total = 0;
-	long bytes = 0;
-	if (growfile_span(dec->growing, &done, &total) && total > 0) {
-		bytes = total; // how much there will be, not how much has arrived
-	} else {
-		bytes = done;
-	}
-
-	// The head average, with the first frame as a safety net.
-	int kbps = mp3_head_average_kbps(dec, NULL);
-	if (kbps <= 0) {
-		kbps = mp3_first_frame_kbps(dec);
-	}
-	long start = (long)dec->impl.mp3->streamStartOffset;
-	if (kbps <= 0 || dec->sample_rate <= 0 || bytes <= start) {
-		return 0; // unknown: better no duration than an invented one
-	}
-
-	double seconds = (double)(bytes - start) * 8.0 / ((double)kbps * 1000.0);
-	return (uint64_t)(seconds * (double)dec->sample_rate);
 }
 
 // The length of a constant-bitrate MP3 with no Xing/Info header, from its size.
@@ -2029,15 +1911,7 @@ static decoder_t *decoder_open_file(const char *filepath, decode_format_t format
 			free(dec);
 			return NULL;
 		}
-		if (growfile_is_growing(filepath)) {
-			dec->growing = growfile_open(filepath);
-			if (!dec->growing || !drmp3_init(dec->impl.mp3, grow_read_mp3, grow_seek_mp3, grow_tell_mp3, NULL, dec->growing, NULL)) {
-				growfile_close(dec->growing);
-				free(dec->impl.mp3);
-				free(dec);
-				return NULL;
-			}
-		} else if (!drmp3_init_file(dec->impl.mp3, filepath, NULL)) {
+		 if (!drmp3_init_file(dec->impl.mp3, filepath, NULL)) {
 			free(dec->impl.mp3);
 			free(dec);
 			return NULL;
@@ -2045,13 +1919,7 @@ static decoder_t *decoder_open_file(const char *filepath, decode_format_t format
 		dec->channels = (int)dec->impl.mp3->channels;
 		dec->sample_rate = (int)dec->impl.mp3->sampleRate;
 		dec->mp3_index.cbr = -1; // found out on the first seek, if there is one
-		// A totalPCMFrameCount other than UINT64_MAX means one thing: there was
-		// a Xing/Info header and the total is already in hand. Only when that
-		// is missing and the file is still downloading does this estimate
-		// instead of counting -- see mp3_growing_estimate().
-		if (dec->growing && dec->impl.mp3->totalPCMFrameCount == DRMP3_UINT64_MAX) {
-			dec->total_pcm_frames = mp3_growing_estimate(dec);
-		} else if (dec->impl.mp3->totalPCMFrameCount == DRMP3_UINT64_MAX &&
+		 if (dec->impl.mp3->totalPCMFrameCount == DRMP3_UINT64_MAX &&
 				   (dec->total_pcm_frames = mp3_cbr_estimate(dec)) > 0) {
 			// A constant stream with no header: its size says its length.
 		} else {
@@ -2061,15 +1929,10 @@ static decoder_t *decoder_open_file(const char *filepath, decode_format_t format
 		break;
 
 	case DECODE_FORMAT_FLAC:
-		if (growfile_is_growing(filepath)) {
-			dec->growing = growfile_open(filepath);
-			dec->impl.flac =
-				dec->growing ? drflac_open(grow_read_flac, grow_seek_flac, grow_tell_flac, dec->growing, NULL) : NULL;
-		} else {
+		 {
 			dec->impl.flac = drflac_open_file(filepath, NULL);
 		}
 		if (!dec->impl.flac) {
-			growfile_close(dec->growing);
 			free(dec);
 			return NULL;
 		}
@@ -2464,7 +2327,7 @@ int decoder_dsd_multiple(const decoder_t *dec) {
 int decoder_sample_rate(const decoder_t *dec) { return dec->sample_rate; }
 
 bool decoder_source_span(const decoder_t *dec, char *file, size_t size, double *begin, double *end) {
-	if (!dec || dec->growing || !dec->file[0] || !file || size == 0) {
+	if (!dec || !dec->file[0] || !file || size == 0) {
 		return false;
 	}
 	snprintf(file, size, "%s", dec->file);
@@ -2677,48 +2540,14 @@ static uint64_t decoder_read_s32_inner(decoder_t *dec, uint64_t frame_count, int
 }
 
 uint64_t decoder_seekable_limit(decoder_t *dec) {
-	if (!dec || dec->total_pcm_frames == 0) {
-		return 0;
-	}
-	if (!dec->growing) {
-		return dec->total_pcm_frames;
-	}
-
-	long done = 0, total = 0;
-	if (!growfile_span(dec->growing, &done, &total) || total <= 0) {
-		return dec->total_pcm_frames; // no longer growing: it is all there
-	}
-
-	// The ratio of bytes to time on a FLAC is not exact -- blocks compress
-	// differently -- so a margin is kept: better to stop a little short and
-	// succeed than to aim at the limit and fail.
-	double share = (double)done / (double)total;
-	return (uint64_t)((double)dec->total_pcm_frames * share * 0.90);
+	return dec ? dec->total_pcm_frames : 0;
 }
 
-bool decoder_is_growing(const decoder_t *dec) {
-	if (!dec || !dec->growing) {
-		return false;
-	}
-	// `growing` stays attached even once the download has finished: what
-	// matters is whether it is still growing now.
-	long done = 0, total = 0;
-	return growfile_span((growfile_t *)dec->growing, &done, &total) && total > 0;
-}
 
-bool decoder_grow_span(decoder_t *dec, long *done, long *total) {
-	if (!dec || !dec->growing) {
-		return false;
-	}
-	return growfile_span(dec->growing, done, total);
-}
 
-bool decoder_take_starved(decoder_t *dec) {
-	if (!dec || !dec->growing) {
-		return false;
-	}
-	return growfile_take_starved(dec->growing);
-}
+
+
+
 
 int decoder_seek_to_frame(decoder_t *dec, uint64_t frame_index) {
 	if (!dec)
@@ -2734,15 +2563,6 @@ int decoder_seek_to_frame(decoder_t *dec, uint64_t frame_index) {
 		frame_index += dec->cue_begin;
 	}
 
-	// A still-downloading file cannot be seeked past where it has got to, so
-	// the request is clamped to the furthest point that can really be served.
-	//
-	// Needed because the decoders' binary search asks for positions scattered
-	// across the whole file, and an unclamped one parks the audio thread waiting
-	// for bytes minutes away.
-	//
-	// Callers should have clamped already (decoder_seekable_limit); this is the
-	// second turn of the key, for the ones that forget.
 	uint64_t limit = decoder_seekable_limit(dec);
 	if (limit > 0 && frame_index > limit) {
 		frame_index = limit;
@@ -2763,10 +2583,8 @@ int decoder_seek_to_frame(decoder_t *dec, uint64_t frame_index) {
 		if (ix->count == 0 && !ix->thread_started) {
 			mp3_index_from_kept(dec);
 		}
-		bool stale = ix->count > 0 && dec->growing && frame_index > ix->points[ix->count - 1].pcmFrameIndex &&
-					 mp3_available_bytes(dec) > ix->scanned_bytes;
 		long start = (long)dec->impl.mp3->streamStartOffset;
-		long avail = ix->count == 0 && !dec->growing ? mp3_available_bytes(dec) : 0;
+		long avail = ix->count == 0 ? mp3_available_bytes(dec) : 0;
 		if (ix->count == 0 && avail - start > MP3_ASYNC_BYTES) {
 			// A long file: see mp3_index_async(). The index when the thread has
 			// finished it, otherwise a point worked out on the spot.
@@ -2784,7 +2602,7 @@ int decoder_seek_to_frame(decoder_t *dec, uint64_t frame_index) {
 					drmp3_bind_seek_table(dec->impl.mp3, 0, NULL);
 				}
 			}
-		} else if (ix->count == 0 || stale) {
+		} else if (ix->count == 0) {
 			mp3_index_build(dec);
 		}
 		return (int)drmp3_seek_to_pcm_frame(dec->impl.mp3, frame_index);
@@ -2914,7 +2732,6 @@ void decoder_close(decoder_t *dec) {
 
 	// The decoder first, the file handle after: while the decoder is alive it
 	// keeps reading through it.
-	growfile_t *growing = dec->growing;
 
 	switch (dec->format) {
 	case DECODE_FORMAT_MP3:
@@ -2960,6 +2777,5 @@ void decoder_close(decoder_t *dec) {
 		break;
 	}
 
-	growfile_close(growing);
 	free(dec);
 }

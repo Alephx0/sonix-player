@@ -19,15 +19,6 @@ typedef struct {
 
 	song_metadata_t metadata; // metadata of current_file; has_tags=false if none loaded
 
-	// A live stream (internet radio) rather than a file. Everything about it
-	// comes from radio.c: `metadata.title` is the station, `metadata.artist`
-	// is whatever the stream says is on air, `current_file` is empty (there is
-	// no file), and the two progress figures are zero because a live stream
-	// has neither a position nor a length. `live_cover` is the station icon on
-	// disk when one was downloaded.
-	//
-	// Anything that draws now-playing has to look at this: without it a radio
-	// reads as a track that has lost its file.
 	bool live;
 	char live_cover[256];
 
@@ -100,29 +91,7 @@ void device_state_play_list_ordered(const char *const *list, int count, int star
 // resumed where it was left. Below zero means its beginning.
 void device_state_play_list_ordered_at(const char *const *list, int count, int start_index, double position);
 
-// Before a file starts, someone can say "not yet".
-//
-// This exists for the streaming services. Since the queue holds the whole album
-// rather than only the tracks already downloaded, playback can reach a file
-// that is not there yet. A registered callback receives the path and:
-//
-//   * returns true if it can be played (the file exists, or it is not theirs);
-//   * returns false after taking responsibility for preparing it and restarting
-//     playback once it is ready.
-//
-// Called on the GUI thread and must not block.
-//
-// Several can be registered, which is why this adds rather than sets. With a
-// single slot the second registration would silently displace the first, and a
-// queue would stop waiting for its downloads and skip tracks that have not
-// arrived.
-//
-// All of them are called, in registration order, and the track starts only if
-// all say yes. The first to say no takes charge and the walk stops there: the
-// others have nothing to say about a file that is not theirs, and asking anyway
-// would mean two preparations in flight on the same path.
-typedef bool (*device_state_prepare_cb)(const char *path);
-void device_state_add_prepare_cb(device_state_prepare_cb cb);
+
 
 // Jump to entry `index` of the current queue.
 bool device_state_play_queue_index(int index);
@@ -157,6 +126,16 @@ bool device_state_play_random_album(library_filter_t filter, const char *value);
 // off the end of it into the directory tree would be a surprise.
 bool device_state_folder_chaining(void);
 void device_state_set_folder_chaining(bool on);
+// Autoplay: when the queue runs out, similar songs from the library follow.
+bool device_state_autoplay(void);
+void device_state_set_autoplay(bool on);
+// Smart Shuffle: recommendations mixed into a shuffled context, marked.
+bool device_state_smart_shuffle(void);
+void device_state_set_smart_shuffle(bool on);
+bool device_state_is_smart_pick(const char *path);
+// Private session: plays are not recorded anywhere while it is on.
+bool device_state_private_session(void);
+void device_state_set_private_session(bool on);
 
 // User-initiated skip to the next/previous track in the folder queue. Start
 // the new track and return true (optionally copying its path into out_path);

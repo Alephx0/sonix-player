@@ -11,8 +11,9 @@ typedef struct {
     int pin, year;
     long long added, recent;
 } collection_item_t;
-/* UI-thread metadata only. Each operation closes its database before returning,
- * so card export cannot leave an open handle behind. Never deletes audio. */
+/* Metadata operations use independent short-lived database connections.
+ * Mount-path snapshots and revision publication are synchronized for workers.
+ * Each operation closes its own connection before returning. Never deletes audio. */
 void collections_init(const char *card_root);
 bool collections_put(collection_kind_t kind, const char *key, const char *title, const char *creator, bool saved);
 bool collections_get(collection_kind_t kind, const char *key, collection_item_t *out);
@@ -30,4 +31,6 @@ bool collections_move_playlist(const char *playlist,const char *folder);
 int collections_folder_count(const char *folder);
 bool collections_catalog_sync(void);
 int collections_browse(int filter,collection_sort_t sort,const char *query,const char *folder,int offset,collection_item_t *out,int capacity);
+/* How many records collections_browse() runs through for the same filter, search and folder. */
+int collections_browse_count(int filter,const char *query,const char *folder);
 #endif

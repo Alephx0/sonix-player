@@ -1,8 +1,9 @@
-#include "src/gui/online/online_album.h"
 #include "src/gui/library/homeview.h"
 #include "src/gui/library/playlistview.h"
 #include "src/gui/shell/bottomsheet.h"
+#include "src/gui/shell/rowswipe.h"
 #include "src/system/library/playlists.h"
+#include "src/system/library/collections.h"
 #include "src/gui/shell/toast.h"
 #include "main_menu.h"
 #include "ui_probe.h"
@@ -22,6 +23,7 @@
 #include "src/gui/library/playlistpage.h"
 #include "src/gui/library/search.h"
 #include "src/gui/nowplaying/player.h"
+#include "src/gui/shell/deviceprofile.h"
 #include "src/gui/nowplaying/coverloader.h"
 #include "src/gui/settings/settings.h"
 #include "src/gui/shell/gridpage.h"
@@ -32,43 +34,38 @@
 #include "src/gui/shell/switcher.h"
 #include "src/gui/shell/theme.h"
 #include "src/gui/shell/topbar.h"
-#include "src/gui/streaming/streaming.h"
-#include "src/gui/streaming/qobuzart.h"
-#include "src/gui/streaming/podcastpage.h"
 #include "src/gui/wireless/wifisettings.h"
 #include "src/gui/wireless/wireless.h"
 #include "src/system/core/lang.h"
 #include "src/system/core/config.h"
-#include "src/system/discovery/discovery.h"
-#include "src/system/discovery/download_queue.h"
-#include "src/system/discovery/preferences.h"
-#include "src/system/discovery/catalog.h"
 #include "src/system/library/library.h"
 #include "src/system/net/wifi.h"
 #include "src/system/playback/device_state.h"
 #include "src/system/playback/playlist.h"
 #include "src/gui/library/collectionview.h"
+#include "src/gui/library/activity.h"
+#include "src/gui/settings/systempage.h"
 
 /* Original Sonix branding and native widgets. Legacy pages retain their own
  * layouts, history and transport owners. Primary pages and the keyboard are
- * created on demand. One bounded catalogue request runs at a time; workers
- * never touch LVGL. Download completion/indexing is owned by the application. */
+ * created on demand. One bounded local-index request runs at a time; workers never touch LVGL. */
 lv_obj_t *main_menu_screen;
-static lv_obj_t *tools_screen, *header_tools, *header_settings, *header_add, *header_search;
+static lv_obj_t *tools_screen, *header_tools, *header_settings, *header_add, *header_search, *header_profile;
 static gui_config_t *cfg;
-static lv_obj_t *page[5], *heading, *nav_icon[3], *nav_label[3], *nav_objects[3];
+static lv_obj_t *page[3], *heading, *nav_icon[3], *nav_label[3], *nav_objects[3];
 static lv_obj_t *mini, *mini_title, *mini_artist, *mini_art, *mini_play, *mini_progress;
 static int selected;
+static bool tab_save_pending;
+static uint32_t tab_changed;
 static cover_image_t mini_image;
 static char mini_path[512];
 static bool mini_has_art;
 
-enum { HOME, SEARCH, LIBRARY, DOWNLOADS, PROVIDERS };
-enum { FILTER_ALL, FILTER_LOCAL, FILTER_ONLINE };
+enum { HOME, SEARCH, LIBRARY };
+
 enum { OPEN_FAVOURITES, OPEN_ALBUMS, OPEN_ARTISTS, OPEN_TRACKS, OPEN_PLAYLISTS,
-       OPEN_BROWSE, OPEN_MOST_PLAYED, OPEN_TOOLS, OPEN_DOWNLOADS, OPEN_SETTINGS,
-       OPEN_CLASSIC_LIBRARY, OPEN_LOCAL_SEARCH, OPEN_WIFI, OPEN_STREAMING,
-       OPEN_DISCOVERY, OPEN_DOWNLOAD_FOLDER, OPEN_PROVIDERS, OPEN_GENRES, OPEN_PODCASTS };
+       OPEN_BROWSE, OPEN_MOST_PLAYED, OPEN_TOOLS, OPEN_SETTINGS,
+       OPEN_CLASSIC_LIBRARY, OPEN_LOCAL_SEARCH, OPEN_WIFI, OPEN_GENRES, OPEN_COMPOSERS };
 
 #define PAD 20
 #define NAV_H 68
@@ -150,33 +147,205 @@ static void action_cb(lv_event_t *e) {
     if (!tapped()) return;
     switch ((intptr_t)lv_event_get_user_data(e)) {
     case OPEN_GENRES: medialist_open("Genres", LIBRARY_LIST_GENRES, LIBRARY_FILTER_NONE, NULL); break;
-    case OPEN_PODCASTS: podcastpage_open_followed(); break;
+    case OPEN_COMPOSERS: activity_open_composers(); break;
     case OPEN_FAVOURITES: medialist_open(tr("favourites"), LIBRARY_LIST_FAVOURITES, LIBRARY_FILTER_NONE, NULL); break;
     case OPEN_ALBUMS: medialist_open(tr("albums"), LIBRARY_LIST_ALBUMS, LIBRARY_FILTER_NONE, NULL); break;
     case OPEN_ARTISTS: medialist_open(tr("artists"), LIBRARY_LIST_ARTISTS, LIBRARY_FILTER_NONE, NULL); break;
     case OPEN_TRACKS: medialist_open(tr("music_all_tracks"), LIBRARY_LIST_TRACKS, LIBRARY_FILTER_NONE, NULL); break;
-    case OPEN_PLAYLISTS: playlistpage_open(); break;
+    case OPEN_PLAYLISTS: if (theme_reference()) main_menu_open_library(1); else playlistpage_open(); break;
     case OPEN_BROWSE: switch_screen(browser_screen); break;
     case OPEN_MOST_PLAYED: medialist_open(tr("music_most_played"), LIBRARY_LIST_MOST_PLAYED, LIBRARY_FILTER_NONE, NULL); break;
     case OPEN_TOOLS: switch_screen(tools_screen); break;
-    case OPEN_DOWNLOADS: show_page(DOWNLOADS); break;
     case OPEN_SETTINGS: switch_screen(settings_screen); break;
     case OPEN_CLASSIC_LIBRARY: switch_screen(music_screen); break;
     case OPEN_LOCAL_SEARCH: search_open(); break;
     case OPEN_WIFI: switch_screen(wifisettings_screen); break;
-    case OPEN_STREAMING: switch_screen(streaming_screen); break;
-    case OPEN_DISCOVERY: show_page(SEARCH); break;
-    case OPEN_PROVIDERS: show_page(PROVIDERS); break;
-    case OPEN_DOWNLOAD_FOLDER: {
-        if (!gui_card_available()) { gui_notify_no_card(); break; }
-        char path[768];
-        snprintf(path, sizeof(path), "%s/Downloads", cfg->sd_root_path);
-        if (access(path, R_OK) != 0) { gui_notify_popup("Your downloads will appear here after the first transfer."); break; }
-        browser_open_dir_public(path);
-        switch_screen(browser_screen);
-        break;
+
     }
+}
+
+/* The profile menu, as Spotify's: the round avatar beside every tab title
+ * slides a drawer in from the left with the personal pages (Listening stats,
+ * Recents, Settings) and, under a divider, the R1's own destinations. Tap the
+ * dimmed page or drag the drawer left to close it. */
+/* 432 on the 480 px screen; narrower at Display size Large (384 px), where a
+ * fixed 432 ran off the right edge and left no dimmed page to tap. */
+#define DRAWER_W (LV_MIN(432, (int)cfg->screen_width - 48))
+static lv_obj_t *drawer_scrim, *drawer_panel;
+static int drawer_drag_x;
+static bool drawer_dragging;
+typedef struct { const char *title; const lv_image_dsc_t *icon; lv_obj_t **target; void (*open)(void); } drawer_entry_t;
+static const drawer_entry_t drawer_entries[] = {
+    {"Listening stats", &sonix_icon_stats, NULL, activity_open_stats},
+    {"Recents", &sonix_icon_recents, NULL, activity_open_recents},
+    {"Settings", &sonix_icon_gear, &settings_screen, NULL},
+    {NULL, NULL, NULL, NULL},
+    {"Devices", &sonix_icon_speaker, &wireless_screen, NULL},
+    {"Audiobooks", &sonix_icon_book, &audiobooks_screen, NULL},
+    {"Browse music", &sonix_icon_music, &music_screen, NULL},
+    {"More", &sonix_icon_grid, &morepage_screen, NULL},
+};
+bool main_menu_drawer_open(void) { return drawer_panel != NULL; }
+static void drawer_x_anim(void *o, int32_t v) { lv_obj_set_style_translate_x(o, v, 0); }
+static void scrim_opa_anim(void *o, int32_t v) { lv_obj_set_style_bg_opa(o, (lv_opa_t)v, 0); }
+static void drawer_deleted(lv_anim_t *a) {
+    (void)a;
+    if (drawer_scrim) lv_obj_delete(drawer_scrim);
+    drawer_scrim = drawer_panel = NULL;
+}
+static void drawer_close(bool animate) {
+    if (!drawer_panel) return;
+    lv_anim_delete(drawer_panel, drawer_x_anim);
+    lv_anim_delete(drawer_scrim, scrim_opa_anim);
+    if (!animate) { lv_obj_delete(drawer_scrim); drawer_scrim = drawer_panel = NULL; return; }
+    lv_obj_set_clickable(drawer_scrim, false);
+    lv_anim_t a; lv_anim_init(&a);
+    lv_anim_set_var(&a, drawer_panel); lv_anim_set_exec_cb(&a, drawer_x_anim);
+    lv_anim_set_values(&a, lv_obj_get_style_translate_x(drawer_panel, 0), -DRAWER_W);
+    lv_anim_set_duration(&a, 180); lv_anim_set_path_cb(&a, lv_anim_path_ease_in);
+    lv_anim_set_completed_cb(&a, drawer_deleted); lv_anim_start(&a);
+    lv_anim_t b; lv_anim_init(&b);
+    lv_anim_set_var(&b, drawer_scrim); lv_anim_set_exec_cb(&b, scrim_opa_anim);
+    lv_anim_set_values(&b, lv_obj_get_style_bg_opa(drawer_scrim, 0), 0);
+    lv_anim_set_duration(&b, 180); lv_anim_start(&b);
+}
+static void drawer_scrim_cb(lv_event_t *e) { if (lv_event_get_target(e) == drawer_scrim) drawer_close(true); }
+static void drawer_pick_cb(lv_event_t *e) {
+    if (drawer_dragging) return;
+    const drawer_entry_t *d = lv_event_get_user_data(e);
+    drawer_close(false);
+    if (d->open) d->open();
+    else if (d->target && *d->target) switch_screen(*d->target);
+}
+/* Dragging the drawer left follows the finger; past a third it closes. Rows
+ * bubble their presses here, so the drag can start anywhere on the drawer. */
+static void drawer_drag_cb(lv_event_t *e) {
+    lv_indev_t *in = lv_indev_active();
+    if (!in || !drawer_panel) return;
+    lv_point_t p; lv_indev_get_point(in, &p);
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_PRESSED) { drawer_drag_x = p.x; drawer_dragging = false; return; }
+    int dx = p.x - drawer_drag_x;
+    if (code == LV_EVENT_PRESSING) {
+        if (!drawer_dragging && dx < -12) {
+            drawer_dragging = true;
+            lv_obj_t *t = lv_event_get_target(e);
+            if (t != drawer_panel) lv_obj_remove_state(t, LV_STATE_PRESSED);
+        }
+        if (drawer_dragging) lv_obj_set_style_translate_x(drawer_panel, dx < 0 ? dx : 0, 0);
+    } else if (drawer_dragging) {
+        if (dx < -DRAWER_W / 3) drawer_close(true);
+        else lv_obj_set_style_translate_x(drawer_panel, 0, 0);
     }
+}
+static lv_obj_t *drawer_item(lv_obj_t *parent, int h, int y) {
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, DRAWER_W, h);
+    lv_obj_set_pos(row, 0, y);
+    lv_obj_set_style_bg_color(row, lv_color_hex(0x2a2a2a), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_STATE_PRESSED);
+    lv_obj_set_clickable(row, true);
+    lv_obj_set_scrollable(row, false);
+    lv_obj_set_event_bubble(row, true);
+    return row;
+}
+static void drawer_row(lv_obj_t *parent, const drawer_entry_t *d, int y) {
+    lv_obj_t *row = drawer_item(parent, 60, y);
+    lv_obj_add_event_cb(row, drawer_pick_cb, LV_EVENT_CLICKED, (void *)d);
+    lv_obj_t *im = lv_image_create(row);
+    lv_image_set_src(im, d->icon); lv_obj_set_size(im, 28, 28);
+    lv_image_set_inner_align(im, LV_IMAGE_ALIGN_CONTAIN);
+    lv_obj_set_style_image_recolor(im, lv_color_white(), 0);
+    lv_obj_set_style_image_recolor_opa(im, LV_OPA_COVER, 0);
+    lv_obj_align(im, LV_ALIGN_LEFT_MID, 20, 0);
+    lv_obj_t *t = label(row, d->title, &font_ui_20, DRAWER_W - 90, false);
+    lv_obj_set_style_text_color(t, lv_color_white(), 0);
+    lv_obj_align(t, LV_ALIGN_LEFT_MID, 68, 0);
+}
+static void drawer_divider(lv_obj_t *parent, int y) {
+    lv_obj_t *line = lv_obj_create(parent);
+    lv_obj_remove_style_all(line);
+    lv_obj_set_size(line, DRAWER_W - 40, 1);
+    lv_obj_set_pos(line, 20, y);
+    lv_obj_set_style_bg_color(line, lv_color_hex(0x3a3a3a), 0);
+    lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
+}
+/* The device's avatar: its picture, or Spotify's default -- the initial on a
+ * coloured disc (deviceprofile.h; chosen in Settings > About). */
+static void avatar(lv_obj_t *o, int size, const lv_font_t *font) { deviceprofile_avatar(o, size, font); }
+static void device_info_cb(lv_event_t *e) {
+    (void)e;
+    if (drawer_dragging) return;
+    drawer_close(false);
+    switch_screen(sysinfo_screen); /* where the name and picture are */
+}
+static void device_menu_cb(lv_event_t *e) {
+    (void)e;
+    if (!tapped() || drawer_panel) return;
+    int h = cfg->screen_height;
+    drawer_scrim = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(drawer_scrim);
+    lv_obj_set_size(drawer_scrim, cfg->screen_width, h);
+    lv_obj_set_style_bg_color(drawer_scrim, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(drawer_scrim, 0, 0);
+    lv_obj_set_clickable(drawer_scrim, true);
+    lv_obj_add_event_cb(drawer_scrim, drawer_scrim_cb, LV_EVENT_CLICKED, NULL);
+    drawer_panel = lv_obj_create(drawer_scrim);
+    lv_obj_remove_style_all(drawer_panel);
+    lv_obj_set_size(drawer_panel, DRAWER_W, h);
+    lv_obj_set_style_bg_color(drawer_panel, lv_color_hex(0x1a1a1a), 0);
+    lv_obj_set_style_bg_opa(drawer_panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_translate_x(drawer_panel, -DRAWER_W, 0);
+    lv_obj_set_clickable(drawer_panel, true);
+    lv_obj_set_scrollable(drawer_panel, false);
+    lv_obj_add_event_cb(drawer_panel, drawer_drag_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(drawer_panel, drawer_drag_cb, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(drawer_panel, drawer_drag_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(drawer_panel, drawer_drag_cb, LV_EVENT_PRESS_LOST, NULL);
+    /* Header: Spotify's profile card (iOS, 2026-11-04 captures) -- the
+     * avatar, the device's name and a way to its details on a raised,
+     * rounded card, the rows straight under it. */
+    int y = cfg->top_bar_height + 16;
+    lv_obj_t *head = drawer_item(drawer_panel, 80, y);
+    lv_obj_set_width(head, DRAWER_W - 24);
+    lv_obj_set_x(head, 12);
+    lv_obj_set_style_radius(head, 12, 0);
+    lv_obj_set_style_bg_color(head, lv_color_hex(0x242424), 0);
+    lv_obj_set_style_bg_opa(head, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(head, lv_color_hex(0x333333), LV_STATE_PRESSED);
+    lv_obj_add_event_cb(head, device_info_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *av = lv_obj_create(head);
+    lv_obj_remove_style_all(av);
+    lv_obj_set_size(av, 56, 56);
+    lv_obj_set_pos(av, 12, 12);
+    lv_obj_set_clickable(av, false);
+    avatar(av, 56, &font_ui_24_bold);
+    lv_obj_t *name = label(head, "", &font_ui_24_bold, DRAWER_W - 130, false);
+    deviceprofile_name_label(name);
+    lv_obj_set_style_text_color(name, lv_color_white(), 0);
+    lv_obj_set_pos(name, 82, 14);
+    lv_obj_t *sub = label(head, "View device info", &font_ui_16, DRAWER_W - 130, true);
+    lv_obj_set_pos(sub, 82, 48);
+    y += 80 + 16;
+    int n = (int)(sizeof(drawer_entries) / sizeof(drawer_entries[0]));
+    for (int i = 0; i < n; i++) {
+        if (!drawer_entries[i].title) {
+            /* Between Spotify's personal pages and the R1's own. */
+            drawer_divider(drawer_panel, y + 8);
+            y += 17;
+            continue;
+        }
+        drawer_row(drawer_panel, &drawer_entries[i], y);
+        y += 60;
+    }
+    lv_anim_t a; lv_anim_init(&a);
+    lv_anim_set_var(&a, drawer_panel); lv_anim_set_exec_cb(&a, drawer_x_anim);
+    lv_anim_set_values(&a, -DRAWER_W, 0); lv_anim_set_duration(&a, 220);
+    lv_anim_set_path_cb(&a, lv_anim_path_ease_out); lv_anim_start(&a);
+    lv_anim_t b; lv_anim_init(&b);
+    lv_anim_set_var(&b, drawer_scrim); lv_anim_set_exec_cb(&b, scrim_opa_anim);
+    lv_anim_set_values(&b, 0, LV_OPA_60); lv_anim_set_duration(&b, 220); lv_anim_start(&b);
 }
 
 static lv_obj_t *route(lv_obj_t *parent, const char *title, const char *subtitle,
@@ -194,12 +363,24 @@ static lv_obj_t *route(lv_obj_t *parent, const char *title, const char *subtitle
     return o;
 }
 
+/* Home is rebuilt only when something its shelves show has changed. It used
+ * to be rebuilt on every return to it -- every Back, every tab tap -- and on
+ * the R1 each rebuild was every shelf's queries and widgets again on the
+ * interface thread (2026-11-05). Kept, it also keeps its scroll position. */
+static void page_ensure(int tab);
 static unsigned home_revision;
+static bool home_built;
+static unsigned home_signature(void) { return library_home_revision()+collections_revision(); }
 static void home_build(void) {
+    uint32_t started=lv_tick_get();
     homeview_build(page[HOME],cfg);
-    home_revision=library_revision(LIBRARY_LIST_TRACKS);
+    home_revision=home_signature();
+    home_built=true;
+    printf("home: feed built in %u ms\n",(unsigned)lv_tick_elaps(started));
 }
-static void home_art_drop(void) {homeview_art_drop();}
+static void home_build_if_stale(void) {
+    if(!home_built || home_revision!=home_signature()) home_build();
+}
 static void home_art_update(void) {homeview_art_update();}
 
 static void library_build(void) {
@@ -209,44 +390,33 @@ static void library_build(void) {
     collectionview_build(collections,cfg);
 }
 
-/* The worker writes separate storage. Displayed buttons keep stable data
- * until it finishes, then the GUI thread alone rebuilds their bounded list. */
+/* A single bounded local-index worker never touches LVGL. */
 typedef library_instant_hit_t local_hit_t;
 typedef struct {
-    discovery_results_t online;
     local_hit_t local[LOCAL_HITS];
     int local_count;
     char artwork[LOCAL_HITS][512], artist[LOCAL_HITS][256];
-    char error[192];
 } search_result_t;
 static search_result_t pending, shown;
 static pthread_mutex_t search_lock = PTHREAD_MUTEX_INITIALIZER;
-static bool search_busy, search_ready, request_album;
-static bool local_busy, local_ready, local_wanted, online_wanted;
-static unsigned local_epoch, online_epoch;
-static char local_text[256], online_text[256];
-static bool online_album_request, online_artist_request;
-static unsigned online_page;
-static discovery_results_t online_pending;
-static char online_error[192];
-static const discovery_provider_t *online_provider;
-static unsigned request_catalog;
-static void search_draw(void);
-static bool request_artist, browse_artist;
-static unsigned request_page = 1, browse_page = 1;
-static char browse_query[256], release_artist[128];
-static int request_filter;
-static char request_text[256];
-static lv_obj_t *search_field, *search_results, *search_status, *filter_buttons[3], *search_keyboard_parent;
+static bool local_busy, local_ready, local_wanted;
+static unsigned local_epoch, search_epoch;
+static char local_text[256], request_text[256], shown_text[256];
+static lv_obj_t *search_field, *search_results, *search_status, *filter_buttons[6], *search_keyboard_parent;
 static keyboard_t *search_keyboard;
 static int search_filter;
-static bool request_instant, instant_pending;
+static bool instant_pending;
 static uint32_t instant_changed;
-static unsigned search_epoch;
+static void search_draw(void);
 
+/* With a chip chosen the worker asks for that kind alone and the whole
+ * LOCAL_HITS budget goes to it, as Spotify's chips narrow the results to a
+ * longer list of one kind; -1 is every kind, LOCAL_HITS/5 each. */
+static int local_type=-1, shown_type=-1;
 static void local_collect(const library_instant_hit_t *item, void *user) {
     search_result_t *r = user;
     if (r->local_count >= LOCAL_HITS) return;
+    if (local_type >= 0 && (int)item->type != local_type) return;
     local_hit_t *hit = &r->local[r->local_count++];
     *hit = *item;
 }
@@ -261,6 +431,8 @@ static void search_resolve_art(void) {
         if(hit->type==LIBRARY_SEARCH_TRACK || hit->type==LIBRARY_SEARCH_LYRICS) {
             memcpy(pending.artwork[i],hit->path,sizeof(hit->path));
             char title[256];playlists_track_names(hit->path,title,sizeof(title),pending.artist[i],256);
+        } else if(hit->type==LIBRARY_SEARCH_ARTIST) {
+            snprintf(pending.artwork[i],512,"%s",hit->path);
         } else {
             library_list_t kind=hit->type==LIBRARY_SEARCH_PLAYLIST?LIBRARY_LIST_PLAYLIST:LIBRARY_LIST_TRACKS;
             library_filter_t filter=hit->type==LIBRARY_SEARCH_ARTIST?LIBRARY_FILTER_ARTIST:hit->type==LIBRARY_SEARCH_ALBUM?LIBRARY_FILTER_ALBUM:LIBRARY_FILTER_NONE;
@@ -269,69 +441,35 @@ static void search_resolve_art(void) {
         }
     }
 }
+/* Browse as it was drawn: kept while the library is the same, so clearing the
+ * field or coming back to it does not draw every tile again. */
+static bool browse_shown;
+static unsigned browse_revision;
 static lv_obj_t *instant_images[LOCAL_HITS];
 static cover_image_t instant_covers[LOCAL_HITS];
-static lv_obj_t *online_images[DISCOVERY_MAX_RESULTS];
-static cover_image_t online_covers[DISCOVERY_MAX_RESULTS];
-static bool online_requested[DISCOVERY_MAX_RESULTS];
-static int online_art_owner;
 static void search_art_drop(void) {
-    for(int i=0;i<DISCOVERY_MAX_RESULTS;i++) {
-        qobuzart_release(&online_art_owner,i%QOBUZART_SLOTS);
-        if(online_images[i])lv_image_set_src(online_images[i],&icon_album);
-        cover_free(&online_covers[i]);online_images[i]=NULL;online_requested[i]=false;
-    }
     for(int i=0;i<LOCAL_HITS;i++) {
         coverloader_release(COVERLOADER_INSTANT_BASE+i);
-        if(instant_images[i]) lv_image_set_src(instant_images[i],&icon_album);
+        if(instant_images[i])lv_image_set_src(instant_images[i],&icon_album);
         cover_free(&instant_covers[i]);instant_images[i]=NULL;
     }
 }
 static void search_art_update(void) {
-    if(selected==SEARCH && lv_screen_active()==main_menu_screen)for(int i=0;i<DISCOVERY_MAX_RESULTS;i++)if(online_images[i]) {
-        lv_area_t a;lv_obj_get_coords(online_images[i],&a);
-        bool visible=a.y2>cfg->top_bar_height+HEADER_H+150 && a.y1<cfg->screen_height-NAV_H-MINI_H-12;
-        if(!visible) {
-            if(online_requested[i])qobuzart_release(&online_art_owner,i%QOBUZART_SLOTS);
-            online_requested[i]=false;
-            if(online_covers[i].pixels){lv_image_set_src(online_images[i],&icon_album);cover_free(&online_covers[i]);}
-        }
-    }
-    if(selected==SEARCH && lv_screen_active()==main_menu_screen)for(int i=0;i<DISCOVERY_MAX_RESULTS;i++)if(online_images[i]) {
-        lv_area_t a;lv_obj_get_coords(online_images[i],&a);
-        if(a.y2<=cfg->top_bar_height+HEADER_H+150 || a.y1>=cfg->screen_height-NAV_H-MINI_H-12)continue;
-        if(!online_requested[i] && shown.online.items[i].artwork[0]) {
-            qobuzart_request(&online_art_owner,i%QOBUZART_SLOTS,shown.online.items[i].artwork,58);online_requested[i]=true;
-        }
-        bool finished=false;
-        if(online_requested[i] && !online_covers[i].pixels && qobuzart_take(&online_art_owner,i%QOBUZART_SLOTS,&online_covers[i],&finished))
-            lv_image_set_src(online_images[i],&online_covers[i].dsc);
-    }
-
-    for(int i=0;i<LOCAL_HITS;i++) if(instant_images[i] && !instant_covers[i].pixels) {
+    for(int i=0;i<LOCAL_HITS;i++)if(instant_images[i]&&!instant_covers[i].pixels) {
         bool done=false;
-        if(coverloader_take(COVERLOADER_INSTANT_BASE+i,&instant_covers[i],&done)) lv_image_set_src(instant_images[i],&instant_covers[i].dsc);
+        if(coverloader_take(COVERLOADER_INSTANT_BASE+i,&instant_covers[i],&done)) {
+            lv_image_set_src(instant_images[i],&instant_covers[i].dsc);
+            lv_obj_set_style_image_recolor_opa(instant_images[i],LV_OPA_TRANSP,0);
+            lv_image_set_inner_align(instant_images[i],LV_IMAGE_ALIGN_CONTAIN);
+        }
     }
 }
 static void *search_worker(void *unused) {
     (void)unused;
     memset(&pending,0,sizeof(pending));
-    library_search_instant(local_text,LOCAL_HITS/5,local_collect,&pending);
+    library_search_instant(local_text,local_type>=0?LOCAL_HITS:LOCAL_HITS/5,local_collect,&pending);
     search_resolve_art();
     pthread_mutex_lock(&search_lock);local_ready=true;pthread_mutex_unlock(&search_lock);
-    return NULL;
-}
-static void *online_worker(void *unused) {
-    (void)unused;
-#ifdef HOST_BUILD
-    const char *delay=getenv("SONIX_TEST_ONLINE_DELAY_MS");
-    if(delay){int ms=atoi(delay);if(ms>0 && ms<=5000)usleep(ms*1000);}
-#endif
-    memset(&online_pending,0,sizeof(online_pending));online_error[0]=0;
-    const discovery_provider_t *provider=online_provider;
-    if(online_album_request)provider->album(online_text,online_page,&online_pending,online_error,sizeof(online_error));
-    else provider->search(online_text,online_artist_request,online_page,&online_pending,online_error,sizeof(online_error));
-    pthread_mutex_lock(&search_lock);search_ready=true;pthread_mutex_unlock(&search_lock);
     return NULL;
 }
 static bool start_worker(void *(*fn)(void *)) {
@@ -344,133 +482,67 @@ static bool start_worker(void *(*fn)(void *)) {
 static void dispatch_search(void) {
     if(local_wanted && !local_busy) {
         local_wanted=false;local_epoch=search_epoch;snprintf(local_text,sizeof(local_text),"%s",request_text);
+        local_type=search_filter?search_filter-1:-1;
         local_ready=false;local_busy=true;
         if(!start_worker(search_worker)){local_busy=false;lv_label_set_text(search_status,"Could not start local search.");}
     }
-    if(online_wanted && !search_busy) {
-        online_wanted=false;online_epoch=search_epoch;snprintf(online_text,sizeof(online_text),"%s",request_text);
-        online_provider=catalog_provider(request_catalog);
-        online_album_request=request_album;online_artist_request=request_artist;online_page=request_page;
-        search_ready=false;search_busy=true;
-        if(!start_worker(online_worker)){search_busy=false;snprintf(shown.error,sizeof(shown.error),"Could not start online search.");search_draw();}
-    }
 }
-
+/* Spotify's browse page has no chips; they appear with a query. Without
+ * them the tiles start under the field. */
+static lv_obj_t *search_chips;
+static int search_top=150;
+static void search_keyboard_visible(bool visible);
+static void search_chips_show(bool on) {
+    if(!search_chips || lv_obj_is_hidden(search_chips)==!on) return;
+    lv_obj_set_hidden(search_chips,!on);lv_obj_set_hidden(search_status,!on);
+    search_top=on?150:68;lv_obj_set_pos(search_results,-PAD,search_top);
+    search_keyboard_visible(!lv_obj_is_hidden(search_keyboard_parent));
+}
+static void start_instant(void);
 static void search_keyboard_visible(bool visible) {
-    keyboard_set_visible(search_keyboard, visible);
-    lv_obj_set_hidden(search_keyboard_parent, !visible);
-    lv_obj_set_hidden(mini, visible);
-    int height = visible ? cfg->screen_height - NAV_H - 310 -
-                           (cfg->top_bar_height + HEADER_H + 150) - 8 : body_height() - 150;
-    lv_obj_set_height(search_results, height > 40 ? height : 40);
+    /* Leaving an empty field shows Browse again, whatever emptied it. */
+    if(!visible && search_field && !lv_textarea_get_text(search_field)[0] && search_chips && !lv_obj_is_hidden(search_chips)) {
+        ++search_epoch;start_instant();
+    }
+    int top=search_top;
+    keyboard_set_visible(search_keyboard,visible);
+    lv_obj_set_hidden(search_keyboard_parent,!visible);lv_obj_set_hidden(mini,visible);
+    int height=visible?cfg->screen_height-NAV_H-310-(cfg->top_bar_height+HEADER_H+top)-8:body_height()-top;
+    lv_obj_set_height(search_results,height>40?height:40);
 }
-
-static void start_search_page(const char *query, bool album, bool artist, unsigned page_number) {
-    if (!query || !query[0]) { gui_notify_popup("Enter an artist, album or track."); return; }
-    char linked_id[128];
-    unsigned catalog=(unsigned)config_get_int("discovery","catalog",0);
-    if(!strncmp(query,"deezer:",7))catalog=1;
-    else if(album || artist)catalog=0;
-    if (!album && !artist && search_filter != FILTER_LOCAL &&
-        (strstr(query, "://") || !strncmp(query,"spotify:",8))) {
-        bool linked_album=false;
-        if(catalog_link(query,linked_id,sizeof(linked_id),&linked_album)){catalog=1;album=linked_album;}
-        else if(discovery_release_link(query,linked_id,sizeof(linked_id))){catalog=0;album=true;}
-        else {gui_notify_popup("Use an Archive release link or a Deezer track/album link.");return;}
-        query=linked_id;
-        release_artist[0]=0;
-    }
-    int filter = (album || artist || page_number > 1) ? FILTER_ONLINE : search_filter;
-    if (!config_get_bool("discovery", "enabled", true)) {
-        if (album || filter == FILTER_ONLINE) {
-            gui_notify_popup("Online discovery is disabled. Enable it in Sources.");
-            return;
-        }
-        filter = FILTER_LOCAL;
-    }
-    /* Pagination may pass request_text itself. Copy before updating state. */
-    char text[sizeof(request_text)];
-    snprintf(text, sizeof(text), "%s", query);
-    snprintf(request_text, sizeof(request_text), "%s", text);
-    request_catalog=catalog;
-    request_album = album;
-    request_artist = artist;
-    request_page = page_number;
-    request_filter = filter;
-    ++search_epoch;
-    instant_pending = false;
-    if (!album) {
-        snprintf(browse_query, sizeof(browse_query), "%s", text);
-        browse_artist = artist;
-        browse_page = page_number;
-    }
-    if(!request_instant)search_keyboard_visible(false);
-    if(!album)memset(&shown,0,sizeof(shown));
-    local_wanted=!album && !artist && page_number==1 && filter!=FILTER_ONLINE;
-    online_wanted=album || filter!=FILTER_LOCAL;
-#ifndef HOST_BUILD
-    if(online_wanted) {wifi_status_t wifi;wifi_get_status(&wifi);if(wifi.state!=WIFI_STATE_CONNECTED) {
-        online_wanted=false;snprintf(shown.error,sizeof(shown.error),"Connect Wi-Fi to search online. Local music is available.");
-    }}
-#endif
-    if(album)lv_label_set_text(search_status,"Loading release...");else search_draw();
-    dispatch_search();
+/* The clear button is there only once something is typed, as in Spotify;
+ * empty, the field has the whole bar and the placeholder is not cut short. */
+static lv_obj_t *search_clear_btn;
+static void search_clear_sync(void) {
+    if(!search_field || !search_clear_btn) return;
+    bool empty=!lv_textarea_get_text(search_field)[0];
+    lv_obj_set_hidden(search_clear_btn,empty);
+    lv_obj_set_style_pad_right(search_field,empty?0:46,0);
 }
-
-static void start_search(const char *query, bool album) { request_instant=false;start_search_page(query, album, false, 1); }
-
 static void instant_changed_cb(lv_event_t *e) {
-    (void)e;
-    search_epoch++;
-    instant_changed=lv_tick_get();
-    instant_pending=true;
-    local_wanted=online_wanted=false;
+    (void)e;++search_epoch;instant_changed=lv_tick_get();instant_pending=true;local_wanted=false;
+    search_clear_sync();
 }
-
 static void start_instant(void) {
-    const char *query=lv_textarea_get_text(search_field);
     instant_pending=false;
-    if(!query[0]) {
-        local_wanted=online_wanted=false;memset(&shown,0,sizeof(shown));
-        search_browse();
-        lv_label_set_text(search_status,"");
-        return;
-    }
-    request_instant=true;
-    start_search_page(query,false,false,1);
+    snprintf(request_text,sizeof(request_text),"%s",lv_textarea_get_text(search_field));
+    if(!request_text[0]) {local_wanted=false;memset(&shown,0,sizeof(shown));search_browse();lv_label_set_text(search_status,"");search_chips_show(false);return;}
+    search_chips_show(true);
+    local_wanted=true;lv_label_set_text(search_status,"Searching your music...");dispatch_search();
 }
-
-static void page_cb(lv_event_t *e) {
-    if (!tapped()) return;
-    int direction = (int)(intptr_t)lv_event_get_user_data(e);
-    if ((direction < 0 && request_page <= 1) || (direction > 0 && request_page >= DISCOVERY_MAX_PAGES)) return;
-    start_search_page(request_text, request_album, request_artist, request_page + direction);
-}
-
-static void results_cb(lv_event_t *e) {
-    (void)e;
-    if (tapped() && browse_query[0]) start_search_page(browse_query, false, browse_artist, browse_page);
-}
-
-static void artist_cb(lv_event_t *e) {
-    (void)e;
-    if (tapped() && release_artist[0]) {
-        switch_screen(main_menu_screen);show_page(SEARCH);request_instant=false;
-        start_search_page(release_artist,false,true,1);
-    }
-}
-
-static void submit_cb(lv_event_t *e) { (void)e; start_search(lv_textarea_get_text(search_field), false); }
-static void field_cb(lv_event_t *e) { (void)e; search_keyboard_visible(true); }
-
+static void submit_cb(lv_event_t *e) {(void)e;start_instant();search_keyboard_visible(false);}
+static void field_cb(lv_event_t *e) {(void)e;search_keyboard_visible(true);}
 static void filter_cb(lv_event_t *e) {
-    if (!tapped()) return;
-    search_filter = (int)(intptr_t)lv_event_get_user_data(e);
-    for (int i = 0; i < 3; i++) {
-        lv_obj_set_style_border_width(filter_buttons[i], i == search_filter ? 2 : 1, 0);
-        lv_obj_set_style_border_color(filter_buttons[i],i == search_filter ? mint() : lv_color_hex(0x555555), 0);
+    if(!tapped())return;
+    int chosen=(int)(intptr_t)lv_event_get_user_data(e);search_filter=search_filter==chosen?0:chosen;
+    for(int i=0;i<6;i++) {
+        lv_obj_set_style_bg_opa(filter_buttons[i],i==search_filter?LV_OPA_COVER:LV_OPA_TRANSP,0);
+        lv_obj_set_style_bg_color(filter_buttons[i],mint(),0);
+        lv_obj_set_style_text_color(lv_obj_get_child(filter_buttons[i],0),i==search_filter?lv_color_black():ink(),0);
     }
-    if (lv_textarea_get_text(search_field)[0]) submit_cb(NULL);
+    /* A different kind asks the index again rather than filtering the few
+     * rows already shown. */
+    if(lv_textarea_get_text(search_field)[0]){++search_epoch;start_instant();}
 }
 
 static lv_point_t local_swipe_origin;
@@ -482,8 +554,23 @@ static void local_hit_cb(lv_event_t *e) {
     if (!tapped()) return;
     if (!gui_card_available()) { gui_notify_no_card(); return; }
     if (hit->type == LIBRARY_SEARCH_TRACK || hit->type == LIBRARY_SEARCH_LYRICS) {
-        player_play_file(hit->path);
-        player_sheet_open(true);
+        /* Spotify continues a searched song with autoplay; offline, the song's
+         * own album is the honest continuation, so it plays from that track in
+         * the album context (never a filesystem folder). Without an indexed
+         * album the song plays alone. Search playback stays in preview. */
+        char album[256];
+        library_index_t *ix=NULL;int start=-1;
+        if(library_track_album_value(hit->path,album,sizeof(album)) && album[0]) {
+            ix=library_index_open(LIBRARY_LIST_TRACKS,LIBRARY_FILTER_ALBUM,album,LIBRARY_ORDER_DEFAULT,false);
+            if(ix) start=library_index_find_path(ix,hit->path);
+        }
+        if(ix && start>=0) {
+            /* The handle is taken whether or not playback starts. */
+            if(device_state_play_index(ix,start)) {playlist_set_album(album);player_refresh_now_playing();}
+        } else {
+            if(ix) library_index_close(ix);
+            player_play_file(hit->path);
+        }
     } else if (hit->type == LIBRARY_SEARCH_ALBUM) {
         char title[256];
         library_album_title(hit->name, title, sizeof(title));
@@ -500,154 +587,57 @@ static void local_queue_cb(lv_event_t *e) {
     lv_obj_t *row = lv_event_get_current_target(e);
     lv_event_code_t code = lv_event_get_code(e);
     lv_point_t point; lv_indev_get_point(input, &point);
+    /* The shared row swipe: the same strip and threshold as every song list. */
+    static const rowswipe_spec_t spec = {&icon_list_plus, ROWSWIPE_GREEN, NULL, 0};
+    int committed = 0;
+    bool swiping = rowswipe_event(e, row, &spec, &committed);
     if (code == LV_EVENT_PRESSED) {
         local_swipe_row = row; local_swipe_origin = point; local_swipe_taken = false;
         return;
     }
-    if (local_swipe_row != row || local_swipe_origin.x <= 32) return;
-    int dx = point.x - local_swipe_origin.x, dy = point.y - local_swipe_origin.y;
-    if (code == LV_EVENT_PRESSING && dx > 35 && abs(dy) < 35) {
-        local_swipe_taken = true;
-        lv_obj_set_style_border_width(row, 3, 0);
-        lv_obj_set_style_border_color(row, lv_color_hex(0x1ed760), 0);
-        lv_event_stop_bubbling(e);
-    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        lv_obj_set_style_border_width(row, 0, 0);
-        if (local_swipe_taken) lv_event_stop_bubbling(e);
-        if (code == LV_EVENT_RELEASED && dx > 75 && abs(dy) < 35 && playlist_priority_add(hit->path)) {
-            device_state_queue_changed(); toast_glyph(&icon_list_music, "added_to_the_queue");
-        }
+    if (local_swipe_row != row) return;
+    if (swiping) { local_swipe_taken = true; lv_event_stop_bubbling(e); }
+    if (committed > 0 && playlist_priority_add(hit->path)) {
+        device_state_queue_changed(); toast_glyph(&icon_list_music, "added_to_the_queue");
     }
 }
 
-/* A copied selection outlives asynchronous search result replacement. */
-static discovery_item_t online_selection;
-static void online_download_cb(lv_event_t *e) {
-    (void)e;
-    if (!gui_card_available()) { gui_notify_no_card(); return; }
-    char error[192] = "Could not open the download queue.";
-    unsigned id = 0;
-    download_job_t previous;bool existed=download_lookup(&online_selection,&previous);
-    if (!download_queue_init(cfg->sd_root_path) ||
-        !(id = download_enqueue(&online_selection, error, sizeof(error)))) {
-        gui_notify_popup(error);
-        return;
-    }
-    if(existed)download_resume(id);
-    bottomsheet_close(false);
-    main_menu_open_downloads();
-}
-static void online_artist_cb(lv_event_t *e) {
-    (void)e;
-    char artist[128];
-    if(online_selection.catalog && online_selection.artist_id[0])snprintf(artist,sizeof(artist),"deezer:artist:%s",online_selection.artist_id);
-    else snprintf(artist,sizeof(artist),"%s",online_selection.artist);
-    bottomsheet_close(false);
-    switch_screen(main_menu_screen);show_page(SEARCH);
-    request_instant=false;start_search_page(artist,false,true,1);
-}
-static void online_queue_cb(lv_event_t *e) {
-    (void)e;bottomsheet_close(false);main_menu_open_downloads();
-}
-static void online_play_existing_cb(lv_event_t *e) {
-    (void)e;download_job_t job;
-    char local_title[256];
-    if(download_lookup(&online_selection,&job) && access(job.path,R_OK)==0 && library_track_title(job.path,local_title,sizeof(local_title))) {
-        bottomsheet_close(false);player_play_file(job.path);
-    } else gui_notify_popup("This file is no longer available on the card.");
-}
-static void online_album_cb(lv_event_t *e) {
-    (void)e;char key[128];snprintf(key,sizeof(key),"deezer:album:%s",online_selection.album_id);
-    snprintf(release_artist,sizeof(release_artist),"deezer:artist:%s",online_selection.artist_id);
-    bottomsheet_close(false);switch_screen(main_menu_screen);show_page(SEARCH);start_search(key,true);
-}
-static void online_track_sheet(const discovery_item_t *item) {
-    online_selection=*item;
-    int w=cfg->screen_width-40;
-    lv_obj_t *body=bottomsheet_open(cfg->screen_height-120,NULL);
-    lv_obj_t *content=column(body,w,lv_obj_get_height(body)-24);
-    lv_obj_set_pos(content,20,12);
-    lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0);
-    lv_obj_t *title=label(content,item->title,&font_ui_24_bold,w,false);
-    lv_obj_set_height(title,68);
-    lv_obj_t *artist=label(content,item->artist,&font_ui_18,w,true);
-    lv_obj_set_height(artist,26);
-    lv_obj_t *album=label(content,item->album,&font_ui_18,w,true);
-    lv_obj_set_height(album,50);
-    char technical[128];snprintf(technical,sizeof(technical),"%s  /  %.1f MB  /  Original source",item->format,(double)item->bytes/1048576);
-    if(item->catalog)snprintf(technical,sizeof(technical),"%u:%02u%s%.12s",item->duration/60,item->duration%60,item->isrc[0]?" / ISRC ":"",item->isrc);
-    lv_obj_t *detail=label(content,technical,&font_ui_18,w,false);
-    lv_obj_set_height(detail,28);
-    label(content,item->catalog?"Deezer catalog":discovery_provider_name(),&font_ui_18,w,true);
-    lv_obj_t *license=label(content,item->catalog?"No audio download source is connected for this recording.":item->license,&font_ui_16,w,true);
-    lv_obj_set_height(license,48);
-    lv_label_set_long_mode(license,LV_LABEL_LONG_WRAP);
-    download_job_t existing;
-    bool found=download_lookup(item,&existing);
-    char local_title[256];
-    bool playable=found && access(existing.path,R_OK)==0 && library_track_title(existing.path,local_title,sizeof(local_title));
-    if(playable)button(content,"Play offline copy",w,56,online_play_existing_cb,NULL);
-    else if(discovery_item_valid(item) && (!found || existing.state==DOWNLOAD_PAUSED || existing.state==DOWNLOAD_FAILED)) {
-        lv_obj_t *download=button(content,found?"Resume download":"Download to microSD",w,56,online_download_cb,NULL);
-        lv_obj_set_style_bg_color(download,lv_color_hex(0x167c40),0);
-    }
-    if(found)label(content,download_state_name(existing.state),&font_ui_18,w,true);
-    if(item->catalog && item->album_id[0])button(content,"Go to album",w,52,online_album_cb,NULL);
-    if(item->artist[0] && (!item->catalog || item->artist_id[0])) button(content,"More by this artist",w,52,online_artist_cb,NULL);
-    button(content,"View downloads",w,52,online_queue_cb,NULL);
-}
-static void online_hit_cb(lv_event_t *e) {
-    discovery_item_t *item = lv_event_get_user_data(e);
+/* A group that filled its instant slots continues in the shared collection
+ * list of every match ("See all songs"), the same list, rows and menus as the
+ * rest of the library. Playlists and lyrics have no full search list yet. */
+static void see_all_cb(lv_event_t *e) {
     if (!tapped()) return;
-    if (item->kind == DISCOVERY_ALBUM) {
-        if(item->catalog && item->artist_id[0])snprintf(release_artist,sizeof(release_artist),"deezer:artist:%s",item->artist_id);
-        else snprintf(release_artist, sizeof(release_artist), "%s", item->artist);
-        start_search(item->id, true);
-        return;
-    }
-    online_track_sheet(item);
+    int kind=(int)(intptr_t)lv_event_get_user_data(e);
+    static const library_list_t lists[]={LIBRARY_LIST_TRACKS,LIBRARY_LIST_ALBUMS,LIBRARY_LIST_ARTISTS};
+    char title[200];snprintf(title,sizeof(title),"\xe2\x80\x9c%.180s\xe2\x80\x9d",shown_text);
+    medialist_open(title,lists[kind],LIBRARY_FILTER_SEARCH,shown_text);
 }
-#ifdef HOST_BUILD
-/* Render a fixture through the production sheet; never a provider/network override. */
-void main_menu_probe_online_track(const discovery_item_t *item) {
-    switch_screen(main_menu_screen);
-    show_page(SEARCH);
-    online_track_sheet(item);
+static void see_all_row(int kind) {
+    static const char *names[]={"See all songs","See all albums","See all artists"};
+    int rw=cfg->screen_width-2*PAD;
+    lv_obj_t *row=button(search_results,NULL,rw,56,see_all_cb,(void *)(intptr_t)kind);
+    lv_obj_set_style_bg_opa(row,LV_OPA_TRANSP,0);
+    lv_obj_t *t=label(row,names[kind],&font_ui_20_bold,rw-40,false);
+    lv_obj_set_pos(t,2,14);
+    lv_obj_t *chevron=glyph(row,&icon_chevron_right,24);
+    lv_obj_align(chevron,LV_ALIGN_RIGHT_MID,-4,0);
+    lv_obj_set_style_image_recolor(chevron,lv_color_hex(0xb3b3b3),0);
+    lv_obj_set_style_image_recolor_opa(chevron,LV_OPA_COVER,0);
 }
-void main_menu_probe_online_album(const discovery_results_t *results) {
-    switch_screen(main_menu_screen);show_page(SEARCH);
-    online_album_open(cfg,results,1,online_track_sheet,page_cb,artist_cb);
-}
-void main_menu_probe_search_text(const char *text) {
-    switch_screen(main_menu_screen);show_page(SEARCH);
-    lv_textarea_set_text(search_field,text);
-}
-#endif
 
 static void search_draw(void) {
-    qobuzart_set_root(cfg->sd_root_path);
-    search_art_drop();
-    lv_obj_clean(search_results);
-    lv_obj_scroll_to_y(search_results, 0, LV_ANIM_OFF);
-    /* A preference reorders original source files; it never transcodes or
-     * hides alternative formats. Stable insertion keeps their source order. */
-    int preference = (int)config_get_int("discovery", "format", 0);
-    const char *preferred = preference == 1 ? "mp3" : preference == 2 ? "flac" : "";
-    int front = 0;
-    if (*preferred) for (int i = 0; i < shown.online.count; i++) {
-        if (shown.online.items[i].kind == DISCOVERY_TRACK && !strcmp(shown.online.items[i].format, preferred)) {
-            discovery_item_t item = shown.online.items[i];
-            memmove(&shown.online.items[front + 1], &shown.online.items[front],
-                    (size_t)(i - front) * sizeof(item));
-            shown.online.items[front++] = item;
-        }
-    }
+    browse_shown=false;
+    search_art_drop();lv_obj_clean(search_results);lv_obj_scroll_to_y(search_results,0,LV_ANIM_OFF);
+    int count=0;
     const char *groups[] = {"Songs", "Albums", "Artists", "Playlists", "Lyrics"};
     for (int kind = 0; kind < 5; kind++) {
+        if(search_filter && kind!=search_filter-1)continue;
         bool heading_drawn = false;
+        int in_group = 0;
         for (int i = 0; i < shown.local_count; i++) {
             local_hit_t *hit = &shown.local[i];
             if ((int)hit->type != kind) continue;
+            count++;in_group++;
             if (!heading_drawn) { section(search_results, groups[kind]); heading_drawn = true; }
             char name[256];
             if (kind == LIBRARY_SEARCH_ALBUM) library_album_title(hit->name, name, sizeof(name));
@@ -670,116 +660,187 @@ static void search_draw(void) {
             lv_obj_add_event_cb(row,local_queue_cb,LV_EVENT_RELEASED,hit);
             lv_obj_add_event_cb(row,local_queue_cb,LV_EVENT_PRESS_LOST,hit);
         }
+        if(in_group>=(shown_type>=0?LOCAL_HITS:LOCAL_HITS/5) && kind<=LIBRARY_SEARCH_ARTIST) see_all_row(kind);
     }
-    if (request_album) {
-        lv_obj_t *nav = box(search_results, cfg->screen_width - 2 * PAD, 46, false);
-        lv_obj_set_flex_flow(nav, LV_FLEX_FLOW_ROW);
-        lv_obj_set_style_pad_column(nav, 12, 0);
-        button(nav, "Results", 128, 46, results_cb, NULL);
-        if (release_artist[0]) button(nav, "Artist releases", 210, 46, artist_cb, NULL);
-    } else if (request_artist) {
-        lv_obj_t *artist_name = label(search_results, !strncmp(request_text,"deezer:artist:",14)?"Artist releases":request_text, &font_ui_22_bold, cfg->screen_width - 2 * PAD, false);
-        lv_obj_set_height(artist_name, 30);
-    }
-    if (shown.online.count) section(search_results, shown.online.items[0].catalog ? "Deezer catalog" : request_album ? "Available audio files" : "Online releases");
-    for (int i = 0; i < shown.online.count; i++) {
-        discovery_item_t *item = &shown.online.items[i];
-        lv_obj_t *b = button(search_results, NULL, cfg->screen_width - 2 * PAD, 90, online_hit_cb, item);
-        int inset=item->catalog?76:14;
-        if(item->catalog) {
-            online_images[i]=lv_image_create(b);lv_image_set_src(online_images[i],&icon_album);
-            lv_obj_set_size(online_images[i],58,58);lv_obj_set_pos(online_images[i],8,12);
-            lv_image_set_inner_align(online_images[i],LV_IMAGE_ALIGN_CONTAIN);
-        }
-        lv_obj_t *title = label(b, item->title, &font_ui_20, cfg->screen_width - 2*PAD - inset - 12, false);
-        lv_obj_set_height(title, 28);
-        lv_obj_set_pos(title, inset, 11);
-        char subtitle[220];
-        if (item->kind == DISCOVERY_ALBUM) snprintf(subtitle, sizeof(subtitle), "%s%sOpen release", item->artist,item->artist[0]?" / ":"");
-        else if(item->catalog)snprintf(subtitle,sizeof(subtitle),"%s / %u:%02u",item->artist,item->duration/60,item->duration%60);
-        else snprintf(subtitle, sizeof(subtitle), "%s  /  %.1f MB  /  Details", item->format, (double)item->bytes / 1048576);
-        lv_obj_t *sub = label(b, subtitle, &font_ui_16, cfg->screen_width - 2*PAD - inset - 12, true);
-        lv_obj_set_height(sub, 24);
-        lv_obj_set_pos(sub, inset, 48);
-    }
-    if (shown.error[0]) {
-        lv_obj_t *err = label(search_results, shown.error, &font_ui_18, cfg->screen_width - 2 * PAD, true);
-        lv_label_set_long_mode(err, LV_LABEL_LONG_WRAP);
-    }
-    char status[128];
-    snprintf(status,sizeof(status),"%d local / %d online%s",shown.local_count,shown.online.count,
-        (online_wanted || (search_busy && online_epoch==search_epoch))?" / Loading online...":"");
-    lv_label_set_text(search_status, status);
-    if (!local_wanted && !local_busy && !online_wanted && !search_busy && !shown.local_count && !shown.online.count && !shown.error[0])
-        label(search_results, shown.online.truncated ? "No eligible releases on this page. Try the next page." :
-              "No matches. Try an artist or album name.", &font_ui_18, cfg->screen_width - 2 * PAD, true);
-    if (request_page > 1 || shown.online.truncated) {
-        lv_obj_t *nav = box(search_results, cfg->screen_width - 2 * PAD, 52, false);
-        lv_obj_set_flex_flow(nav, LV_FLEX_FLOW_ROW);
-        lv_obj_set_style_pad_column(nav, 12, 0);
-        if (request_page > 1) button(nav, "Previous", 180, 52, page_cb, (void *)(intptr_t)-1);
-        if (shown.online.truncated && request_page < DISCOVERY_MAX_PAGES)
-            button(nav, "Next page", 180, 52, page_cb, (void *)(intptr_t)1);
-    }
-    if (shown.local_count >= LOCAL_HITS / 3)
-        route(search_results, "Search the full local library", "This overview shows up to six hits per category", &icon_search, OPEN_LOCAL_SEARCH);
+    /* Spotify shows no result count, and a capped instant count would be
+     * wrong for a long list; the line only reports transient states. */
+    lv_label_set_text(search_status,"");
+    if(!count)label(search_results,"No matches. Try a song, artist or lyric.",&font_ui_18,cfg->screen_width-2*PAD,true);
 }
+/* The one search of the Spotify-style experience, for pages that offer one. */
+void main_menu_open_search(void) {
+    switch_screen(main_menu_screen);show_page(SEARCH);
+}
+/* Your Library on one chip; the playlists live there, not on a page of their own. */
+void main_menu_open_library(int filter) {
+    collectionview_set_filter(filter);switch_screen(main_menu_screen);show_page(LIBRARY);
+}
+#ifdef HOST_BUILD
+void main_menu_probe_search_text(const char *text) {
+    switch_screen(main_menu_screen);show_page(SEARCH);lv_textarea_set_text(search_field,text);++search_epoch;start_instant();search_keyboard_visible(false);
+}
+#endif
 
-static char browse_genres[2][256];
+/* Search's browse page, as Spotify lays it out: your top genres first, in a
+ * carousel of tiles that runs to the screen edge, then "Browse all" -- one grid
+ * of coloured tiles, each with a sleeve tilted into its corner. The sleeves are
+ * real covers from the library where there is one, loaded through the instant
+ * results' slots (the two never show at once). */
+#define BROWSE_GENRES 10
+static char browse_genres[BROWSE_GENRES][256];
 static int browse_genre_count;
-static bool browse_genre_row(const char *name, const char *path, const char *artist, void *user) {
-    (void)path; (void)artist; (void)user;
-    if (browse_genre_count == 2) return false;
-    snprintf(browse_genres[browse_genre_count++], 256, "%s", name);
-    return browse_genre_count < 2;
-}
+static int browse_art_slot;
+static const uint32_t TILE_COLORS[] = {0xe8115b, 0x006450, 0x8400e7, 0x1e3264, 0xdc148c, 0x477d95,
+                                       0xaf2896, 0x509bf5, 0xba5d07, 0x148a08, 0xe13300, 0x7358ff};
 static void browse_genre_cb(lv_event_t *e) {
     const char *genre=lv_event_get_user_data(e);
     if (tapped()) medialist_open(genre, LIBRARY_LIST_TRACKS, LIBRARY_FILTER_GENRE, genre);
 }
-static lv_obj_t *browse_pair(const char *title) {
-    section(search_results,title);
-    lv_obj_t *pair=box(search_results,cfg->screen_width-2*PAD,126,false);
-    lv_obj_set_flex_flow(pair,LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(pair,12,0);
-    return pair;
+/* A track of that list to take the sleeve from. */
+typedef struct {
+    char genres[BROWSE_GENRES][256], genre_art[BROWSE_GENRES][512], tile_art[6][512];
+    int count;
+    unsigned revision;
+} browse_data_t;
+static browse_data_t browse_data, browse_pending;
+static bool browse_busy, browse_valid;
+static int browse_ready;
+static bool browse_collect(const char *name,const char *path,const char *artist,void *unused) {
+    (void)path;(void)artist;(void)unused;
+    if(browse_pending.count>=BROWSE_GENRES)return false;
+    snprintf(browse_pending.genres[browse_pending.count++],256,"%s",name);
+    return browse_pending.count<BROWSE_GENRES;
 }
-static void browse_tile(lv_obj_t *pair,const char *title,uint32_t color,const lv_image_dsc_t *icon,int action,const char *genre) {
-    int w=(cfg->screen_width-2*PAD-12)/2;
-    lv_obj_t *tile=button(pair,NULL,w,118,genre?browse_genre_cb:action_cb,genre?(void *)genre:(void *)(intptr_t)action);
+static void *browse_worker(void *unused) {
+    (void)unused;
+    library_for_each(LIBRARY_LIST_GENRES,LIBRARY_FILTER_NONE,NULL,browse_collect,NULL);
+    for(int n=0;n<browse_pending.count;n++)
+        library_sample_path(LIBRARY_LIST_TRACKS,LIBRARY_FILTER_GENRE,browse_pending.genres[n],0,browse_pending.genre_art[n],512);
+    for(int n=0;n<6;n++)
+        library_sample_path(n==5?LIBRARY_LIST_MOST_PLAYED:LIBRARY_LIST_TRACKS,LIBRARY_FILTER_NONE,NULL,n,browse_pending.tile_art[n],512);
+    __atomic_store_n(&browse_ready,1,__ATOMIC_RELEASE);return NULL;
+}
+static void browse_poll(void) {
+    if(browse_busy && __atomic_load_n(&browse_ready,__ATOMIC_ACQUIRE)) {
+        browse_busy=false;browse_data=browse_pending;browse_valid=true;
+        browse_shown=false;
+        if(search_field && !lv_textarea_get_text(search_field)[0])search_browse();
+    }
+}
+static void browse_tile(lv_obj_t *parent, int w, int h, const char *title, uint32_t color, const lv_image_dsc_t *icon,
+                        int action, const char *genre, const char *art) {
+    lv_obj_t *tile=button(parent,NULL,w,h,genre?browse_genre_cb:action_cb,genre?(void *)genre:(void *)(intptr_t)action);
     lv_obj_set_style_bg_color(tile,lv_color_hex(color),0);
     lv_obj_set_style_bg_opa(tile,LV_OPA_COVER,0);
-    lv_obj_set_style_radius(tile,6,0);
-    lv_obj_t *t=label(tile,title,&font_ui_22_bold,w-24,false);
-    lv_obj_set_style_text_color(t,lv_color_white(),0);lv_obj_set_pos(t,14,14);
-    lv_obj_t *sleeve=box(tile,68,68,true);
-    lv_obj_set_style_bg_color(sleeve,lv_color_darken(lv_color_hex(color),LV_OPA_50),0);
-    lv_obj_set_style_radius(sleeve,3,0);lv_obj_set_pos(sleeve,w-64,62);
-    lv_obj_set_style_transform_rotation(sleeve,180,0);
-    lv_obj_t *im=glyph(sleeve,icon,34);lv_obj_center(im);
+    lv_obj_set_style_radius(tile,8,0); /* no corner clipping: a layer per tile per frame on the R1 */
+    lv_obj_set_style_bg_color(tile,lv_color_darken(lv_color_hex(color),LV_OPA_20),LV_STATE_PRESSED);
+    lv_obj_t *t=label(tile,title,&font_ui_22_bold,w-28,false);
+    lv_label_set_long_mode(t,LV_LABEL_LONG_WRAP);
+    lv_obj_set_height(t,LV_SIZE_CONTENT);
+    lv_obj_set_style_max_height(t,2*font_ui_22_bold.line_height,0);
+    lv_obj_set_style_text_color(t,lv_color_white(),0);lv_obj_set_pos(t,14,12);
+    /* The sleeve: tilted 25 degrees, half out of the tile's corner, shadowed. */
+    lv_obj_t *im=lv_image_create(tile);
+    lv_obj_set_size(im,78,78);
+    lv_obj_set_pos(im,w-62,h-64);
+    lv_obj_set_style_radius(im,4,0);
+    lv_obj_set_style_bg_color(im,lv_color_darken(lv_color_hex(color),LV_OPA_40),0);
+    lv_obj_set_style_bg_opa(im,LV_OPA_COVER,0);
+    lv_image_set_src(im,icon);
+    lv_image_set_inner_align(im,LV_IMAGE_ALIGN_CENTER);
     lv_obj_set_style_image_recolor(im,lv_color_white(),0);
+    lv_obj_set_style_image_recolor_opa(im,LV_OPA_COVER,0);
+    lv_obj_set_style_shadow_width(im,14,0);
+    lv_obj_set_style_shadow_color(im,lv_color_black(),0);
+    lv_obj_set_style_shadow_opa(im,LV_OPA_50,0);
+    lv_obj_set_style_transform_pivot_x(im,39,0);
+    lv_obj_set_style_transform_pivot_y(im,39,0);
+    lv_obj_set_style_transform_rotation(im,250,0);
+    if (icon == &icon_heart) {
+        /* Liked Songs keeps its own cover: the heart on the violet gradient. */
+        lv_obj_set_style_bg_color(im,lv_color_hex(0x450af5),0);
+        lv_obj_set_style_bg_grad_color(im,lv_color_hex(0xc4efd9),0);
+        lv_obj_set_style_bg_grad_dir(im,LV_GRAD_DIR_VER,0);
+        lv_image_set_src(im,NULL);
+        lv_obj_t *heart=lv_image_create(im);
+        lv_image_set_src(heart,&icon_heart);lv_obj_set_size(heart,36,36);
+        lv_image_set_inner_align(heart,LV_IMAGE_ALIGN_CONTAIN);
+        lv_obj_set_style_image_recolor(heart,lv_color_white(),0);
+        lv_obj_set_style_image_recolor_opa(heart,LV_OPA_COVER,0);
+        lv_obj_center(heart);
+    }
+    if (art && art[0] && browse_art_slot < LOCAL_HITS) {
+        int k = browse_art_slot++;
+        instant_images[k] = im;
+        coverloader_request(COVERLOADER_INSTANT_BASE + k, art, 78);
+    }
 }
-static void search_clear_cb(lv_event_t *e) { (void)e;lv_textarea_set_text(search_field,""); }
+static lv_obj_t *browse_heading(const char *title) {
+    lv_obj_t *l = label(search_results, title, &font_ui_24_bold, cfg->screen_width - 2 * PAD, false);
+    lv_obj_set_style_margin_top(l, 6, 0);
+    return l;
+}
+/* The field has a length limit, and with one LVGL empties it without sending
+ * VALUE_CHANGED: the clear button starts the empty search itself, which puts
+ * Browse back. */
+static void search_clear_cb(lv_event_t *e) { (void)e;lv_textarea_set_text(search_field,"");++search_epoch;start_instant(); }
 
 static void search_browse(void) {
+    if (browse_shown && browse_revision == library_revision(LIBRARY_LIST_TRACKS)) return;
+    browse_shown = true;
+    browse_revision = library_revision(LIBRARY_LIST_TRACKS);
     search_art_drop();
     lv_obj_clean(search_results);
-    browse_genre_count=0;
-    library_for_each(LIBRARY_LIST_GENRES,LIBRARY_FILTER_NONE,NULL,browse_genre_row,NULL);
-    lv_obj_t *pair=browse_pair(browse_genre_count?"Your genres":"Your music");
-    browse_tile(pair,browse_genre_count?browse_genres[0]:"Songs",0x9950ad,&icon_music2,OPEN_TRACKS,browse_genre_count?browse_genres[0]:NULL);
-    browse_tile(pair,browse_genre_count>1?browse_genres[1]:"Albums",0x637e25,&icon_album,OPEN_ALBUMS,browse_genre_count>1?browse_genres[1]:NULL);
-    pair=browse_pair("Explore your collection");
-    browse_tile(pair,"Podcasts",0x2865c7,&icon_podcast_list,OPEN_PODCASTS,NULL);
-    browse_tile(pair,"Playlists",0xc44822,&icon_list_music,OPEN_PLAYLISTS,NULL);
-    pair=browse_pair("Browse all");
-    browse_tile(pair,"Liked Songs",0x8170b3,&icon_heart,OPEN_FAVOURITES,NULL);
-    browse_tile(pair,"Artists",0x23375f,&icon_artist,OPEN_ARTISTS,NULL);
-    pair=browse_pair("More music");
-    browse_tile(pair,"Genres",0x3d8964,&icon_genre,OPEN_GENRES,NULL);
-    browse_tile(pair,"Downloads",0xb45b23,&icon_download,OPEN_DOWNLOADS,NULL);
-    route(search_results,"Streaming & radio","Your connected music services",&icon_wifi,OPEN_STREAMING);
-    route(search_results,"Files & folders","Browse the microSD card",&icon_folder,OPEN_BROWSE);
+    browse_art_slot = 0;
+    if(!browse_busy && (!browse_valid || browse_data.revision!=browse_revision)) {
+        memset(&browse_pending,0,sizeof(browse_pending));browse_pending.revision=browse_revision;
+        __atomic_store_n(&browse_ready,0,__ATOMIC_RELEASE);
+        browse_busy=start_worker(browse_worker);
+    }
+    browse_genre_count=browse_data.count;
+    memcpy(browse_genres,browse_data.genres,sizeof(browse_genres));
+    char art[512];
+    if (browse_genre_count) {
+        /* Your top genres: a carousel; the next tile peeks in at the edge and a
+         * sideways drag flicks through, each tile resting at the gutter. */
+        browse_heading("Your top genres");
+        lv_obj_t *row = box(search_results, cfg->screen_width, 118, false);
+        lv_obj_set_style_translate_x(row, -PAD, 0);
+        lv_obj_set_style_pad_hor(row, PAD, 0);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_pad_column(row, 12, 0);
+        lv_obj_set_scrollable(row, true);
+        lv_obj_set_scroll_dir(row, LV_DIR_HOR);
+        lv_obj_set_scroll_snap_x(row, LV_SCROLL_SNAP_START);
+        lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
+        for (int i = 0; i < browse_genre_count; i++) {
+            snprintf(art,sizeof(art),"%s",browse_data.genre_art[i]);
+            browse_tile(row, 196, 112, browse_genres[i], TILE_COLORS[i % 12], &icon_genre, 0, browse_genres[i], art);
+        }
+    }
+    browse_heading("Browse all");
+    int tw = (cfg->screen_width - 2 * PAD - 12) / 2;
+    lv_obj_t *grid = box(search_results, cfg->screen_width - 2 * PAD, LV_SIZE_CONTENT, false);
+    lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_column(grid, 12, 0);
+    lv_obj_set_style_pad_row(grid, 12, 0);
+    static const struct { const char *title; uint32_t color; int action; int sample; } TILES[] = {
+        {"All songs", 0x1e3264, OPEN_TRACKS, 0},      {"Liked Songs", 0x8400e7, OPEN_FAVOURITES, -1},
+        {"Albums", 0xe8115b, OPEN_ALBUMS, 1},         {"Artists", 0x477d95, OPEN_ARTISTS, 2},
+        {"Playlists", 0x006450, OPEN_PLAYLISTS, 3},   {"Genres", 0xba5d07, OPEN_GENRES, 4},
+        {"Most played", 0xaf2896, OPEN_MOST_PLAYED, 5}, {"Files & folders", 0x509bf5, OPEN_BROWSE, -1},
+        /* An R1 addition for classical libraries: who wrote it. */
+        {"Composers", 0x7d4b32, OPEN_COMPOSERS, -1},
+    };
+    static const lv_image_dsc_t *const ICONS[] = {&icon_music2, &icon_heart, &icon_album, &icon_artist,
+                                                  &icon_list_music, &icon_genre, &icon_music2, &icon_folder,
+                                                  &icon_music_note};
+    for (int i = 0; i < 9; i++) {
+        art[0] = 0;
+        if (TILES[i].sample >= 0)
+            snprintf(art,sizeof(art),"%s",browse_data.tile_art[TILES[i].sample]);
+        browse_tile(grid, tw, 112, TILES[i].title, TILES[i].color, ICONS[i], TILES[i].action, NULL, art);
+    }
 }
 
 static void search_build(void) {
@@ -787,23 +848,24 @@ static void search_build(void) {
     lv_obj_set_layout(p, LV_LAYOUT_NONE);
     lv_obj_set_scrollable(p, false);
     lv_obj_t *search_frame=box(p,cfg->screen_width-2*PAD,58,true);
-    lv_obj_set_pos(search_frame,0,0);lv_obj_set_style_radius(search_frame,28,0);
-    lv_obj_set_style_bg_color(search_frame,lv_color_hex(0x292929),0);
-    lv_obj_set_style_border_color(search_frame,lv_color_hex(0xcccccc),0);
-    lv_obj_set_style_border_width(search_frame,2,0);
+    /* Spotify's Search bar (iOS, captured 2026-11-04): white, slightly
+     * rounded, black glyph and text, "What do you want to listen to?". */
+    lv_obj_set_pos(search_frame,0,0);lv_obj_set_style_radius(search_frame,8,0);
+    lv_obj_set_style_bg_color(search_frame,lv_color_white(),0);
+    lv_obj_set_style_border_width(search_frame,0,0);
     search_field = lv_textarea_create(p);
     /* The text viewport itself excludes both icons. Padding alone lets a
      * horizontally scrolled URL paint underneath the search glyph. */
-    lv_obj_set_size(search_field, cfg->screen_width - 2 * PAD - 98, 54);
+    lv_obj_set_size(search_field, cfg->screen_width - 2 * PAD - 52, 54);
     lv_obj_set_pos(search_field, 48, 2);
     lv_textarea_set_one_line(search_field, true);
     lv_textarea_set_max_length(search_field, 160);
-    lv_textarea_set_placeholder_text(search_field, "Music, lyrics or a release link");
+    lv_textarea_set_placeholder_text(search_field, "What do you want to listen to?");
     lv_obj_add_style(search_field, &theme_style_card, 0);
     lv_obj_add_style(search_field, &theme_style_text, 0);
     lv_obj_set_style_text_font(search_field, &font_ui_20, 0);
     lv_obj_set_style_bg_color(search_field,lv_color_hex(0x292929),0);
-    lv_obj_set_style_text_color(search_field,lv_color_white(),0);
+    lv_obj_set_style_text_color(search_field,lv_color_black(),0);
     lv_obj_set_style_radius(search_field,0,0);
     lv_obj_set_style_border_width(search_field,0,0);
     lv_obj_set_style_border_width(search_field,0,LV_STATE_FOCUSED);
@@ -812,240 +874,43 @@ static void search_build(void) {
     lv_obj_set_scrollbar_mode(search_field,LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_bg_opa(search_field,LV_OPA_TRANSP,0);
     lv_obj_set_style_pad_left(search_field,0,0);lv_obj_set_style_pad_right(search_field,0,0);
-    lv_obj_set_style_text_color(search_field,lv_color_hex(0xb3b3b3),LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_set_style_text_color(search_field,lv_color_hex(0x535353),LV_PART_TEXTAREA_PLACEHOLDER);
     lv_obj_t *mag=lv_image_create(p);lv_image_set_src(mag,&icon_search);lv_obj_set_size(mag,26,26);
+    lv_obj_set_style_image_recolor(mag,lv_color_black(),0);lv_obj_set_style_image_recolor_opa(mag,LV_OPA_COVER,0);
     lv_image_set_inner_align(mag,LV_IMAGE_ALIGN_CONTAIN);lv_obj_set_pos(mag,14,16);
     lv_obj_t *clear=button(p,"",44,52,search_clear_cb,NULL);lv_obj_set_pos(clear,cfg->screen_width-2*PAD-46,3);
+    search_clear_btn=clear;
     lv_obj_set_style_bg_opa(clear,0,0);lv_obj_t *x=lv_image_create(clear);lv_image_set_src(x,&icon_close);
+    lv_obj_set_style_image_recolor(x,lv_color_black(),0);lv_obj_set_style_image_recolor_opa(x,LV_OPA_COVER,0);
     lv_obj_set_size(x,24,24);lv_image_set_inner_align(x,LV_IMAGE_ALIGN_CONTAIN);lv_obj_center(x);
     keyboard_style_caret(search_field);
     lv_obj_add_event_cb(search_field, field_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(search_field, instant_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    const char *names[] = {"All", "Local", "Online"};
-    for (int i = 0; i < 3; i++) {
-        filter_buttons[i] = button(p, names[i], 110, 46, filter_cb, (void *)(intptr_t)i);
-        lv_obj_set_pos(filter_buttons[i], i * 120, 68);
-        lv_obj_set_style_radius(filter_buttons[i],24,0);
-        lv_obj_set_style_bg_opa(filter_buttons[i],LV_OPA_TRANSP,0);
-        lv_obj_set_style_border_color(filter_buttons[i],lv_color_hex(0x555555),0);
-        lv_obj_set_style_border_width(filter_buttons[i],1,0);
+    search_clear_sync();
+    lv_obj_t *chips=box(p,cfg->screen_width-2*PAD,50,false);lv_obj_set_pos(chips,0,68);search_chips=chips;
+    lv_obj_set_flex_flow(chips,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(chips,8,0);
+    lv_obj_set_scrollable(chips,true);lv_obj_set_scroll_dir(chips,LV_DIR_HOR);lv_obj_set_scrollbar_mode(chips,LV_SCROLLBAR_MODE_OFF);
+    const char *names[]={"All","Songs","Albums","Artists","Playlists","Lyrics"};
+    const int widths[]={58,86,96,94,110,88};
+    for(int i=0;i<6;i++) {
+        filter_buttons[i]=button(chips,names[i],widths[i],46,filter_cb,(void *)(intptr_t)i);
+        lv_obj_set_style_radius(filter_buttons[i],23,0);lv_obj_set_style_bg_color(filter_buttons[i],mint(),0);
+        lv_obj_set_style_bg_opa(filter_buttons[i],i?LV_OPA_TRANSP:LV_OPA_COVER,0);
+        lv_obj_set_style_border_width(filter_buttons[i],1,0);lv_obj_set_style_border_color(filter_buttons[i],lv_color_hex(0x555555),0);
+        lv_obj_set_style_text_color(lv_obj_get_child(filter_buttons[i],0),i?ink():lv_color_black(),0);
     }
-    lv_obj_set_style_border_width(filter_buttons[0], 2, 0);
-    lv_obj_set_style_border_color(filter_buttons[0], mint(), 0);
-    lv_obj_t *sources = button(p, "Sources", 80, 46, action_cb, (void *)OPEN_PROVIDERS);
-    lv_obj_set_style_text_font(lv_obj_get_child(sources, 0), &font_ui_14, 0);
-    lv_obj_set_height(lv_obj_get_child(sources, 0), 20);
-    lv_obj_set_pos(sources, 360, 68);
     search_status = label(p, "", &font_ui_16, cfg->screen_width - 2 * PAD, true);
     lv_obj_set_pos(search_status, 0, 122);
-    search_results = column(p, cfg->screen_width - 2 * PAD, body_height() - 150);
-    lv_obj_set_pos(search_results, 0, 150);
+    search_results = column(p, cfg->screen_width, body_height() - 150);
+    lv_obj_set_style_pad_hor(search_results, PAD, 0);
+    lv_obj_set_pos(search_results, -PAD, 150);
     search_browse();
     search_keyboard_parent = box(main_menu_screen, cfg->screen_width, 310, false);
     lv_obj_set_pos(search_keyboard_parent, 0, cfg->screen_height - NAV_H - 310);
     search_keyboard = keyboard_create(search_keyboard_parent, cfg->screen_width, 310, search_field,
                                       &icon_search, NULL, submit_cb, NULL);
     search_keyboard_visible(false);
-}
-
-static discovery_preferences_t provider_draft;
-static lv_obj_t *provider_body,*provider_values[7],*provider_tabs[3],*provider_notice;
-static int provider_tab;
-static void provider_refresh(void) {
-    char text[96];
-    if(provider_values[6])lv_label_set_text(provider_values[6],(const char *[]){"Catalog: Archive releases","Catalog: Deezer tracks","Catalog: Deezer albums"}[provider_draft.catalog]);
-    if(provider_values[0])lv_label_set_text(provider_values[0],provider_draft.enabled?"Online discovery: On":"Online discovery: Off");
-    if(provider_values[1])lv_label_set_text(provider_values[1],(const char *[]){"Use source format order","Prefer MP3 sources","Prefer FLAC sources"}[provider_draft.format]);
-    if(provider_values[2])lv_label_set_text(provider_values[2],provider_draft.transfers.start_immediately?"Start new downloads: On":"Start new downloads: Off");
-    if(provider_values[3]){snprintf(text,sizeof(text),"Network attempts: %u",provider_draft.transfers.attempts);lv_label_set_text(provider_values[3],text);}
-    if(provider_values[4]){if(provider_draft.transfers.rate_kib)snprintf(text,sizeof(text),"Speed limit: %u KiB/s",provider_draft.transfers.rate_kib);else snprintf(text,sizeof(text),"Speed limit: Unlimited");lv_label_set_text(provider_values[4],text);}
-    if(provider_values[5])lv_label_set_text(provider_values[5],(const char *[]){"Filename: Source identity","Filename: Title - Artist","Filename: Artist - Title"}[provider_draft.transfers.naming]);
-}
-static void provider_setting_cb(lv_event_t *e) {
-    if(!tapped())return;
-    switch((intptr_t)lv_event_get_user_data(e)) {
-    case 0:provider_draft.enabled=!provider_draft.enabled;break;
-    case 1:provider_draft.format=(provider_draft.format+1)%3;break;
-    case 2:provider_draft.transfers.start_immediately=!provider_draft.transfers.start_immediately;break;
-    case 3:provider_draft.transfers.attempts=provider_draft.transfers.attempts%3+1;break;
-    case 4:provider_draft.transfers.rate_kib=provider_draft.transfers.rate_kib==0?128:provider_draft.transfers.rate_kib==128?512:0;break;
-    case 6:provider_draft.catalog=(provider_draft.catalog+1)%3;break;
-    case 5:provider_draft.transfers.naming=(provider_draft.transfers.naming+1)%3;break;
-    }
-    lv_label_set_text(provider_notice,"Unsaved changes");provider_refresh();
-}
-static void provider_choice(int id) {
-    lv_obj_t *b=button(provider_body,"",cfg->screen_width-2*PAD,52,provider_setting_cb,(void *)(intptr_t)id);
-    provider_values[id]=lv_obj_get_child(b,0);
-}
-static void provider_note(const char *text) {
-    lv_obj_t *l=label(provider_body,text,&font_ui_18,cfg->screen_width-2*PAD,true);
-    lv_label_set_long_mode(l,LV_LABEL_LONG_WRAP);
-}
-static void provider_content(void) {
-    lv_obj_clean(provider_body);memset(provider_values,0,sizeof(provider_values));
-    for(int i=0;i<3;i++)lv_obj_set_style_bg_color(provider_tabs[i],lv_color_hex(i==provider_tab?0x167c40:0x282828),0);
-    if(provider_tab==0) {
-        provider_choice(6);provider_choice(0);provider_choice(1);
-        provider_note("Archive provides downloadable source files. Deezer provides catalog metadata only; it does not supply offline audio here.");
-        route(provider_body,"Wi-Fi settings","Choose a network",&icon_wifi,OPEN_WIFI);
-    } else if(provider_tab==1) {
-        provider_choice(2);provider_choice(3);provider_choice(4);
-        provider_note("One transfer at a time. Start Off adds paused jobs. Restored jobs always wait for Resume. Retry settings apply to the next transfer.");
-    } else {
-        provider_choice(5);
-        provider_note("Destination: microSD / Downloads\nNew filenames keep a source suffix to distinguish recordings. Existing jobs keep their filenames.");
-        provider_note("Existing files: verify size and checksum; never overwrite. Original audio and embedded tags are preserved. Source details are saved alongside the audio.");
-    }
-    lv_obj_scroll_to_y(provider_body,0,LV_ANIM_OFF);provider_refresh();
-}
-static void provider_tab_cb(lv_event_t *e) {
-    if(!tapped())return;
-    provider_tab=(int)(intptr_t)lv_event_get_user_data(e);provider_content();
-}
-static void provider_save_cb(lv_event_t *e) {
-    if(!tapped())return;
-    intptr_t action=(intptr_t)lv_event_get_user_data(e);
-    if(action==1){provider_draft=discovery_preferences_load();lv_label_set_text(provider_notice,"Changes discarded");}
-    else if(action==2){provider_draft=discovery_preferences_defaults();lv_label_set_text(provider_notice,"Defaults ready - tap Save");}
-    else {
-        if(!discovery_preferences_save(&provider_draft)){lv_label_set_text(provider_notice,"Could not save settings");return;}
-        search_epoch++;online_wanted=false;memset(&shown.online,0,sizeof(shown.online));
-        lv_label_set_text(provider_notice,"Settings saved");
-    }
-    provider_refresh();
-}
-static void providers_build(void) {
-    lv_obj_t *p=page[PROVIDERS];int w=cfg->screen_width-2*PAD;
-    lv_obj_t *tabs=box(p,w,46,false);lv_obj_set_flex_flow(tabs,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(tabs,8,0);
-    for(int i=0;i<3;i++)provider_tabs[i]=button(tabs,(const char *[]){"Sources","Transfers","Files"}[i],(w-16)/3,46,provider_tab_cb,(void *)(intptr_t)i);
-    provider_body=column(p,w,body_height()-46-52-24-36);
-    lv_obj_t *actions=box(p,w,52,false);lv_obj_set_flex_flow(actions,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(actions,8,0);
-    for(int i=0;i<3;i++)button(actions,(const char *[]){"Save","Discard","Defaults"}[i],(w-16)/3,52,provider_save_cb,(void *)(intptr_t)i);
-    provider_notice=label(p,"",&font_ui_16,w,true);lv_obj_set_height(provider_notice,24);
-}
-
-static download_job_t jobs[DOWNLOAD_MAX_JOBS];
-static lv_obj_t *job_group[DOWNLOAD_MAX_JOBS], *job_cancel[DOWNLOAD_MAX_JOBS];
-static lv_obj_t *job_title[DOWNLOAD_MAX_JOBS], *job_status[DOWNLOAD_MAX_JOBS], *job_card[DOWNLOAD_MAX_JOBS];
-static int job_count,job_filter;
-static lv_obj_t *job_filters[5],*jobs_empty,*jobs_summary;
-static void downloads_update(void);
-static void job_filter_cb(lv_event_t *e) {
-    if(!tapped())return;
-    job_filter=(int)(intptr_t)lv_event_get_user_data(e);downloads_update();
-}
-static void job_all_cb(lv_event_t *e) {
-    if(!tapped())return;
-    bool resume=(intptr_t)lv_event_get_user_data(e)==1;
-    download_job_t snapshot[DOWNLOAD_MAX_JOBS];int n=download_snapshot(snapshot,DOWNLOAD_MAX_JOBS);
-    for(int i=0;i<n;i++) {
-        if(resume && (snapshot[i].state==DOWNLOAD_PAUSED || snapshot[i].state==DOWNLOAD_FAILED))download_resume(snapshot[i].id);
-        else if(!resume && (snapshot[i].state==DOWNLOAD_RUNNING || snapshot[i].state==DOWNLOAD_QUEUED))download_pause(snapshot[i].id);
-    }
-    downloads_update();
-}
-
-
-static void job_cb(lv_event_t *e) {
-    intptr_t index = (intptr_t)lv_event_get_user_data(e);
-    if (!tapped() || index < 0 || index >= job_count) return;
-    download_job_t *job = &jobs[index];
-    if (job->state == DOWNLOAD_DONE) {
-        if (!gui_card_available()) { gui_notify_no_card(); return; }
-        player_play_file(job->path);
-    } else if (job->state == DOWNLOAD_PAUSED || job->state == DOWNLOAD_FAILED) download_resume(job->id);
-    else if (job->state == DOWNLOAD_QUEUED || job->state == DOWNLOAD_RUNNING) download_pause(job->id);
-}
-
-static void cancel_cb(lv_event_t *e) {
-    intptr_t index = (intptr_t)lv_event_get_user_data(e);
-    if (tapped() && index >= 0 && index < job_count) download_cancel(jobs[index].id);
-}
-
-static void downloads_build(void) {
-    lv_obj_t *p = page[DOWNLOADS];
-    int w=cfg->screen_width-2*PAD;
-    lv_obj_t *filters=box(p,w,46,false);lv_obj_set_flex_flow(filters,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(filters,5,0);
-    for(int i=0;i<5;i++)job_filters[i]=button(filters,(const char *[]){"All","Active","Paused","Done","Failed"}[i],(w-20)/5,46,job_filter_cb,(void *)(intptr_t)i);
-    jobs_summary=label(p,"",&font_ui_16,w,true);
-    lv_obj_t *actions=box(p,w,48,false);lv_obj_set_flex_flow(actions,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(actions,12,0);
-    button(actions,"Start all",(w-12)/2,48,job_all_cb,(void *)1);
-    button(actions,"Pause all",(w-12)/2,48,job_all_cb,(void *)0);
-    jobs_empty=label(p,"",&font_ui_18,w,true);
-    lv_label_set_long_mode(jobs_empty,LV_LABEL_LONG_WRAP);
-    lv_obj_t *hint = label(p, "Tap a transfer to pause or resume. Tap a completed track to play.", &font_ui_18,
-                           cfg->screen_width - 2 * PAD, true);
-    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
-    for (int i = 0; i < DOWNLOAD_MAX_JOBS; i++) {
-        job_group[i]=label(p,"",&font_ui_18,cfg->screen_width-2*PAD,false);
-        lv_obj_set_height(job_group[i],52);
-        job_card[i] = button(p, NULL, cfg->screen_width - 2 * PAD, 112, job_cb, (void *)(intptr_t)i);
-        job_title[i] = label(job_card[i], "", &font_ui_20, cfg->screen_width - 140, false);
-        lv_obj_set_height(job_title[i], 28);
-        lv_obj_set_pos(job_title[i], 12, 10);
-        job_status[i] = label(job_card[i], "", &font_ui_16, cfg->screen_width - 140, true);
-        lv_obj_set_pos(job_status[i], 12, 42);
-        lv_label_set_long_mode(job_status[i], LV_LABEL_LONG_WRAP);
-        lv_obj_t *cancel = job_cancel[i] = button(job_card[i], "X", 52, 52, cancel_cb, (void *)(intptr_t)i);
-        lv_obj_set_event_bubble(cancel, false);
-        lv_obj_align(cancel, LV_ALIGN_RIGHT_MID, -8, 0);
-        lv_obj_set_hidden(job_card[i], true);
-    }
-    route(p, "Listen offline", "Open your indexed music", &icon_music2, OPEN_TRACKS);
-}
-
-static void downloads_update(void) {
-    job_count = download_snapshot(jobs, DOWNLOAD_MAX_JOBS);
-    int total=job_count,counts[5]={job_count,0,0,0,0};
-    for(int i=0;i<job_count;i++) {
-        download_state_t state=jobs[i].state;
-        counts[1]+=state==DOWNLOAD_QUEUED || state==DOWNLOAD_RUNNING;
-        counts[2]+=state==DOWNLOAD_PAUSED;counts[3]+=state==DOWNLOAD_DONE;counts[4]+=state==DOWNLOAD_FAILED;
-    }
-    int kept=0;
-    for(int i=0;i<job_count;i++) {
-        download_state_t state=jobs[i].state;
-        if(job_filter==0 || (job_filter==1 && (state==DOWNLOAD_QUEUED || state==DOWNLOAD_RUNNING)) ||
-           (job_filter==2 && state==DOWNLOAD_PAUSED) || (job_filter==3 && state==DOWNLOAD_DONE) ||
-           (job_filter==4 && state==DOWNLOAD_FAILED))jobs[kept++]=jobs[i];
-    }
-    job_count=kept;char summary[128];
-    snprintf(summary,sizeof(summary),"%d total / %d active / %d done / %d failed",total,counts[1],counts[3],counts[4]);
-    lv_label_set_text(jobs_summary,summary);
-    lv_obj_set_hidden(jobs_empty,job_count>0);
-    lv_label_set_text(jobs_empty,total?"No downloads in this filter.":"No downloads yet. Choose a recording in Search to get started.");
-    for(int i=0;i<5;i++)lv_obj_set_style_bg_color(job_filters[i],lv_color_hex(i==job_filter?0x167c40:0x282828),0);
-    /* Keep release members adjacent without altering transfer scheduling. */
-    for(int i=1;i<job_count;i++) {
-        download_job_t job=jobs[i];int j=i;
-        while(j>0 && strcmp(jobs[j-1].item.id,job.item.id)>0){jobs[j]=jobs[j-1];j--;}
-        jobs[j]=job;
-    }
-    for (int i = 0; i < DOWNLOAD_MAX_JOBS; i++) {
-        lv_obj_set_hidden(job_card[i], i >= job_count);
-        bool group=i<job_count && (!i || strcmp(jobs[i-1].item.id,jobs[i].item.id));
-        lv_obj_set_hidden(job_group[i],!group);
-        if(group) {
-            int total=0,done=0;
-            for(int j=i;j<job_count && !strcmp(jobs[i].item.id,jobs[j].item.id);j++) {total++;done+=jobs[j].state==DOWNLOAD_DONE;}
-            char title[256];snprintf(title,sizeof(title),"%.180s\n%d of %d downloaded",jobs[i].item.album,done,total);
-            lv_label_set_text(job_group[i],title);
-        }
-        if (i >= job_count) continue;
-        download_job_t *job = &jobs[i];
-        char local_title[256];
-        bool indexed=job->state==DOWNLOAD_DONE && library_track_title(job->path,local_title,sizeof(local_title));
-        lv_label_set_text(job_title[i],indexed?local_title:job->item.title);
-        lv_obj_set_hidden(job_cancel[i],job->state==DOWNLOAD_DONE || job->state==DOWNLOAD_CANCELLED);
-        char status[256];
-        snprintf(status, sizeof(status), "%s  /  %.1f / %.1f MB\n%s", download_state_name(job->state),
-                 (double)job->done / 1048576, (double)job->total / 1048576, job->error);
-        if (job->state == DOWNLOAD_RUNNING)
-            snprintf(status, sizeof(status), "%d%% / %s / %u KB/s\nTap to pause",
-                     job->total?(int)(100*job->done/job->total):0, job->item.format, job->bytes_per_second / 1024);
-        lv_label_set_text(job_status[i], status);
-    }
+    search_chips_show(false);
 }
 
 static void mini_open_cb(lv_event_t *e) { (void)e; if (tapped()) player_sheet_open(true); }
@@ -1092,7 +957,34 @@ static void mini_update(void) {
 
 static void poll_cb(lv_timer_t *timer) {
     (void)timer;
+    if(tab_save_pending && lv_tick_elaps(tab_changed)>1500 && lv_display_get_inactive_time(NULL)>1000) {config_save();tab_save_pending=false;}
+    browse_poll();
     search_art_update();
+    /* Search and Your Library made ahead, hidden, once the screen has been
+     * left alone for a few seconds on the main pages: the first tap on either
+     * then only shows it. One at a time, a few seconds apart. */
+    static uint32_t prebuilt_at;
+    if (lv_screen_active() == main_menu_screen && lv_display_get_inactive_time(NULL) > 3000 &&
+        lv_tick_elaps(prebuilt_at) > 4000 && !bottomsheet_active() && !player_sheet_is_open()) {
+        int want = !page[SEARCH] ? SEARCH : !page[LIBRARY] ? LIBRARY : -1;
+        uint32_t started = lv_tick_get();
+        if (want >= 0) {
+            page_ensure(want);
+            prebuilt_at = lv_tick_get();
+            printf("home: %s built ahead in %u ms\n", want == SEARCH ? "Search" : "Your Library",
+                   (unsigned)lv_tick_elaps(started));
+        } else if (!library_scan_running() && selected != LIBRARY && collectionview_stale()) {
+            /* A hidden page brought up to date in the same quiet moment, not
+             * on the tap that shows it: after the startup check, refreshing
+             * Your Library on the tap took 1.9 s (2026-11-05). */
+            collectionview_refresh();
+            prebuilt_at = lv_tick_get();
+            printf("home: Your Library refreshed ahead in %u ms\n", (unsigned)lv_tick_elaps(started));
+        } else if (!library_scan_running() && selected != HOME && home_built && home_revision != home_signature()) {
+            home_build();
+            prebuilt_at = lv_tick_get();
+        }
+    }
     if(instant_pending && lv_tick_elaps(instant_changed)>=180)start_instant();
     if(local_busy) {
         pthread_mutex_lock(&search_lock);bool ready=local_ready;pthread_mutex_unlock(&search_lock);
@@ -1103,28 +995,8 @@ static void poll_cb(lv_timer_t *timer) {
                 memcpy(shown.local,pending.local,sizeof(shown.local));
                 memcpy(shown.artwork,pending.artwork,sizeof(shown.artwork));
                 memcpy(shown.artist,pending.artist,sizeof(shown.artist));
+                snprintf(shown_text,sizeof(shown_text),"%s",local_text);shown_type=local_type;
                 search_draw();
-            }
-        }
-    }
-    if(search_busy) {
-        pthread_mutex_lock(&search_lock);bool ready=search_ready;pthread_mutex_unlock(&search_lock);
-        if(ready) {
-            search_busy=false;
-            if(online_epoch==search_epoch) {
-                if(request_album) {
-                    /* Keep the previous results and scroll position under the release page. */
-                    lv_label_set_text(search_status,online_error);
-                    if(online_pending.count && selected==SEARCH &&
-                       (lv_screen_active()==main_menu_screen || online_album_active())) {
-                        if(online_pending.items[0].catalog && online_pending.items[0].artist_id[0])snprintf(release_artist,sizeof(release_artist),"deezer:artist:%s",online_pending.items[0].artist_id);
-                        else snprintf(release_artist,sizeof(release_artist),"%s",online_pending.items[0].artist);
-                        online_album_open(cfg,&online_pending,request_page,online_track_sheet,page_cb,artist_cb);
-                    }
-                } else {
-                    shown.online=online_pending;snprintf(shown.error,sizeof(shown.error),"%s",online_error);
-                    search_draw();
-                }
             }
         }
     }
@@ -1135,12 +1007,11 @@ static void poll_cb(lv_timer_t *timer) {
     if (selected == HOME) {
         /* Apply a completed import only at the top of an idle feed. A user
          * browsing a shelf keeps its order until returning to Home. */
-        if (home_revision!=library_revision(LIBRARY_LIST_TRACKS) && !library_scan_running()
+        if (home_revision!=home_signature() && !library_scan_running()
             && !bottomsheet_active() && lv_obj_get_scroll_y(page[HOME])==0
             && lv_display_get_inactive_time(NULL)>2000) home_build();
         home_art_update();
     }
-    if (selected == DOWNLOADS) downloads_update();
 }
 
 int main_menu_mount_footer(lv_obj_t *screen) {
@@ -1156,44 +1027,52 @@ void main_menu_restore_footer(lv_obj_t *screen) {
 static void nav_cb(lv_event_t *e) {
     if(!tapped()) return;
     int tab=(int)(intptr_t)lv_event_get_user_data(e);
-    if(lv_screen_active()!=main_menu_screen) {main_menu_mount_footer(main_menu_screen);switch_screen(main_menu_screen);}
-    show_page(tab);
+    /* The tab already open, tapped again: back to the top of it, as Spotify
+     * does -- the way out of a long Your Library. */
+    if(lv_screen_active()==main_menu_screen && tab==selected && tab==LIBRARY) {collectionview_scroll_top();return;}
+    if(lv_screen_active()!=main_menu_screen) {selected=tab;main_menu_mount_footer(main_menu_screen);switch_screen(main_menu_screen);}
+    else show_page(tab);
+}
+
+/* A tab's page, built the first time it is wanted -- or earlier, hidden, while
+ * nobody is touching the screen (prebuild_tick): building Search took most of
+ * a second on the R1 the first time it was opened (2026-11-05). */
+static void page_ensure(int tab) {
+    if (page[tab]) return;
+    /* Full width with the margin inside: card carousels run to the screen
+     * edges (Spotify's peeking shelves) while everything else keeps its
+     * 20 px gutter. */
+    page[tab] = column(main_menu_screen, cfg->screen_width, body_height());
+    lv_obj_set_style_pad_hor(page[tab], PAD, 0);
+    lv_obj_set_pos(page[tab], 0, cfg->top_bar_height + HEADER_H);
+    lv_obj_set_hidden(page[tab], tab != selected);
+    if (tab == SEARCH) search_build();
+    if (tab == LIBRARY) library_build();
 }
 
 static void show_page(int tab) {
-    if (tab < HOME || tab > PROVIDERS) return;
+    if (tab < HOME || tab > LIBRARY) return;
     selected = tab;
-    if(tab<=LIBRARY) {config_set_int("ui","last_tab",tab);config_save();}
-    if (tab != HOME) home_art_drop();
+    if(tab<=LIBRARY) {config_set_int("ui","last_tab",tab);tab_save_pending=true;tab_changed=lv_tick_get();}
+    /* Keep the bounded Home artwork slots warm across tab switches. */
     if (search_keyboard) search_keyboard_visible(false);
-    if (!page[tab]) {
-        page[tab] = column(main_menu_screen, cfg->screen_width - 2 * PAD, body_height());
-        lv_obj_set_pos(page[tab], PAD, cfg->top_bar_height + HEADER_H);
-        if (tab == SEARCH) search_build();
-        if (tab == LIBRARY) library_build();
-        if (tab == DOWNLOADS) downloads_build();
-        if (tab == PROVIDERS) providers_build();
-    }
-    for (int i = 0; i < 5; i++) if (page[i]) lv_obj_set_hidden(page[i], i != tab);
-    const char *titles[] = {"Sonix", "Search", "Your Library", "Downloads", "Online settings"};
+    page_ensure(tab);
+    for (int i = 0; i < 3; i++) if (page[i]) lv_obj_set_hidden(page[i], i != tab);
+    const char *titles[] = {"Home", "Search", "Your Library"};
     lv_label_set_text(heading, titles[tab]);
     lv_obj_set_hidden(header_add,tab!=LIBRARY);
-    lv_obj_set_hidden(header_search,tab!=LIBRARY);lv_obj_set_hidden(header_tools,tab==LIBRARY);
-    lv_obj_set_hidden(header_settings,tab==LIBRARY);
+    lv_obj_set_hidden(header_search,tab!=LIBRARY);lv_obj_set_hidden(header_tools,true);
+    lv_obj_set_hidden(header_settings,true);
     for (int i = 0; i < 3; i++) {
-        bool active = i == (tab == DOWNLOADS ? LIBRARY : tab == PROVIDERS ? SEARCH : tab);
+        bool active = i == tab;
         lv_obj_set_style_image_recolor(nav_icon[i], active ? ink() : quiet(), 0);
         lv_obj_set_style_text_color(nav_label[i], active ? ink() : quiet(), 0);
     }
-    if (tab == HOME) home_build();
-    if (tab == PROVIDERS) {provider_draft=discovery_preferences_load();provider_tab=0;provider_content();lv_label_set_text(provider_notice,"");}
-    if (tab == DOWNLOADS) downloads_update();
-    if(tab==LIBRARY) collectionview_refresh();
-}
-
-void main_menu_open_downloads(void) {
-    if(lv_screen_active()!=main_menu_screen) switch_screen(main_menu_screen);
-    show_page(DOWNLOADS);
+    if (tab == HOME) home_build_if_stale();
+    /* Only when something it lists changed: rebuilt on every visit, it took
+     * over a second on the R1 (2026-11-05). */
+    if(tab==LIBRARY) collectionview_refresh_if_stale();
+    if(tab==SEARCH && search_keyboard)search_keyboard_visible(false);
 }
 
 static void screen_cb(lv_event_t *e) {
@@ -1204,7 +1083,6 @@ static void screen_cb(lv_event_t *e) {
     } else {
         if (search_keyboard) search_keyboard_visible(false);
         mini_drop();
-        home_art_drop();
     }
 }
 
@@ -1215,20 +1093,24 @@ void main_menu_init(gui_config_t *config) {
     tools_screen = lv_obj_create(NULL);
     const grid_entry_t entries[] = {
         {"music", &icon_menu_music, &music_screen},
-        {"streaming", &icon_menu_streaming, &streaming_screen},
         {"wireless", &icon_menu_wireless, &wireless_screen},
         {"audiobooks", &icon_menu_audiobooks, &audiobooks_screen},
         {"more", &icon_menu_more, &morepage_screen},
         {"settings", &icon_menu_settings, &settings_screen},
     };
-    gridpage_build(tools_screen, cfg, entries, 6, 2, 3, true);
+    gridpage_build(tools_screen, cfg, entries, 5, 2, 3, true);
     switcher_attach_back_gesture(tools_screen);
     lv_obj_add_style(main_menu_screen, &theme_style_screen, 0);
     lv_obj_set_style_pad_all(main_menu_screen, 0, 0);
     lv_obj_set_scrollable(main_menu_screen, false);
     if(theme_is_dark()) {lv_obj_set_style_bg_color(main_menu_screen,lv_color_hex(0x121212),0);topbar_tint_on_screen(main_menu_screen,true,lv_color_hex(0x121212),lv_color_white());}
-    heading = label(main_menu_screen, "Sonix", &font_ui_28, cfg->screen_width - 140, false);
-    lv_obj_set_pos(heading, PAD, cfg->top_bar_height + 17);
+    header_profile = button(main_menu_screen, NULL, 44, 44, device_menu_cb, NULL);
+    lv_obj_set_style_radius(header_profile, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_ext_click_area(header_profile, 4);
+    lv_obj_set_pos(header_profile, PAD - 4, cfg->top_bar_height + 12);
+    avatar(header_profile, 44, &font_ui_20_bold);
+    heading = label(main_menu_screen, "Home", &font_ui_28, cfg->screen_width - 200, false);
+    lv_obj_set_pos(heading, PAD + 52, cfg->top_bar_height + 17);
     lv_obj_t *tools = button(main_menu_screen, NULL, 48, 48, action_cb, (void *)OPEN_TOOLS);
     header_tools=tools;
     lv_obj_set_style_bg_opa(tools,LV_OPA_TRANSP,0);
@@ -1249,6 +1131,8 @@ void main_menu_init(gui_config_t *config) {
     lv_obj_center(glyph(header_add,&icon_plus,28));
     mini = button(main_menu_screen, NULL, cfg->screen_width - 24, MINI_H, mini_open_cb, NULL);
     lv_obj_set_pos(mini, 12, cfg->screen_height - NAV_H - MINI_H - 6);
+    player_sheet_attach_drag(mini, true); /* swipe it up, as on Spotify */
+    player_sheet_set_handle(mini);
     lv_obj_set_style_bg_color(mini,lv_color_hex(0x252525),0);
     lv_obj_set_style_radius(mini,6,0);
     mini_art = glyph(mini, &icon_music2, 44);

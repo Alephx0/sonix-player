@@ -91,6 +91,9 @@ lv_obj_t *bottomsheet_open(int height, void (*cleanup)(void)) {
 			fn();
 		}
 		lv_obj_clean(body);
+		lv_obj_scroll_to_y(body, 0, LV_ANIM_OFF);
+		/* As a fresh body: no padding left from the sheet before. */
+		lv_obj_set_style_pad_all(body, 0, 0);
 	} else {
 		overlay = lv_obj_create(lv_layer_top());
 		lv_obj_remove_style_all(overlay);
@@ -139,7 +142,12 @@ lv_obj_t *bottomsheet_open(int height, void (*cleanup)(void)) {
 		body = lv_obj_create(panel);
 		lv_obj_remove_style_all(body);
 		lv_obj_set_pos(body, 0, 36);
-		lv_obj_set_scrollable(body, false);
+		/* A sheet capped at the screen's height (Display size Large) scrolls
+		 * what does not fit, rather than cutting it off (device round 4: the
+		 * Sound sheet's last rows, "All audio settings" among them). A body
+		 * whose content fits does not move. */
+		lv_obj_set_scroll_dir(body, LV_DIR_VER);
+		lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_ACTIVE);
 		lv_obj_set_clickable(body, true);
 	}
 	height = LV_MIN(h - 40, LV_MAX(160, height));

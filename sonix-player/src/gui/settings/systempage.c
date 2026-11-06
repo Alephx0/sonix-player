@@ -7,15 +7,16 @@
 #include "lvgl/lvgl.h"
 
 #include "src/gui/shell/confirm.h"
+#include "src/gui/shell/deviceprofile.h"
 #include "src/gui/shell/easteregg.h"
 #include "src/gui/fonts/fonts.h"
-#include "src/gui/settings/fwupdate.h"
 #include "src/gui/settings/settings.h"
 #include "src/gui/shell/settingsrow.h"
 #include "src/gui/shell/switcher.h"
 #include "src/gui/shell/theme.h"
 #include "src/system/core/config.h"
 #include "src/system/device/factoryreset.h"
+#include "src/system/device/firmware.h"
 #include "src/system/audio/headset.h"
 #include "src/system/core/lang.h"
 #include "src/system/device/power.h"
@@ -33,36 +34,55 @@ lv_obj_t *sysinfo_screen;
 // Firmware update
 //
 //   battery below 30% and not charging -> refuse, and say why
-//   otherwise                          -> the update card (fwupdate.h): from
-//                                         the internet or from the card
+//   no <model>.upt at the card's root  -> say where to put it
+//   otherwise                          -> confirm, then recovery installs it
+//
+// From the card only: the player is local-only, so the internet route of the
+// old update card is gone (device round 4 brought the card route back).
 // ---------------------------------------------------------------------------
 
 #define FIRMWARE_MIN_BATTERY_PERCENT 30
+
+static void firmware_confirmed(void *user) {
+	(void)user;
+	firmware_update_start(); // does not return on the device
+}
 
 static void firmware_clicked_cb(lv_event_t *e) {
 	(void)e;
 
 	// Charge check first, like the stock player: an update that loses power
-	// halfway leaves the device in recovery with a half-written kernel, the one
-	// failure here that cannot be undone from the UI. An unreadable level must
-	// not block the update: the reader returns "!!" when it cannot find the
-	// gauge (the host build, and any firmware naming that sysfs node
-	// differently), and refusing to update over a battery nobody can measure
-	// would be the opposite of useful.
+	// halfway leaves the device in recovery with a half-written kernel. An
+	// unreadable level ("!!" on the host) does not block it.
 	char *percent_text = read_battery_percent();
 	int percent = 100;
 	if (percent_text && percent_text[0] >= '0' && percent_text[0] <= '9') {
 		percent = atoi(percent_text);
 	}
-	bool charging = read_battery_charging();
-
-	if (percent < FIRMWARE_MIN_BATTERY_PERCENT && !charging) {
+	if (percent < FIRMWARE_MIN_BATTERY_PERCENT && !read_battery_charging()) {
 		gui_notify_popup("system_battery_warning");
 		return;
 	}
 
-	fwupdate_show();
+	static char message[300];
+	const char *stem = firmware_update_stem();
+	char path[512];
+	if (!firmware_update_file_find(path, sizeof(path))) {
+		snprintf(message, sizeof(message),
+				 "Copy %s.upt to the top folder of the card, then try again. Your music and settings stay as they are.",
+				 stem ? stem : "the update file");
+		confirm_notice("No update on the card", message);
+		return;
+	}
+	const char *name = strrchr(path, '/');
+	snprintf(message, sizeof(message),
+			 "The R1 restarts and installs %s, which takes a few minutes. Keep it charged and leave the card in. "
+			 "Your music and settings stay as they are.",
+			 name ? name + 1 : path);
+	confirm_show("Update from the card?", message, "Update", firmware_confirmed, NULL);
 }
+
+
 
 // ---------------------------------------------------------------------------
 // Factory reset
@@ -198,8 +218,62 @@ static lv_obj_t *info_row(lv_obj_t *parent, const char *name, lv_obj_t **value_o
 	return row;
 }
 
+static lv_obj_t *picture_value;
+static void picture_value_sync(void) {
+	if (picture_value) {
+		const char *path = deviceprofile_image();
+		const char *slash = strrchr(path, '/');
+		lv_label_set_text(picture_value, !path[0] ? "None" : slash ? slash + 1 : path);
+	}
+}
+static void name_clicked_cb(lv_event_t *e) {
+	(void)e;
+	deviceprofile_edit_name();
+}
+static void picture_clicked_cb(lv_event_t *e) {
+	(void)e;
+	deviceprofile_pick_image();
+}
+
+// The head of About: the device's picture and name, large, as the head of a
+// Spotify profile; tapping either changes it (Settings and the drawer show the
+// same two).
+static void identity_build(lv_obj_t *container) {
+	lv_obj_t *head = lv_obj_create(container);
+	lv_obj_remove_style_all(head);
+	lv_obj_set_size(head, lv_pct(100), LV_SIZE_CONTENT);
+	lv_obj_set_flex_flow(head, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_align(head, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_set_style_pad_ver(head, 8, 0);
+	lv_obj_set_style_pad_row(head, 10, 0);
+	lv_obj_set_scrollable(head, false);
+	lv_obj_t *av = lv_obj_create(head);
+	lv_obj_remove_style_all(av);
+	lv_obj_set_size(av, 120, 120);
+	lv_obj_set_clickable(av, true);
+	lv_obj_add_event_cb(av, picture_clicked_cb, LV_EVENT_CLICKED, NULL);
+	deviceprofile_avatar(av, 120, &font_ui_36_bold);
+	lv_obj_t *name = lv_label_create(head);
+	lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+	lv_obj_set_width(name, lv_pct(100));
+	lv_obj_set_style_text_align(name, LV_TEXT_ALIGN_CENTER, 0);
+	lv_obj_set_style_text_font(name, &font_ui_24_bold, 0);
+	lv_obj_add_style(name, &theme_style_text, 0);
+	lv_obj_set_clickable(name, true);
+	lv_obj_add_event_cb(name, name_clicked_cb, LV_EVENT_CLICKED, NULL);
+	deviceprofile_name_label(name);
+
+	lv_obj_t *name_value = NULL;
+	settingsrow_add(container, "Name", &name_value, name_clicked_cb, NULL);
+	deviceprofile_name_label(name_value);
+	settingsrow_add(container, "Picture", &picture_value, picture_clicked_cb, NULL);
+	picture_value_sync();
+	deviceprofile_on_change(picture_value_sync);
+}
+
 static void sysinfo_loaded_cb(lv_event_t *e) {
 	(void)e;
+	picture_value_sync();
 	// Card usage changes while the player runs, so it is re-read on every
 	// opening, and the tap counters start over.
 	sd_refresh();
@@ -212,6 +286,7 @@ static void refresh_theme(void) { sd_refresh(); }
 
 static void build_sysinfo_page(gui_config_t *cfg) {
 	lv_obj_t *container = settingsrow_page(sysinfo_screen, cfg, "system_about");
+	identity_build(container);
 
 	// --- device and DAC: two read-only rows ---
 	// Both come from system-info.json, which is the one place that knows which
@@ -300,7 +375,7 @@ void systempage_init(gui_config_t *cfg) {
 
 	settingsrow_add(container, "system_about", NULL, switch_screen_cb, sysinfo_screen);
 	// Actions, not pages: settingsrow_action leaves off the chevron.
-	settingsrow_action(container, "system_update_firmware", firmware_clicked_cb, NULL);
+	settingsrow_action(container, "Update from SD card", firmware_clicked_cb, NULL);
 	settingsrow_action(container, "system_factory_reset", factory_clicked_cb, NULL);
 
 	switcher_attach_back_gesture(systempage_screen);

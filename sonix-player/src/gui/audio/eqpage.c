@@ -326,7 +326,13 @@ static void paint_all(void) {
 }
 
 // A band's value changed: what it moves on the page.
+static void chips_rebuild(void);
+
 static void band_changed(int band) {
+	if (eqsettings_marked()[0]) {
+		eqsettings_mark(""); // moved by hand: no preset any more
+		chips_rebuild();
+	}
 	paint_knob(band);
 	if (band == eq.selected) {
 		paint_band_card();
@@ -363,6 +369,119 @@ void eqpage_refresh(void) {
 	}
 	paint_all();
 	paint_headroom();
+	chips_rebuild();
+}
+
+// ---------------------------------------------------------------------------
+// Presets, as Spotify shows them: a row of chips under the curve, the one put
+// on filled; the R1's saved presets first, then the built-in ones, and a chip
+// to save the curve as it stands as a preset of one's own (device round 4:
+// the presets were behind an unlabelled icon in the corner).
+// ---------------------------------------------------------------------------
+
+static lv_obj_t *chips_row;
+
+static void chip_free_cb(lv_event_t *e) { free(lv_event_get_user_data(e)); }
+
+static void chip_cb(lv_event_t *e) {
+	if (switcher_back_drag_active()) {
+		return;
+	}
+	const char *name = lv_event_get_user_data(e);
+	bool done = false;
+	for (int i = 0; i < EQ_DEFAULT_PRESET_COUNT && !done; i++) {
+		if (!strcmp(EQ_DEFAULT_PRESETS[i].name, name)) {
+			eq_apply_preset(&EQ_DEFAULT_PRESETS[i]);
+			done = true;
+		}
+	}
+	if (!done && !eq_preset_load(name)) {
+		return;
+	}
+	if (!eq_get_enabled()) {
+		eq_set_enabled(true); // a preset chosen is a preset to hear
+	}
+	eq_save();
+	eqsettings_mark(name);
+	eqpage_refresh();
+}
+
+static void chip_save_cb(lv_event_t *e) {
+	(void)e;
+	if (!switcher_back_drag_active()) {
+		eqsettings_save_new();
+	}
+}
+
+static lv_obj_t *chip(const char *text, bool active, lv_event_cb_t cb, char *owned) {
+	lv_obj_t *c = lv_obj_create(chips_row);
+	lv_obj_remove_style_all(c);
+	lv_obj_set_size(c, LV_SIZE_CONTENT, 40);
+	lv_obj_set_style_radius(c, 20, 0);
+	lv_obj_set_style_pad_hor(c, 16, 0);
+	lv_obj_set_style_bg_color(c, active ? lv_color_hex(0x1ed760) : lv_color_hex(0x2a2a2a), 0);
+	lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
+	lv_obj_set_clickable(c, true);
+	lv_obj_set_scrollable(c, false);
+	lv_obj_add_flag(c, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+	lv_obj_add_event_cb(c, cb, LV_EVENT_CLICKED, owned);
+	if (owned) {
+		lv_obj_add_event_cb(c, chip_free_cb, LV_EVENT_DELETE, owned);
+	}
+	lv_obj_t *l = lv_label_create(c);
+	lv_label_set_text(l, text);
+	lv_obj_set_style_text_font(l, &font_ui_18, 0);
+	lv_obj_set_style_text_color(l, active ? lv_color_black() : lv_color_white(), 0);
+	lv_obj_center(l);
+	return c;
+}
+
+static bool chip_saved(const char *name, void *user) {
+	(void)user;
+	char *owned = strdup(name);
+	if (owned) {
+		chip(name, !strcmp(eqsettings_marked(), name), chip_cb, owned);
+	}
+	return true;
+}
+
+static void chips_rebuild(void) {
+	if (!chips_row) {
+		return;
+	}
+	lv_obj_clean(chips_row);
+	chip("+ Save", false, chip_save_cb, NULL);
+	eq_preset_for_each(chip_saved, NULL);
+	const char *marked = eqsettings_marked();
+	lv_obj_t *active = NULL;
+	for (int i = 0; i < EQ_DEFAULT_PRESET_COUNT; i++) {
+		char *owned = strdup(EQ_DEFAULT_PRESETS[i].name);
+		if (!owned) {
+			continue;
+		}
+		bool on = !strcmp(marked, EQ_DEFAULT_PRESETS[i].name);
+		lv_obj_t *c = chip(tr(EQ_DEFAULT_PRESETS[i].name), on, chip_cb, owned);
+		if (on) {
+			active = c;
+		}
+	}
+	if (active) {
+		lv_obj_update_layout(chips_row);
+		lv_obj_scroll_to_view(active, LV_ANIM_OFF);
+	}
+}
+
+static void build_chips(lv_obj_t *container) {
+	chips_row = lv_obj_create(container);
+	lv_obj_remove_style_all(chips_row);
+	lv_obj_set_size(chips_row, lv_pct(100), 48);
+	lv_obj_set_flex_flow(chips_row, LV_FLEX_FLOW_ROW);
+	lv_obj_set_flex_align(chips_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_set_style_pad_column(chips_row, 8, 0);
+	lv_obj_set_scroll_dir(chips_row, LV_DIR_HOR);
+	lv_obj_set_scrollbar_mode(chips_row, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_set_scroll_snap_x(chips_row, LV_SCROLL_SNAP_NONE);
+	lv_obj_remove_flag(chips_row, LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
 }
 
 // ---------------------------------------------------------------------------
@@ -439,6 +558,7 @@ static void width_cb(lv_event_t *e) {
 static void reset_action(void *user) {
 	(void)user;
 	eq_reset();
+	eqsettings_mark("eq_flat");
 	eqpage_refresh();
 }
 
@@ -667,10 +787,13 @@ void eqpage_init(gui_config_t *cfg) {
 
 	eq.screen = lv_obj_create(NULL);
 	lv_obj_t *container = settingsrow_page(eq.screen, cfg, "equaliser");
-	settingsrow_title_corner_slots(settingsrow_page_title(eq.screen), cfg, 2);
+	settingsrow_title_corner_slots(settingsrow_page_title(eq.screen), cfg, 1);
 
 	settingsrow_toggle(container, "on", &eq.enable_sw, enable_cb);
 
+	/* Above the curve, not under it as on a phone: on the R1's screen the
+	 * curve fills the page and the chips would start out of sight. */
+	build_chips(container);
 	build_board(container);
 	build_band_card(container);
 
@@ -686,7 +809,9 @@ void eqpage_init(gui_config_t *cfg) {
 	note(container, "eq_page_note");
 
 	corner_button(0, &icon_music_settings, presets_cb);
-	eq.reset_btn = corner_button(1, &icon_reset, reset_cb);
+	/* No reset in the corner: the Flat chip is the same thing, and the title
+	 * needs the room (it read "Equali..." at Display size Large). */
+	(void)reset_cb;
 
 	eqpage_refresh();
 	lv_obj_add_event_cb(eq.screen, screen_loaded_cb, LV_EVENT_SCREEN_LOADED, NULL);

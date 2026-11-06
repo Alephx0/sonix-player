@@ -21,7 +21,6 @@
 #include "src/gui/shell/toast.h"
 #include "src/system/library/audiobookdb.h"
 #include "src/system/playback/playlist.h"
-#include "src/system/streaming/podcastdl.h"
 #include "src/system/core/lang.h"
 #include "src/system/library/library.h"
 #include "src/system/device/power.h"
@@ -55,7 +54,9 @@ static void poll_cb(lv_timer_t *timer) {
 	int found = library_scan_found();
 	lv_label_set_text_fmt(count_label, "%d", found);
 
-	if (library_scan_running()) {
+	// Finished once the tracks are indexed: lyrics for search are read on
+	// in the background and need nobody waiting on this page.
+	if (library_scan_running() && !library_scan_tracks_done()) {
 		return;
 	}
 
@@ -180,7 +181,7 @@ static void pick_read_folders(void) {
 	}
 	struct dirent *de;
 	while ((de = readdir(dir)) != NULL) {
-		if (de->d_name[0] == '.' || playlist_is_junk_name(de->d_name) || strcasecmp(de->d_name, AUDIOBOOKDB_FOLDER) == 0 || strcasecmp(de->d_name, PODCASTDL_FOLDER) == 0) {
+		if (de->d_name[0] == '.' || playlist_is_junk_name(de->d_name) || strcasecmp(de->d_name, AUDIOBOOKDB_FOLDER) == 0) {
 			continue;
 		}
 		char path[768];
@@ -282,7 +283,7 @@ static lv_obj_t *pick_button(lv_obj_t *parent, const char *text, bool accent, lv
 	lv_obj_t *label = lv_label_create(btn);
 	lv_label_set_text(label, tr(text));
 	lv_obj_set_style_text_font(label, &font_ui_22, 0);
-	lv_obj_set_style_text_color(label, accent ? lv_color_white() : theme()->text_primary, 0);
+	lv_obj_set_style_text_color(label, accent ? theme()->accent_ink : theme()->text_primary, 0);
 	lv_obj_center(label);
 	return btn;
 }
@@ -438,7 +439,7 @@ static lv_obj_t *make_button(lv_obj_t *parent, const char *text, lv_color_t colo
 	lv_obj_t *label = lv_label_create(button);
 	lv_label_set_text(label, tr(text));
 	lv_obj_set_style_text_font(label, &font_ui_24, 0);
-	lv_obj_set_style_text_color(label, lv_color_white(), 0);
+	lv_obj_set_style_text_color(label, lv_color_eq(colour, theme()->accent) ? theme()->accent_ink : lv_color_white(), 0);
 	lv_obj_center(label);
 
 	return button;

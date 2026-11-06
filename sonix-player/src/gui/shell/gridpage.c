@@ -10,6 +10,7 @@
 #include "src/gui/shell/settingsrow.h"
 #include "src/gui/shell/switcher.h"
 #include "src/gui/shell/icons.h"
+#include "src/gui/shell/main_menu.h"
 #include "src/gui/shell/theme.h"
 #include "src/system/core/lang.h"
 #include "src/system/device/usb.h"
@@ -60,7 +61,55 @@ void gridpage_set_tile(lv_obj_t *grid, int index, const lv_image_dsc_t *icon, co
 	}
 }
 
+// The reference layout lists a hub's destinations as flat rows, like
+// Spotify's settings: name, chevron, the pressed grey. The tile picture stays
+// as a hidden first child so gridpage_set_tile() keeps working.
+#define REF_ROW_H 72
+static void add_row(lv_obj_t *grid, const grid_entry_t *entry) {
+	lv_obj_t *row = lv_btn_create(grid);
+	lv_obj_set_size(row, lv_pct(100), REF_ROW_H);
+	lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(row, lv_color_make(42, 42, 42), LV_STATE_PRESSED);
+	lv_obj_set_style_radius(row, 8, 0);
+	lv_obj_set_style_shadow_width(row, 0, 0);
+	lv_obj_set_style_border_width(row, 0, 0);
+	lv_obj_set_style_pad_hor(row, 4, 0);
+	lv_obj_set_event_bubble(row, true);
+
+	lv_obj_t *icon = lv_image_create(row);
+	lv_image_set_src(icon, entry->icon);
+	lv_obj_set_hidden(icon, true);
+
+	lv_obj_t *label = lv_label_create(row);
+	lv_label_set_text(label, tr(entry->label));
+	lv_obj_add_style(label, &theme_style_text, 0);
+	lv_obj_set_style_text_font(label, &font_ui_20, 0);
+	lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+	lv_obj_set_width(label, lv_pct(85));
+	lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
+
+	lv_obj_t *chev = lv_image_create(row);
+	lv_image_set_src(chev, &icon_chevron_right);
+	lv_obj_add_style(chev, &theme_style_icon, 0);
+	lv_obj_set_style_image_opa(chev, LV_OPA_60, 0);
+	lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
+
+	if (entry->target) {
+		lv_obj_add_event_cb(row, switch_screen_cb, LV_EVENT_CLICKED, *entry->target);
+	} else if (entry->action) {
+		lv_obj_add_event_cb(row, action_cb, LV_EVENT_CLICKED, (void *)entry->action);
+	} else {
+		lv_obj_add_event_cb(row, unavailable_cb, LV_EVENT_CLICKED, (void *)entry->label);
+		lv_obj_add_style(label, &theme_style_text_dim, 0);
+	}
+}
+
 static void add_tile(lv_obj_t *grid, const grid_entry_t *entry, int width, int height) {
+	if (theme_reference()) {
+		add_row(grid, entry);
+		return;
+	}
 	lv_obj_t *tile = lv_btn_create(grid);
 	lv_obj_set_size(tile, width, height);
 	lv_obj_add_style(tile, &theme_style_card, 0);
@@ -123,6 +172,19 @@ void gridpage_set_entries(lv_obj_t *grid, gui_config_t *cfg, const grid_entry_t 
 	}
 }
 
+// Reference hubs keep the shell's mini-player and navigation; the rows end
+// above them and scroll when they do not all fit.
+static void footer_loaded_cb(lv_event_t *e) {
+	lv_obj_t *screen = lv_event_get_current_target(e);
+	lv_obj_t *grid = lv_event_get_user_data(e);
+	int footer = main_menu_mount_footer(screen);
+	lv_obj_update_layout(grid); // its y is not known before the first layout
+	lv_obj_set_height(grid, lv_obj_get_height(screen) - lv_obj_get_y(grid) - footer);
+	gridpage_set_scrolling(grid);
+}
+
+static void footer_unloaded_cb(lv_event_t *e) { main_menu_restore_footer(lv_event_get_current_target(e)); }
+
 lv_obj_t *gridpage_build(lv_obj_t *screen, gui_config_t *cfg, const grid_entry_t *entries, int count, int columns,
 						 int rows, bool clear_corner_buttons) {
 	lv_obj_add_style(screen, &theme_style_screen, 0);
@@ -139,7 +201,12 @@ lv_obj_t *gridpage_build(lv_obj_t *screen, gui_config_t *cfg, const grid_entry_t
 	lv_obj_set_style_pad_gap(grid, GRID_GAP, 0);
 	lv_obj_set_scrollable(grid, false);
 
-	lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
+	lv_obj_set_flex_flow(grid, theme_reference() ? LV_FLEX_FLOW_COLUMN : LV_FLEX_FLOW_ROW_WRAP);
+	if (theme_reference()) {
+		lv_obj_set_style_pad_gap(grid, 2, 0);
+		lv_obj_add_event_cb(screen, footer_loaded_cb, LV_EVENT_SCREEN_LOADED, grid);
+		lv_obj_add_event_cb(screen, footer_unloaded_cb, LV_EVENT_SCREEN_UNLOADED, NULL);
+	}
 	// START on the main axis, not CENTER: the tile size is computed for a full
 	// `columns` x `rows` grid, so a page with fewer entries reads as that grid
 	// with empty places. Centring would drift an odd tile into the middle of
@@ -264,7 +331,7 @@ lv_obj_t *gridpage_empty_panel(lv_obj_t *screen, gui_config_t *cfg, const lv_ima
 	lv_obj_t *button_label = lv_label_create(button);
 	lv_label_set_text(button_label, tr("scan"));
 	lv_obj_set_style_text_font(button_label, &font_ui_24, 0);
-	lv_obj_set_style_text_color(button_label, lv_color_white(), 0);
+	lv_obj_set_style_text_color(button_label, theme()->accent_ink, 0);
 	lv_obj_center(button_label);
 
 	empty_panel_t *state = calloc(1, sizeof(*state));

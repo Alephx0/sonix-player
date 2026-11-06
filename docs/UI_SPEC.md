@@ -1,17 +1,78 @@
 # Offline player UI specification
 
-Authority: requirements visible in this conversation, consolidated 2026-10-28.
+## 2026-11-05: Device repair clarification
+
+Updated 2026-11-06 (latest explicit request): estimate untagged releases using
+the complete local release count: 7+ tracks -> Albums; 1-6 -> Singles & EPs
+(1-3 Single, 4-6 EP). Display "(estimated)". This intentionally accepts the risk
+of partially imported albums; it supersedes the earlier untyped-in-Albums rule.
+Manual corrections, explicit tags, and explicit title suffixes take precedence.
+Featured On still follows performer/owner credits, regardless of track count.
+Unknown ownership stays separate. Long-press a release to choose Album / Single /
+EP or Automatic (tags, then local estimate). Never modify or duplicate audio.
+
+Home recommendation gathering, Search browse metadata, and Library catalog
+rebuilding must not block the GUI thread. Show navigation immediately, keep the
+previous feed until a bounded fresh snapshot is ready, and apply it at the top
+while idle. Do not continuously reorder content under an active scroll.
+
+- Now Playing expansion starts inside the visible mini-player, never from an
+  arbitrary list position or an invisible bottom-edge fallback. Vertical list
+  scrolling cannot later become a swipe-to-pin gesture during that same press.
+- Release type prefers explicit embedded tags or `- Single` / `- EP` suffixes;
+  missing types use the owner's count estimate above, labeled as such.
+  Owned releases without type tags remain in **Albums**, labeled **Type not
+  tagged**. Unknown ownership remains in **Other releases** in All. Local
+  corrections can classify a release without changing its audio file. The
+  earlier Other-only placement and experimental count inference are superseded.
+- Your Library retains filtering, search, sort and list/grid, with a draggable
+  fast-scroll grip for long collections and tab-reselection to return to top.
+  No additional Load more screen is introduced.
+- Storage categories describe usage, not disk partitions. The SD card and
+  internal system storage are separate. `.m4b` is an audiobook even outside the
+  Audiobooks directory; arbitrary hidden directories are not player data.
+
+
+Authority: requirements visible in this conversation, updated 2026-11-02.
 Hardware target: HiBy R1, 480 × 800, 64 MB RAM. Exact connected hardware revision
 and installed firmware have not been verified. The user asked to assume latest.
+
+## Product-wide fidelity requirement
+
+This document defines intended behavior, not proof that the implementation meets
+it. Study and scrutinize every reachable feature using `UI_RESEARCH.md` and
+`UI_AUDIT.md`. Proactively research current Spotify Mobile appearance and function
+on the internet for each feature. Record the reference version/platform and
+resolve conflicts explicitly. User-specific requirements below remain deliberate
+R1 adaptations even when current Spotify differs.
+
+The ENTIRE retained user-facing experience must use the same Spotify-inspired
+presentation and navigation. This includes audiobooks and their deeper controls,
+settings, EQ/audio configuration, connectivity, library scanning, keyboards,
+confirmations and recovery states. A shortcut to an unchanged native Sonix page
+does not meet this requirement. Reuse native services and models beneath a
+consistent interface; do not mistake backend reuse for UI integration.
+
+For functions Spotify does not provide, design a fitting extension of its visual
+and interaction language, with honest local-device behavior. Do not fabricate
+cloud recommendations, authentication, streaming, download availability or other
+unsupported functions. Keep offline content fully discoverable.
+
+Re-evaluate old geometry and implementation choices using research, renders and
+R1 constraints. Existing test passes and historical screenshots are not evidence
+of full-product fidelity. Audit secondary routes and settings previously excluded
+from scoped checks. No retained feature is exempt merely because it already works.
 
 ## Navigation and playback
 
 Home, Search, Your Library are the three primary tabs. A persistent mini-player
 sits above navigation. Opening a collection never starts or interrupts audio;
-its Play/Shuffle actions establish the automatic context. Now Playing expands
+its Play action establishes the automatic context. Collection Shuffle is a passive
+toggle (green when enabled); apply it when Play is pressed, without changing the
+current song, queue or playback position on toggle. Now Playing expands
 upward from the mini-player and collapses downward. Physical transport buttons
 and touch controls use the same playback actions.
-Starting a track, Play, or Shuffle from the reference collection view keeps that
+Starting a track or pressing Play from the reference collection view keeps that
 view visible and updates the mini-player (preview mode). Only an explicit tap on
 the mini-player expands Now Playing. Collection artwork and names share the same
 open action, including Liked Songs and All songs in both List and Grid layouts.
@@ -24,6 +85,14 @@ track rows, and persistent mini-player/navigation. Playlist-specific actions
 belong in the contextual menu, not a separate browsing layout. Empty playlists
 retain their header and a usable Add songs action. Playlist edits update the
 visible collection immediately. Long names must not overlap controls.
+
+Long collections have a visible draggable scrollbar that jumps across the full
+list while retaining pooled rows. Pull down at the top to reveal Find in playlist
+(or Find on this page for albums/Liked Songs). Filter only this collection by
+track title, artist or album with a short debounce. Offer Clear and Original /
+Title / Artist / Album / Added view sorting; Added uses the date the file entered the local library; never rewrite playlist order while filtering
+or sorting. A result starts the correct entry in the full collection context.
+Remove random-track-to-queue actions from the reference collection UI.
 
 Your Library is metadata organization, never the Sonix filesystem browser.
 Header: Your Library, Search, Create. Filters: All, Playlists, Albums, Artists;
@@ -38,7 +107,7 @@ playlist membership, pins, and physical file availability remain independent.
 Artist text opens individually selectable credited artists. The artist page is
 discography ONLY: All, Albums, Singles & EPs, Featured On; newest release date
 first with year. Use ALBUMARTIST and structured credits/identifiers for ownership;
-do not infer singles merely from track count. No photos, biography, popularity,
+use the explicit count fallback above only when release type is absent. No artist-page photo hero, biography, popularity,
 or arbitrary name splitting. Uncertain credits must remain visibly uncertain.
 
 ## Now Playing and temporary panels
@@ -69,8 +138,17 @@ roughly three seconds, then walks actual history. Repeat-off stops at exhaustion
 
 Search is incremental, local, accent/case insensitive with grouped songs,
 artists, albums, playlists, and lyric excerpts. Results use existing release art
-or light placeholders; artist recognition can use release art, not downloaded
-artist portraits. Use a persistent index, bounded queries, short debounce.
+or light placeholders. Artist recognition uses embedded release art with a neutral fallback.
+Use a persistent index, bounded queries, short debounce.
+
+Home category row: All, Music, Audiobooks. Audiobooks is an in-place Spotify-style
+Home feed, not a shortcut to the legacy audiobook screen. Show Continue listening,
+Recently added, and a paginated All audiobooks cover grid. Cards show title, author,
+and saved position/finished status. Cover/title opens a details bottom sheet;
+explicit Play/Resume uses the existing local audiobook playback and saved position
+without expanding Now Playing. Keep the mini-player and main navigation visible.
+Persist the selected category; offer an in-place Scan books action and a useful
+empty state for the card's Audiobooks folder.
 
 Home: six pinned/recent/frequent shortcuts; Jump Back In with context resume;
 Recently Added based on import time. Conditionally show On Repeat (rolling local
@@ -83,52 +161,29 @@ opens, explicit Play starts. All recommendations reference existing local files.
 The simulator renders production LVGL widgets, but host RSS/timing do not prove
 64 MB device performance, touch fidelity, DAC behavior, or firmware compatibility.
 Hardware tests and approved pixel baselines remain separate acceptance gates.
+Target dimensions and the 64 MB budget are project constraints, not a measurement
+of a connected device. Verify exact hardware assumptions against official HiBy
+sources and build configuration; document CPU/ABI, display/input, storage and
+memory implications before hardware-dependent changes. Preserve a responsive UI
+and uninterrupted playback under indexing, artwork loads and large libraries.
+See the audit's end-product gates before claiming the system is complete.
 
-## Native online workflow
+## Local-only branch
 
-Adapt SpotBye's search → release → track details → managed downloads flow into
-the native player. The initial provider is Internet Archive. Search accepts its
-HTTPS release links as well as text. An online track opens a bottom sheet with
-title, artist, release, source format/size and licence; opening it never downloads
-or starts playback. Download to microSD is an explicit action. View downloads
-opens the existing resumable queue; More by this artist performs creator search.
-Completed files enter the local library through the existing import pipeline.
-Expose unsupported links clearly. Do not label this a SpotBye service connection
-or Spotify catalog client. Additional providers and online previews remain future
-work; source identity and downloadable audio identity stay explicit.
+`feature/spotify-ui-local` replaces the SpotBye parity objective. No online catalog,
+provider matching, music transfers, download manager, provider authentication or
+browser/phone verification belongs in the Sonix/LVGL application. Removed services
+include legacy Tidal/Qobuz, podcast fetching, radio/HLS, DLNA progressive files,
+online lyric lookup, AutoEQ fetching and OTA downloading. Local EQ presets,
+embedded/sidecar lyrics, indexed artwork, queues and playlist data remain usable.
 
+Search is entirely local: All, Songs, Albums, Artists, Playlists and Lyrics.
+Local search runs off the GUI thread with a bounded result/artwork pool and drops
+stale responses. Selecting a track keeps preview mode; artist and release results
+open the established local destinations without replacing playback.
 
-Online milestone extension: All starts independent local-index and provider workers
-with a short debounce. Local hits publish without waiting for the provider; edits
-and filter changes invalidate stale results. A release opens a dedicated native
-page using the same collection-header component as local albums/playlists, with
-Download replacing Play. Complete releases of at most 24 source files can be
-submitted atomically to the persistent 32-file queue, still one transfer at a time.
-Paged releases retain individual file downloads and must not claim a partial page
-is a complete album. Downloads group entries by release and retain individual
-pause/resume/retry/cancel actions. Completed indexed copies offer offline playback.
-
-The initial source lacks reliable structured release-type/featured-credit and ISRC
-coverage. Creator search must not pretend to be a verified Albums / Singles / EPs /
-Featured On discography. Structured online discographies, cross-provider recording
-matching, remote artwork and larger release jobs remain subsequent milestones.
-
-
-## SpotBye settings and downloads
-
-Online settings use Sources / Transfers / Files with explicit Save and Discard.
-Defaults is a draft until saved. Persist source/format, start-new-downloads,
-network-attempt, rate-limit and filename preferences. Existing jobs keep their
-destination; source audio/tags and playback remain unchanged. Downloads offers
-All / Active / Paused / Done / Failed, counts, Start all and Pause all.
-This does not establish Spotify/SpotBye provider compatibility; see
-[observed parity and gaps](custom-firmware/spotbye-parity.md).
-
-
-Catalog extension: Search -> Sources saves Archive releases / Deezer tracks /
-Deezer albums. Deezer is a metadata-only adapter with real service IDs, duration
-and ISRC when provided. Exact Deezer track/album links open details/releases;
-artist actions list source releases without inventing discography categories.
-Catalog metadata does not imply a playable/downloadable audio source. Original
-Archive transfer validation remains independent. Artwork uses the existing shared
-asynchronous image loader, with visible result covers and one album cover.
+Device connectivity (Bluetooth, AirPlay reception, SonixLink, local file upload),
+clock synchronization and optional Last.fm scrobbling are separate from music
+acquisition. TLS certificate checks remain intact. Last.fm uses user-configured
+`lastfm.api_key`/`api_secret`; bundled streaming credential infrastructure is removed.
+Build-time dependency fetching is tooling, not a runtime firmware downloader.

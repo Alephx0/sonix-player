@@ -9,6 +9,7 @@
 
 #include "src/gui/fonts/fonts.h"
 #include "src/gui/nowplaying/player.h"
+#include "src/gui/shell/bottomsheet.h"
 #include "src/gui/shell/settingsrow.h"
 #include "src/gui/shell/switcher.h"
 #include "src/gui/shell/theme.h"
@@ -28,6 +29,21 @@ lv_obj_t *chapters_screen;
 static lv_obj_t *chapter_list;
 static lv_obj_t *empty_label;
 static int listed_count;
+
+// The reference layout lists the chapters in the shared sheet over Now Playing,
+// as it lists the queue, instead of on a page of its own. chapter_list points
+// into the sheet while it is open and back at the page's list afterwards.
+static lv_obj_t *page_list;
+static bool in_sheet;
+
+// After a pick: the sheet closes onto the player; the page goes back to it.
+static void leave(void) {
+	if (in_sheet) {
+		bottomsheet_close(true);
+	} else {
+		back_btn_cb(NULL);
+	}
+}
 
 // A folder book lists its files here instead: each file is a chapter.
 static bool listing_parts;
@@ -66,7 +82,7 @@ static void chapter_clicked_cb(lv_event_t *e) {
 	audiobook_note_position(start, 0, true);
 
 	player_refresh_now_playing();
-	back_btn_cb(NULL); // back to the player, which is where the jump is heard
+	leave(); // back to the player, which is where the jump is heard
 }
 
 // Starts part `index` of the folder book from its beginning, with the book's
@@ -102,10 +118,44 @@ static void part_clicked_cb(lv_event_t *e) {
 	free(paths);
 
 	player_refresh_now_playing();
-	back_btn_cb(NULL);
+	leave();
+}
+
+// A flat sheet row: the chapter's name over where it starts, the one being
+// heard in green, as the queue sheet marks the playing track.
+static lv_obj_t *make_sheet_row(int i, const char *title, const char *clock, bool playing, lv_event_cb_t cb) {
+	int w = lv_obj_get_width(chapter_list);
+	lv_obj_t *row = lv_obj_create(chapter_list);
+	lv_obj_remove_style_all(row);
+	lv_obj_set_size(row, w, clock ? 64 : 56);
+	lv_obj_set_scrollable(row, false);
+	lv_obj_set_clickable(row, true);
+	lv_obj_set_style_bg_color(row, lv_color_hex(0x2a2a2a), LV_STATE_PRESSED);
+	lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_STATE_PRESSED);
+	lv_obj_set_event_bubble(row, true);
+	lv_obj_add_event_cb(row, cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+
+	lv_obj_t *label = lv_label_create(row);
+	lv_label_set_text(label, title[0] ? title : tr("chapter"));
+	lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+	lv_obj_set_size(label, w - 40, 28);
+	lv_obj_set_pos(label, 20, clock ? 8 : 14);
+	lv_obj_set_style_text_font(label, &font_ui_20, 0);
+	lv_obj_set_style_text_color(label, playing ? lv_color_hex(0x1ed760) : lv_color_white(), 0);
+	if (clock) {
+		lv_obj_t *time_label = lv_label_create(row);
+		lv_label_set_text_fmt(time_label, "%s %d \xc2\xb7 %s", tr("chapter"), i + 1, clock);
+		lv_obj_set_pos(time_label, 20, 38);
+		lv_obj_set_style_text_font(time_label, &font_ui_16, 0);
+		lv_obj_set_style_text_color(time_label, lv_color_hex(0xb3b3b3), 0);
+	}
+	return row;
 }
 
 static lv_obj_t *make_row(int i, const char *title, const char *clock, bool playing, lv_event_cb_t cb) {
+	if (in_sheet) {
+		return make_sheet_row(i, title, clock, playing, cb);
+	}
 	lv_obj_t *row = lv_btn_create(chapter_list);
 	lv_obj_set_size(row, lv_pct(100), ROW_HEIGHT);
 	lv_obj_add_style(row, &theme_style_card, 0);
@@ -238,7 +288,53 @@ static void loaded_cb(lv_event_t *e) {
 	}
 }
 
+static void sheet_cleanup(void) {
+	in_sheet = false;
+	chapter_list = page_list;
+	empty_label = NULL;
+}
+
+// The sheet over Now Playing: the heading, then the list, opened on the chapter
+// being heard. Playback and the player stay exactly as they were.
+static void sheet_open(void) {
+	int w = lv_display_get_horizontal_resolution(NULL), h = lv_display_get_vertical_resolution(NULL);
+	lv_obj_t *body = bottomsheet_open(h - 48, sheet_cleanup);
+	lv_obj_update_layout(body); // measured below; a fresh sheet is not laid out yet
+	in_sheet = true;
+	lv_obj_t *heading = lv_label_create(body);
+	lv_label_set_text(heading, tr("chapters"));
+	lv_obj_set_style_text_font(heading, &font_ui_24_bold, 0);
+	lv_obj_set_style_text_color(heading, lv_color_white(), 0);
+	lv_obj_set_pos(heading, 20, 0);
+	chapter_list = lv_obj_create(body);
+	lv_obj_remove_style_all(chapter_list);
+	lv_obj_set_size(chapter_list, w, lv_obj_get_height(body) - 48);
+	lv_obj_set_pos(chapter_list, 0, 48);
+	lv_obj_set_flex_flow(chapter_list, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_scroll_dir(chapter_list, LV_DIR_VER);
+	lv_obj_update_layout(chapter_list); // the rows take their width from it
+	rebuild();
+	if (empty_label) {
+		lv_obj_set_style_text_color(empty_label, lv_color_hex(0xb3b3b3), 0);
+		lv_obj_set_style_text_font(empty_label, &font_ui_20, 0);
+		lv_obj_set_width(empty_label, w - 40);
+		lv_obj_set_style_pad_top(empty_label, 40, 0);
+	}
+	lv_obj_update_layout(chapter_list);
+	int playing = playing_row();
+	if (playing > 0 && playing < listed_count) {
+		lv_obj_t *row = lv_obj_get_child(chapter_list, playing);
+		if (row) {
+			lv_obj_scroll_to_view(row, LV_ANIM_OFF);
+		}
+	}
+}
+
 void chapters_open(void) {
+	if (theme_reference()) {
+		sheet_open();
+		return;
+	}
 	player_sheet_close(false);
 	switch_screen(chapters_screen);
 	switcher_set_player_return(chapters_screen);
@@ -264,6 +360,7 @@ void chapters_init(gui_config_t *cfg) {
 	// Set here, not in the row builder: a book with no chapters creates no
 	// rows, and the page still has to answer the swipe-back.
 	lv_obj_set_event_bubble(chapter_list, true);
+	page_list = chapter_list;
 
 	// No player-sheet swipe here, for the queue page's reason: it would slide
 	// the sheet over the list being read. The swipe-back still works.

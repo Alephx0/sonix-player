@@ -8,6 +8,7 @@
 #include "src/gui/fonts/fonts.h"
 #include "src/gui/library/audiobooks.h"
 #include "src/gui/nowplaying/player.h"
+#include "src/gui/shell/bottomsheet.h"
 #include "src/gui/shell/icons.h"
 #include "src/gui/shell/popover.h"
 #include "src/gui/shell/settingsrow.h"
@@ -137,6 +138,35 @@ static int menu_mark = -1;
 
 static void build_marks(void);
 
+// The reference layout lists the playing book's marks, and shows its summary,
+// in the shared sheet over Now Playing instead of on pages of their own.
+// marks_list points into the sheet while it is open.
+static lv_obj_t *marks_page_list;
+static bool marks_in_sheet;
+
+static lv_obj_t *sheet_heading(lv_obj_t *body, const char *text) {
+	lv_obj_t *heading = lv_label_create(body);
+	lv_label_set_text(heading, text);
+	lv_label_set_long_mode(heading, LV_LABEL_LONG_DOT);
+	lv_obj_set_size(heading, lv_display_get_horizontal_resolution(NULL) - 100, 34);
+	lv_obj_set_style_text_font(heading, &font_ui_24_bold, 0);
+	lv_obj_set_style_text_color(heading, lv_color_white(), 0);
+	lv_obj_set_pos(heading, 20, 0);
+	return heading;
+}
+
+static lv_obj_t *sheet_column(lv_obj_t *body, int top) {
+	lv_obj_update_layout(body); // a fresh sheet is not laid out yet
+	lv_obj_t *column = lv_obj_create(body);
+	lv_obj_remove_style_all(column);
+	lv_obj_set_size(column, lv_display_get_horizontal_resolution(NULL), lv_obj_get_height(body) - top);
+	lv_obj_set_pos(column, 0, top);
+	lv_obj_set_flex_flow(column, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_scroll_dir(column, LV_DIR_VER);
+	lv_obj_update_layout(column); // the rows take their width from it
+	return column;
+}
+
 // The mark is heard where it was picked: in the player when the page came
 // from there, and the player comes up when it came from the library. A mark in
 // the file already playing is a seek; anything else starts the book there.
@@ -164,7 +194,9 @@ static void mark_pick_cb(lv_event_t *e) {
 		audiobooks_play_at(open_book, mark->file, mark->seconds);
 	}
 
-	if (marks_from_player) {
+	if (marks_in_sheet) {
+		bottomsheet_close(true); // the player is still underneath
+	} else if (marks_from_player) {
 		back_btn_cb(NULL); // back to the player, which is where the jump is heard
 	} else {
 		player_sheet_open(true);
@@ -192,6 +224,63 @@ static void mark_long_pressed_cb(lv_event_t *e) {
 	popover_show(lv_event_get_current_target(e), items, 1);
 }
 
+// The sheet's remove button: a sheet cannot stack the long-press menu over
+// itself, so each row carries its own.
+// Deferred: the rows are rebuilt, and the pressed one must not be deleted
+// inside its own event.
+static void sheet_remove_async(void *user) {
+	menu_mark = (int)(intptr_t)user;
+	if (marks_in_sheet) {
+		delete_mark_action(NULL);
+	}
+}
+
+static void sheet_remove_cb(lv_event_t *e) {
+	lv_event_stop_bubbling(e);
+	lv_async_call(sheet_remove_async, lv_event_get_user_data(e));
+}
+
+// A flat sheet row: the place over the time, and a remove button at the end.
+static void sheet_mark_row(const char *label, const char *clock) {
+	int w = lv_obj_get_width(marks_list);
+	lv_obj_t *row = lv_obj_create(marks_list);
+	lv_obj_remove_style_all(row);
+	lv_obj_set_size(row, w, 64);
+	lv_obj_set_scrollable(row, false);
+	lv_obj_set_clickable(row, true);
+	lv_obj_set_style_bg_color(row, lv_color_hex(0x2a2a2a), LV_STATE_PRESSED);
+	lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_STATE_PRESSED);
+	lv_obj_set_event_bubble(row, true);
+	lv_obj_add_event_cb(row, mark_pick_cb, LV_EVENT_CLICKED, (void *)(intptr_t)mark_count);
+	lv_obj_t *title = lv_label_create(row);
+	lv_label_set_text(title, label && label[0] ? label : clock);
+	lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+	lv_obj_set_size(title, w - 100, 28);
+	lv_obj_set_pos(title, 20, label && label[0] ? 8 : 18);
+	lv_obj_set_style_text_font(title, &font_ui_20, 0);
+	lv_obj_set_style_text_color(title, lv_color_white(), 0);
+	if (label && label[0]) {
+		lv_obj_t *time_label = lv_label_create(row);
+		lv_label_set_text(time_label, clock);
+		lv_obj_set_pos(time_label, 20, 38);
+		lv_obj_set_style_text_font(time_label, &font_ui_16, 0);
+		lv_obj_set_style_text_color(time_label, lv_color_hex(0xb3b3b3), 0);
+	}
+	lv_obj_t *remove = lv_obj_create(row);
+	lv_obj_remove_style_all(remove);
+	lv_obj_set_size(remove, 56, 56);
+	lv_obj_align(remove, LV_ALIGN_RIGHT_MID, -8, 0);
+	lv_obj_set_clickable(remove, true);
+	lv_obj_add_event_cb(remove, sheet_remove_cb, LV_EVENT_CLICKED, (void *)(intptr_t)mark_count);
+	lv_obj_t *glyph = lv_image_create(remove);
+	lv_image_set_src(glyph, &icon_minus);
+	lv_obj_set_size(glyph, 24, 24);
+	lv_image_set_inner_align(glyph, LV_IMAGE_ALIGN_CONTAIN);
+	lv_obj_set_style_image_recolor(glyph, lv_color_hex(0xb3b3b3), 0);
+	lv_obj_set_style_image_recolor_opa(glyph, LV_OPA_COVER, 0);
+	lv_obj_center(glyph);
+}
+
 static bool collect_mark(long long id, const char *file, double seconds, const char *label, void *user) {
 	(void)user;
 	if (mark_count >= MARKS_MAX) {
@@ -201,6 +290,14 @@ static bool collect_mark(long long id, const char *file, double seconds, const c
 	mark->id = id;
 	snprintf(mark->file, sizeof(mark->file), "%s", file);
 	mark->seconds = seconds;
+
+	if (marks_in_sheet) {
+		char clock[24];
+		format_clock(seconds, clock, sizeof(clock));
+		sheet_mark_row(label, clock);
+		mark_count++;
+		return true;
+	}
 
 	lv_obj_t *row = make_card(marks_list);
 	lv_obj_add_event_cb(row, mark_pick_cb, LV_EVENT_CLICKED, (void *)(intptr_t)mark_count);
@@ -226,7 +323,7 @@ static void build_marks(void) {
 	lv_obj_clean(marks_list);
 	mark_count = 0;
 	menu_mark = -1;
-	if (marks_title) {
+	if (marks_title && !marks_in_sheet) {
 		lv_label_set_text(marks_title, open_title[0] ? open_title : tr("bookmarks"));
 	}
 	if (!marks) {
@@ -234,6 +331,19 @@ static void build_marks(void) {
 	}
 	if (marks) {
 		audiobookdb_bookmarks_for_each(open_book, collect_mark, NULL);
+	}
+	if (marks_in_sheet) {
+		if (mark_count == 0) {
+			lv_obj_t *note = lv_label_create(marks_list);
+			lv_label_set_text(note, tr("audiobook_bookmarks_empty"));
+			lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
+			lv_obj_set_width(note, lv_obj_get_width(marks_list) - 40);
+			lv_obj_set_style_margin_left(note, 20, 0);
+			lv_obj_set_style_pad_top(note, 24, 0);
+			lv_obj_set_style_text_font(note, &font_ui_18, 0);
+			lv_obj_set_style_text_color(note, lv_color_hex(0xb3b3b3), 0);
+		}
+		return;
 	}
 	if (mark_count > 0) {
 		lv_obj_set_hidden(marks_empty, true);
@@ -425,12 +535,60 @@ void audiobookextras_add_bookmark(void) {
 	}
 }
 
+static void marks_sheet_cleanup(void) {
+	marks_in_sheet = false;
+	marks_list = marks_page_list;
+	free(marks);
+	marks = NULL;
+	mark_count = 0;
+}
+
+static void summary_sheet_open(void) {
+	char title[256] = "", author[256] = "";
+	char *summary = NULL;
+	audiobookdb_book_info(open_book, title, sizeof(title), author, sizeof(author), &summary);
+	lv_obj_t *body = bottomsheet_open(lv_display_get_vertical_resolution(NULL) - 48, NULL);
+	sheet_heading(body, tr("audiobook_summary"));
+	lv_obj_t *column = sheet_column(body, 48);
+	lv_obj_set_style_pad_hor(column, 20, 0);
+	lv_obj_set_style_pad_bottom(column, 24, 0);
+	lv_obj_set_style_pad_row(column, 6, 0);
+	int w = lv_display_get_horizontal_resolution(NULL) - 40;
+	const char *lines[3] = {title[0] ? title : open_title, author, summary ? summary : tr("audiobook_summary_empty")};
+	const lv_font_t *fonts[3] = {&font_ui_22_bold, &font_ui_18, &font_ui_18};
+	for (int i = 0; i < 3; i++) {
+		if (!lines[i][0]) {
+			continue;
+		}
+		lv_obj_t *label = lv_label_create(column);
+		lv_label_set_text(label, lines[i]);
+		lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+		lv_obj_set_width(label, w);
+		lv_obj_set_style_text_font(label, fonts[i], 0);
+		lv_obj_set_style_text_color(label, i == 0 || (i == 2 && summary) ? lv_color_white() : lv_color_hex(0xb3b3b3), 0);
+		if (i == 2) {
+			lv_obj_set_style_pad_top(label, 12, 0);
+			lv_obj_set_style_text_line_space(label, 4, 0);
+		}
+	}
+	free(summary);
+}
+
 void audiobookextras_open_current_bookmarks(void) {
 	char book[512];
 	if (!audiobook_current_book(book, sizeof(book), NULL, 0)) {
 		return;
 	}
 	remember_book(book);
+	if (theme_reference()) {
+		lv_obj_t *body = bottomsheet_open(lv_display_get_vertical_resolution(NULL) - 48, marks_sheet_cleanup);
+		marks_in_sheet = true;
+		marks_from_player = true;
+		sheet_heading(body, tr("bookmarks"));
+		marks_list = sheet_column(body, 48);
+		build_marks();
+		return;
+	}
 	marks_from_player = true;
 	player_sheet_close(false);
 	switch_screen(marks_screen);
@@ -443,6 +601,10 @@ void audiobookextras_open_current_summary(void) {
 		return;
 	}
 	remember_book(book);
+	if (theme_reference()) {
+		summary_sheet_open();
+		return;
+	}
 	player_sheet_close(false);
 	switch_screen(summary_screen);
 	switcher_set_player_return(summary_screen);
@@ -472,6 +634,7 @@ void audiobookextras_init(gui_config_t *cfg) {
 	// The heading says which book, so it is rewritten every time one opens.
 	marks_title = settingsrow_page_title(marks_screen);
 	marks_list = column_list(container);
+	marks_page_list = marks_list;
 	marks_empty = empty_note(container, "audiobook_bookmarks_empty");
 	lv_obj_add_event_cb(marks_screen, marks_loaded_cb, LV_EVENT_SCREEN_LOADED, NULL);
 	lv_obj_add_event_cb(marks_screen, marks_unloaded_cb, LV_EVENT_SCREEN_UNLOADED, NULL);

@@ -6,26 +6,21 @@
 #include "src/system/audio/replaygain.h"
 #include "src/system/core/config.h"
 #include "src/system/core/lang.h"
-#include "src/system/decode/growfile.h"
 #include "src/system/device/system.h"
 #include "src/system/library/library.h"
 #include "src/system/library/metadata.h"
 #include "src/system/playback/audiobook.h"
 #include "src/system/playback/playhistory.h"
 #include "src/system/playback/playlist.h"
-#include "src/system/remote/dlna.h"
-#include "src/system/streaming/podcast.h"
-#include "src/system/streaming/podcastcache.h"
-#include "src/system/streaming/podcaststate.h"
-#include "src/system/streaming/qobuzcache.h"
-#include "src/system/streaming/radio.h"
-#include "src/system/streaming/tidalcache.h"
 
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+// Spotify's Private session; see device_state_private_session().
+static bool private_session;
 
 // Cache of the currently loaded track's metadata, refreshed whenever a new
 // file is loaded via device_state_play_file(). Only ever touched from the
@@ -142,8 +137,7 @@ static bool remember_enabled(void) { return config_get_int("player", "remember_t
 // A track this player must not offer to come back to: a live stream has no
 // position, and a streaming cache file will not exist at the next boot.
 static bool remember_worth_saving(const device_state_t *state) {
-	return !state->live && state->current_file[0] && !qobuzcache_owns(state->current_file) &&
-		   !tidalcache_owns(state->current_file);
+	return !state->live && state->current_file[0];
 }
 
 void device_state_remember_restored(const char *path, double position) {
@@ -180,7 +174,7 @@ void device_state_remember_note(void) {
 // the engine has not reached yet rather than a place anyone stopped at.
 static void flush_book_position(const device_state_t *state) {
 	// And the podcast episode's, which is kept the same way.
-	podcaststate_flush();
+
 	if (state->live || !audiobook_is_playing() || state->progress_current_secs <= 1.0) {
 		return;
 	}
@@ -225,42 +219,7 @@ void device_state_get(device_state_t *out) {
 	out->live = false;
 	out->live_cover[0] = '\0';
 
-	if (radio_is_active()) {
-		radio_now_t now;
-		radio_get_now(&now);
-
-		out->live = true;
-		// Connecting counts as playing: it is on, and the button that would
-		// stop it should say so. A station that has been stopped reads as
-		// stopped, and its button goes back to play.
-		out->status = (now.playing || now.connecting) ? AUDIO_STATUS_PLAYING : AUDIO_STATUS_STOPPED;
-		out->current_file[0] = '\0';
-		out->progress_current_secs = 0;
-		out->progress_total_secs = 0;
-		out->stream_sample_rate = now.sample_rate;
-		out->stream_channels = now.channels;
-		snprintf(out->live_cover, sizeof(out->live_cover), "%s", now.cover_path);
-
-		memset(&out->metadata, 0, sizeof(out->metadata));
-		snprintf(out->metadata.title, sizeof(out->metadata.title), "%s", now.station);
-
-		// The second line: what the stream says is on air, or -- before the
-		// first frame has come out of it -- what the player is busy doing.
-		// Opening a connection to a radio server takes a moment, and a blank
-		// line for that moment reads as a station that does not work.
-		if (now.error[0]) {
-			// Whatever went wrong goes where the on-air title would be: it is
-			// the line the user is already reading, and a station that simply
-			// sits there silent is the worst way to say "this one does not
-			// work here".
-			snprintf(out->metadata.artist, sizeof(out->metadata.artist), "%s", now.error);
-		} else if (now.title[0]) {
-			snprintf(out->metadata.artist, sizeof(out->metadata.artist), "%s", now.title);
-		} else if (now.connecting) {
-			snprintf(out->metadata.artist, sizeof(out->metadata.artist), "%s", tr("connecting"));
-		}
-		out->metadata.has_tags = true;
-	} else {
+	 {
 		out->status = audio_get_status();
 		audio_get_current_file(out->current_file, sizeof(out->current_file));
 		audio_get_progress(&out->progress_current_secs, &out->progress_total_secs);
@@ -322,7 +281,7 @@ static bool queue_ever_saved;
 // dealt again when it comes back, and the old deal's position would land on an
 // unrelated track. Anything "add to queue" put there afterwards is not in the
 // query and goes along beside it.
-static void queue_save_query_form(const library_index_spec_t *spec) {
+static bool queue_save_query_form(const library_index_spec_t *spec) {
 	int extra_count = playlist_appended_count();
 	char **extra = NULL;
 	int *slots = NULL;
@@ -350,13 +309,14 @@ static void queue_save_query_form(const library_index_spec_t *spec) {
 		}
 	}
 
-	library_queue_save_query(spec, (int)playlist_current_entry(), (const char *const *)extra, slots, filled);
+	bool saved = library_queue_save_query(spec, (int)playlist_current_entry(), (const char *const *)extra, slots, filled);
 
 	for (int i = 0; i < filled; i++) {
 		free(extra[i]);
 	}
 	free(extra);
 	free(slots);
+	return saved;
 }
 
 static void queue_persist(void) {
@@ -385,9 +345,10 @@ static void queue_persist(void) {
 	// large library the write alone would outlast the track.
 	library_index_spec_t spec;
 	if (playlist_library_spec(&spec)) {
-		queue_save_query_form(&spec);
-		saved_queue_revision = revision;
-		queue_ever_saved = true;
+		if (queue_save_query_form(&spec)) {
+			saved_queue_revision = revision;
+			queue_ever_saved = true;
+		}
 		return;
 	}
 
@@ -397,7 +358,6 @@ static void queue_persist(void) {
 	}
 
 	int filled = 0;
-	bool from_stream = false;
 	for (int i = 0; i < count; i++) {
 		char path[512];
 		if (!playlist_context_path_at(i, path, sizeof(path))) {
@@ -407,10 +367,7 @@ static void queue_persist(void) {
 		// empty themselves) and the next boot would restore a queue of paths
 		// that no longer exist, mixed in with the user's own tracks. Both
 		// services, for the same reason.
-		if (qobuzcache_owns(path) || tidalcache_owns(path)) {
-			from_stream = true;
-			break;
-		}
+		
 		list[filled] = strdup(path);
 		if (!list[filled]) {
 			break;
@@ -418,8 +375,8 @@ static void queue_persist(void) {
 		filled++;
 	}
 
-	if (filled > 0 && !from_stream) {
-		library_queue_save((const char *const *)list, filled, current, playlist_is_custom());
+	if (filled > 0 &&
+		library_queue_save((const char *const *)list, filled, current, playlist_is_custom())) {
 		saved_queue_revision = revision;
 		queue_ever_saved = true;
 	}
@@ -434,23 +391,9 @@ void device_state_queue_changed(void) { queue_persist(); }
 
 // One per streaming service plus headroom: four is already twice as many as
 // exist.
-#define PREPARE_CB_MAX 4
-static device_state_prepare_cb prepare_cbs[PREPARE_CB_MAX];
-static int prepare_cb_count;
 
-void device_state_add_prepare_cb(device_state_prepare_cb cb) {
-	if (!cb || prepare_cb_count >= PREPARE_CB_MAX) {
-		return;
-	}
-	// Registering twice would mean preparing the same track twice. The cost is
-	// one walk over four entries, once at start-up.
-	for (int i = 0; i < prepare_cb_count; i++) {
-		if (prepare_cbs[i] == cb) {
-			return;
-		}
-	}
-	prepare_cbs[prepare_cb_count++] = cb;
-}
+
+
 
 // Defined with the rest of the scrub state further down.
 static void scrub_cancel(void);
@@ -486,9 +429,7 @@ void device_state_note_storage_gone(void) {
 static void apply_track_speed(void) {
 	if (audiobook_is_playing()) {
 		audio_set_speed(audiobook_speed());
-	} else if (podcastcache_is_episode(current_metadata_file)) {
-		audio_set_speed(podcast_speed());
-	} else {
+	} else  {
 		audio_set_speed(1.0);
 	}
 }
@@ -517,7 +458,7 @@ static void history_leave_for(const char *next, double position) {
 // pressed.
 static void note_started(bool restored) {
 	snprintf(started_file, sizeof(started_file), "%s", current_metadata_file);
-	bool kept_out = audiobook_is_playing() || podcastcache_is_episode(current_metadata_file) || dlna_owns_path(current_metadata_file);
+	bool kept_out = audiobook_is_playing() || private_session;
 	playhistory_started(current_metadata_file, current_metadata.title, metadata_shown_artist(&current_metadata), kept_out, restored);
 }
 
@@ -525,24 +466,35 @@ static void note_started(bool restored) {
 // Not on a file still coming down -- the point may not have arrived, and a seek
 // past what has arrived is refused rather than waited for; the podcast page
 // waits for it itself before starting one (podcastpage.c).
-static double podcast_resume(const char *filepath) {
-	if (!podcastcache_is_episode(filepath) || strcmp(started_file, filepath) == 0 || growfile_is_growing(filepath)) {
-		return -1.0;
-	}
-	double at = podcaststate_resume_point(filepath);
-	if (at > 0) {
-		fprintf(stderr, "podcast: '%s' picks up at %.0f s\n", filepath, at);
-		return at;
-	}
-	return -1.0;
-}
+
 
 // Loads metadata for `filepath` and starts playback, without touching the
 // folder queue. Shared by fresh selections, queue advances, and replays.
 //
 // `position` is where to start; below zero means the beginning, which is what
 // every caller but the resume below wants.
+#define LONG_TRACK_SECS 1200.0
+#define LONG_TRACK_EDGE 30.0
+/* Long-track resume: the track being left, if it is twenty minutes or more and
+ * was left partway, keeps its place; finished, it forgets it. Books keep their
+ * own places. */
+static void long_track_note_leaving(const char *next) {
+	if (!current_metadata_file[0] || (next && !strcmp(next, current_metadata_file)) || audiobook_is_playing()) {
+		return;
+	}
+	double pos = 0, dur = 0;
+	audio_get_progress(&pos, &dur);
+	// [player] long_resume_secs: the length from which a track keeps its place.
+	if (dur < config_get_int("player", "long_resume_secs", (int)LONG_TRACK_SECS)) {
+		return;
+	}
+	library_resume_set(current_metadata_file, pos > LONG_TRACK_EDGE && pos < dur - LONG_TRACK_EDGE ? pos : 0);
+}
+
 static void load_and_play_at(const char *filepath, double position) {
+	// A replay of the same file (Previous, a tap on it again) starts over.
+	bool another = strcmp(filepath, current_metadata_file) != 0;
+	long_track_note_leaving(filepath);
 	// A position picked on the outgoing track means nothing on this one, and
 	// the track can change under a held button -- the queue advances on its
 	// own when the outgoing one ends.
@@ -552,7 +504,7 @@ static void load_and_play_at(const char *filepath, double position) {
 	// A file and a stream cannot both have the output. Starting a track ends
 	// the radio outright -- not merely stops it -- because from here on the
 	// player belongs to the track.
-	radio_clear();
+
 
 	// Callers may replay the already-loaded track by passing current_metadata_file
 	// itself, so guard against copying a buffer onto itself.
@@ -571,19 +523,16 @@ static void load_and_play_at(const char *filepath, double position) {
 	replaygain_load(&current_metadata);
 	apply_track_speed();
 
-	// The file may not be there yet: with Qobuz and Tidal the queue holds the
-	// whole album and playback can reach a track before its download does. The
-	// registered callback takes over and restarts this once the file is ready;
-	// stop here rather than hand the decoder a path to nothing.
-	for (int i = 0; i < prepare_cb_count; i++) {
-		if (!prepare_cbs[i](current_metadata_file)) {
-			queue_persist();
-			return;
-		}
-	}
 
 	if (position <= 0) {
-		position = podcast_resume(current_metadata_file);
+		position = -1.0;
+		/* A long track left partway starts where it was left. */
+		if (another && !audiobook_is_playing()) {
+			double saved = library_resume_get(current_metadata_file);
+			if (saved > 0) {
+				position = saved;
+			}
+		}
 	}
 	if (position > 0) {
 		audio_play_at(current_metadata_file, position);
@@ -607,7 +556,7 @@ static void load_and_play(const char *filepath) { load_and_play_at(filepath, -1.
 static void load_paused(const char *filepath) {
 	scrub_cancel();
 	history_leave_for(filepath, -1.0);
-	radio_clear();
+
 
 	if (filepath != current_metadata_file) {
 		snprintf(current_metadata_file, sizeof(current_metadata_file), "%s", filepath);
@@ -679,6 +628,7 @@ static void restore_queue_album(void) {
 		fprintf(stderr, "queue: the restored queue is the record \"%s\"\n", shown);
 	}
 	playlist_note_album_restored();
+	playlist_restore_context_name();
 }
 
 // The same restore, but with the queue that was saved next to the track, so
@@ -824,7 +774,7 @@ void device_state_play_file_at(const char *filepath, double position) {
 	playlist_load_folder(folder, filename);
 
 	history_leave_for(filepath, position);
-	radio_clear();
+
 	if (filepath != current_metadata_file) {
 		strncpy(current_metadata_file, filepath, sizeof(current_metadata_file) - 1);
 		current_metadata_file[sizeof(current_metadata_file) - 1] = '\0';
@@ -951,6 +901,102 @@ bool device_state_folder_chaining(void) { return config_get_int("player", "folde
 void device_state_set_folder_chaining(bool on) {
 	config_set_int("player", "folder_chaining", on ? 1 : 0);
 	config_save();
+}
+
+// Spotify's Autoplay, on by default as there: when what was playing runs out,
+// similar songs from the library carry on (library_autoplay_paths).
+/* Spotify's Private session: while on, nothing is written to Recents, the
+ * play counts, listening time or Last.fm. Not kept across a restart, as
+ * Spotify ends a private session on its own. */
+/* Smart Shuffle (Spotify): with shuffle on, songs from the library that fit
+ * what is playing are mixed into what is still to come -- one after every
+ * three -- and marked in the queue; turned off, they are taken out again.
+ * From a playlist they are its recommended songs, otherwise Autoplay's
+ * picks for the playing song. Tied to the context it was started on. */
+#define SMART_MAX 10
+static char smart_paths[SMART_MAX][512];
+static int smart_count;
+static bool smart_on;
+static char smart_context[256];
+
+bool device_state_smart_shuffle(void) { return smart_on && !strcmp(smart_context, playlist_context_name()); }
+
+bool device_state_is_smart_pick(const char *path) {
+	if (!device_state_smart_shuffle() || !path) return false;
+	for (int i = 0; i < smart_count; i++)
+		if (!strcmp(smart_paths[i], path)) return true;
+	return false;
+}
+
+void device_state_set_smart_shuffle(bool on) {
+	if (on == device_state_smart_shuffle()) return;
+	if (!on) {
+		int idx[SMART_MAX * 4], n = 0;
+		int cur = playlist_current_index();
+		for (int i = cur + 1; i < playlist_count() && n < (int)(sizeof(idx) / sizeof(idx[0])); i++) {
+			char path[512];
+			if (playlist_path_at(i, path, sizeof(path)) && device_state_is_smart_pick(path)) idx[n++] = i;
+		}
+		if (n) playlist_remove(idx, n);
+		smart_on = false;
+		smart_count = 0;
+		device_state_queue_changed();
+		return;
+	}
+	if (!playlist_shuffle_enabled()) playlist_set_shuffle(true);
+	char recs[SMART_MAX][512];
+	int n = !strcmp(playlist_context_kind(), "PLAYLIST") && playlist_context_name()[0]
+				? library_playlist_recommend(playlist_context_name(), recs, SMART_MAX)
+				: library_autoplay_paths(current_metadata_file, recs, SMART_MAX);
+	int at = playlist_current_index() + 1;
+	smart_count = 0;
+	for (int k = 0; k < n; k++) {
+		at += 3;
+		if (at > playlist_count()) at = playlist_count();
+		if (playlist_insert_at(recs[k], at)) {
+			snprintf(smart_paths[smart_count++], sizeof(smart_paths[0]), "%s", recs[k]);
+			at++;
+		}
+	}
+	snprintf(smart_context, sizeof(smart_context), "%s", playlist_context_name());
+	smart_on = true;
+	device_state_queue_changed();
+}
+
+bool device_state_private_session(void) { return private_session; }
+void device_state_set_private_session(bool on) { private_session = on; }
+
+bool device_state_autoplay(void) { return config_get_int("player", "autoplay", 1) != 0; }
+
+void device_state_set_autoplay(bool on) {
+	config_set_int("player", "autoplay", on ? 1 : 0);
+	config_save();
+}
+
+#define AUTOPLAY_COUNT 25
+static bool autoplay_start(const char *seed) {
+	if (!seed || !seed[0] || !device_state_autoplay()) {
+		return false;
+	}
+	static char found[AUTOPLAY_COUNT][512];
+	int n = library_autoplay_paths(seed, found, AUTOPLAY_COUNT);
+	if (n <= 0) {
+		return false;
+	}
+	const char *list[AUTOPLAY_COUNT];
+	for (int i = 0; i < n; i++) {
+		list[i] = found[i];
+	}
+	playlist_load_paths_ordered(list, n, 0);
+	playlist_set_album("");
+	playlist_set_context("", "Autoplay");
+	char path[512];
+	if (!playlist_current_path(path, sizeof(path))) {
+		return false;
+	}
+	load_and_play(path);
+	fprintf(stderr, "autoplay: %d songs after %s\n", n, seed);
+	return true;
 }
 
 // One pass over the records, keeping both neighbours of the current one. It
@@ -1297,9 +1343,7 @@ static bool chain_beside(bool forward) {
 }
 
 bool device_state_advance_auto(char *out_path, size_t out_size) {
-	if (radio_is_active()) {
-		return false; // a stream never finishes, so there is nothing to advance to
-	}
+	
 
 	// A book ends where it ends. The queue behind a book in one file is its
 	// folder, and on a card that folder is a shelf of other books -- rolling
@@ -1347,10 +1391,27 @@ bool device_state_advance_auto(char *out_path, size_t out_size) {
 		return true;
 	}
 
-	if (!playlist_advance_auto(path, sizeof(path))) {
+	bool more = playlist_advance_auto(path, sizeof(path));
+	// Songs hidden in the playlist being played are gone past (Spotify's
+	// "Hide in this playlist"); a bound, so a playlist all hidden still ends.
+	for (int guard = 0; more && guard < 64 && !strcmp(playlist_context_kind(), "PLAYLIST") &&
+						library_playlist_hidden(playlist_context_name(), path);
+		 guard++) {
+		more = playlist_advance_auto(path, sizeof(path));
+	}
+	if (!more) {
 		// The queue is spent, and there was no record to follow: the last
-		// track has been heard to its end.
+		// track has been heard to its end. Autoplay carries on from it, unless
+		// repeat-one holds this track or the option is off.
 		playhistory_left();
+		char seed[512];
+		snprintf(seed, sizeof(seed), "%s", current_metadata_file);
+		if (playlist_repeat_mode() != 2 && autoplay_start(seed)) {
+			if (out_path && out_size > 0) {
+				playlist_current_path(out_path, out_size);
+			}
+			return true;
+		}
 		return false;
 	}
 
@@ -1372,7 +1433,7 @@ bool device_state_advance_auto(char *out_path, size_t out_size) {
 void device_state_read_ahead(double position, double total) {
 	// Only where gapless can use it: what it buys is the next track opening
 	// before the queue held at the end of this one runs out.
-	if (!audio_get_gapless() || radio_is_active() || total <= 0.0 || position < READAHEAD_SETTLE_SECS ||
+	if (!audio_get_gapless() || total <= 0.0 || position < READAHEAD_SETTLE_SECS ||
 		total - position > READAHEAD_LEAD_SECS) {
 		return;
 	}
@@ -1455,6 +1516,13 @@ bool device_state_next(char *out_path, size_t out_size) {
 
 	if (!playlist_next(path, sizeof(path)))
 		return false;
+	// Next by hand also goes past songs hidden in the playlist playing.
+	for (int guard = 0; guard < 64 && !strcmp(playlist_context_kind(), "PLAYLIST") &&
+						library_playlist_hidden(playlist_context_name(), path);
+		 guard++) {
+		if (!playlist_next(path, sizeof(path)))
+			return false;
+	}
 
 	load_and_play(path);
 
@@ -1506,21 +1574,7 @@ audio_status_t device_state_toggle_play_pause(void) {
 	// the player's button, the control centre, the physical key -- means
 	// "stop this". Without this, the paused track underneath would resume on
 	// top of the stream and both would be writing to one output.
-	if (radio_is_active()) {
-		// While it is still connecting the key does nothing: stopping a
-		// connection halfway only makes the wait for the next one longer.
-		if (radio_is_connecting()) {
-			return AUDIO_STATUS_PLAYING;
-		}
-		if (radio_is_playing()) {
-			radio_stop();
-			return AUDIO_STATUS_STOPPED;
-		}
-		// Stopped on a station: play means reconnect to it, not go back to
-		// whatever track was loaded before.
-		radio_resume();
-		return AUDIO_STATUS_PLAYING;
-	}
+	
 
 	switch (audio_get_status()) {
 	case AUDIO_STATUS_PLAYING:

@@ -14,16 +14,11 @@
 #include "src/gui/library/audiobooks.h"
 #include "src/gui/nowplaying/player.h"
 #include "src/gui/shell/scrolltext.h"
-#include "src/gui/streaming/podcastpage.h"
-#include "src/gui/wireless/dlna.h"
 #include "src/gui/wireless/sonixlink.h"
 #include "src/gui/wireless/wifitransfer.h"
 #include "src/gui/shell/theme.h"
 #include "src/gui/shell/toast.h"
 #include "src/system/playback/audiobook.h"
-#include "src/system/streaming/podcast.h"
-#include "src/system/streaming/podcastcache.h"
-#include "src/system/streaming/podcastsubs.h"
 #include "src/system/bluetooth/btreceiver.h"
 #include "src/system/audio/usbdac.h"
 #include "src/system/net/wifitransfer.h"
@@ -42,12 +37,6 @@
 #include "src/system/playback/playlist.h"
 #include "src/system/playback/sleeptimer.h"
 #include "src/system/device/power.h"
-#include "src/system/streaming/qobuzcache.h"
-#include "src/system/streaming/qobuzsync.h"
-#include "src/system/streaming/tidalcache.h"
-#include "src/system/streaming/tidalsync.h"
-#include "src/system/streaming/radio.h"
-#include "src/system/remote/dlna.h"
 #include "src/system/remote/sonixlink.h"
 #include "src/system/net/wifi.h"
 
@@ -58,7 +47,7 @@
 // against the roughly 400 px the card leaves inside its padding, so a fifth
 // does not fit however tight the gap gets: the extra controls wrap onto a
 // second line rather than shrinking.
-#define CIRCLE_BUTTON_SIZE 88
+#define CIRCLE_BUTTON_SIZE 88 // the most a circle grows to; see circle_size
 #define CIRCLE_BUTTON_GAP 14
 #define QP_BUTTONS_PER_LINE 4
 
@@ -72,7 +61,7 @@
 #define CARD_GAP 16	   // between the two cards
 #define CARD_ROW_GAP 12 // between the blocks inside the controls card
 #define HANDLE_ROOM 24	// added under the slider when the card has a handle
-#define BRIGHT_ROW_H 44
+#define BRIGHT_ROW_H 52
 // The dimmest backlight level on the slider: 0 would put the backlight out.
 #define BRIGHTNESS_FLOOR 1
 
@@ -92,10 +81,8 @@ static lv_obj_t *airplay_btn;
 static lv_obj_t *lineout_btn;
 static lv_obj_t *sonixlink_btn;
 static lv_obj_t *peq_btn;
-static lv_obj_t *dlna_btn;
 static lv_obj_t *sleep_music_btn;
 static lv_obj_t *sleep_audiobook_btn;
-static lv_obj_t *sleep_podcast_btn;
 static lv_obj_t *wifi_transfer_btn;
 static lv_obj_t *gapless_btn;
 
@@ -126,10 +113,8 @@ static const char *const button_key[QP_BTN_COUNT] = {
 	[QP_BTN_LINEOUT] = "lineout",
 	[QP_BTN_SONIXLINK] = "sonixlink",
 	[QP_BTN_PEQ] = "peq",
-	[QP_BTN_DLNA] = "dlna",
 	[QP_BTN_SLEEP_MUSIC] = "sleep_music",
 	[QP_BTN_SLEEP_AUDIOBOOK] = "sleep_audiobook",
-	[QP_BTN_SLEEP_PODCAST] = "sleep_podcast",
 	[QP_BTN_WIFI_TRANSFER] = "wifi_transfer",
 	[QP_BTN_GAPLESS] = "gapless",
 };
@@ -145,10 +130,8 @@ static const char *const button_tag[QP_BTN_COUNT] = {
 	[QP_BTN_LINEOUT] = "quickpanel_line_out",
 	[QP_BTN_SONIXLINK] = "sonixlink",
 	[QP_BTN_PEQ] = "peq",
-	[QP_BTN_DLNA] = "dlna",
 	[QP_BTN_SLEEP_MUSIC] = "quickpanel_sleep_music",
 	[QP_BTN_SLEEP_AUDIOBOOK] = "quickpanel_sleep_audiobook",
-	[QP_BTN_SLEEP_PODCAST] = "quickpanel_sleep_podcast",
 	[QP_BTN_WIFI_TRANSFER] = "wifitransfer_title",
 	[QP_BTN_GAPLESS] = "musicsettings_gapless_playback",
 };
@@ -200,6 +183,11 @@ static uint32_t drag_begin_ms;
 // ---------------------------------------------------------------------------
 
 static lv_obj_t *controls_card;
+// The circles' diameter: four to a line and two lines in the card's room for
+// them, up to CIRCLE_BUTTON_SIZE. Fixed at 88 px they wrapped three to a line
+// at Display size Large and the lines were cut off top and bottom (device
+// round 4).
+static int circle_size = CIRCLE_BUTTON_SIZE;
 static lv_obj_t *np_card;
 static lv_obj_t *quick_row;	   // the first QP_SLOT_VISIBLE buttons
 static lv_obj_t *extra_clip;	   // the window the stretch opens, under the first lines
@@ -310,10 +298,10 @@ static void refresh_now_playing_card(void) {
 	}
 	lv_image_set_src(np_play_icon, glyph);
 
-	bool station_steps = state.live && radio_can_step();
+	bool station_steps = state.live && false;
 
 	// Greyed out and inert while a station connects, as on the player.
-	bool connecting = state.live && radio_is_connecting();
+	bool connecting = state.live && false;
 	lv_obj_t *const transport[] = {np_prev_btn, np_play_btn, np_next_btn};
 	for (size_t i = 0; i < sizeof(transport) / sizeof(transport[0]); i++) {
 		if (!transport[i]) {
@@ -351,12 +339,11 @@ static void refresh_now_playing_card(void) {
 	// track -- but with its own intervals (podcast_skip_*), no repeat mode, and a
 	// star that follows the feed rather than the track. Same dressing as the
 	// player.
-	long long podcast_feed_id = 0;
-	player_current_podcast_feed(&podcast_feed_id, NULL);
-	bool podcast = !state.live && !book && podcastcache_is_episode(state.current_file);
+
+	bool podcast = !state.live && !book && false;
 	bool skips = book || podcast;
-	int back = book ? audiobook_skip_back() : podcast ? podcast_skip_back() : 0;
-	int forward = book ? audiobook_skip_forward() : podcast ? podcast_skip_forward() : 0;
+	int back = book ? audiobook_skip_back() : podcast ? audiobook_skip_back() : 0;
+	int forward = book ? audiobook_skip_forward() : podcast ? audiobook_skip_forward() : 0;
 	if (np_prev_icon) {
 		lv_image_set_src(np_prev_icon, !skips                       ? &icon_skip_back_large
 									   : back == AUDIOBOOK_SKIP_HUGE ? &icon_prev_60
@@ -398,33 +385,10 @@ static void refresh_now_playing_card(void) {
 
 	// On a radio the star is about the station and lives in the radio database:
 	// there is no file to look up in the music library.
-	radio_station_t station;
 	bool fav;
-	long qobuz_id = 0;
-	long tidal_id = 0;
-	if (radio_current_station(&station)) {
-		fav = radio_fav_contains(station.uuid);
-	} else if (podcast) {
-		// On a podcast the star reports whether the feed is followed, exactly as
-		// the player's star does.
-		fav = podcastsubs_is_followed(podcast_feed_id);
-	} else if (state.current_file[0] && (tidal_id = tidalcache_track_id(state.current_file)) > 0) {
-		// Same reasoning as the Qobuz case below: the star must report what is on
-		// the account, not what is in the local database.
-		//
-		// The local mirror is also refreshed, because it may not be populated
-		// yet: the control centre can be opened on a Tidal track without the
-		// player ever having been visited, and an empty star on a track that is
-		// a favourite turns the next tap into an "add" for something already
-		// added.
-		fav = tidalsync_is_favorite(tidal_id);
-		tidalsync_favorites_refresh(NULL);
-	} else if (state.current_file[0] && (qobuz_id = qobuzcache_track_id(state.current_file)) > 0) {
-		// A Qobuz track: the star reports the account state, like the player's.
-		// Reading the local database here would draw a star that disagrees with
-		// the one a tap fills.
-		fav = qobuzsync_is_favorite(qobuz_id);
-	} else {
+
+
+	    {
 		fav = state.current_file[0] && library_fav_contains(state.current_file);
 	}
 	lv_image_set_src(np_star_icon, fav ? &icon_star_filled : &icon_star);
@@ -857,64 +821,21 @@ static void repeat_cb(lv_event_t *e) {
 	refresh_repeat_icon();
 }
 
-// Result of a Qobuz star, delivered by the qobuzsync worker. Same contract as
-// the player's star: success needs no message, since the filled star already
-// says it, but failure does, because the star filled on touch and now empties
-// again. Reported on the GUI thread via gui_post, never from the worker.
-static char qp_fav_error[192];
 
-static void qp_fav_error_async(void *user) {
-	(void)user;
-	if (qp_fav_error[0]) {
-		gui_notify_popup(qp_fav_error);
-	}
-	refresh_now_playing_card();
-	player_refresh_now_playing();
-}
 
-static void qp_fav_done(bool ok, const char *error, void *user) {
-	(void)user;
-	snprintf(qp_fav_error, sizeof(qp_fav_error), "%s",
-			 ok ? "" : (error && error[0] ? error : tr("qobuz_favourites_failed")));
-	gui_post(qp_fav_error_async, NULL);
-}
 
-static void qp_tidal_fav_done(bool ok, const char *error, void *user) {
-	(void)user;
-	snprintf(qp_fav_error, sizeof(qp_fav_error), "%s",
-			 ok ? "" : (error && error[0] ? error : tr("tidal_favourites_failed")));
-	gui_post(qp_fav_error_async, NULL);
-}
+
+
+
 
 static void star_cb(lv_event_t *e) {
 	(void)e;
-
-	radio_station_t station;
-	if (radio_current_station(&station)) {
-		if (radio_fav_contains(station.uuid)) {
-			radio_fav_remove(station.uuid);
-		} else {
-			radio_fav_add(&station);
-		}
-		refresh_now_playing_card();
-		player_refresh_now_playing();
-		return;
-	}
+	
 
 	// A podcast: the star follows or unfollows the feed, like the player's, and
 	// reads the same source so the two stars cannot disagree.
-	long long feed_id = 0;
-	podcast_feed_t feed;
-	if (player_current_podcast_feed(&feed_id, &feed)) {
-		if (podcastsubs_is_followed(feed_id)) {
-			podcastsubs_unfollow(feed_id);
-		} else {
-			podcastsubs_follow(&feed);
-		}
-		refresh_now_playing_card();
-		player_refresh_now_playing();
-		return;
-	}
+
+	
 
 	device_state_t state;
 	device_state_get(&state);
@@ -922,26 +843,9 @@ static void star_cb(lv_event_t *e) {
 		return;
 	}
 
-	// A Qobuz track: the star goes to the account favourites, like the player's,
-	// and not to the local database, which would store the path of a cache file
-	// that is gone twenty tracks later.
-	long qobuz_id = qobuzcache_track_id(state.current_file);
-	if (qobuz_id > 0) {
-		bool want = !qobuzsync_is_favorite(qobuz_id);
-		qobuzsync_favorite_toggle(qobuz_id, want, qp_fav_done, NULL);
-		refresh_now_playing_card(); // the local mirror already flipped, so redraw at once
-		player_refresh_now_playing();
-		return;
-	}
 
-	long tidal_id = tidalcache_track_id(state.current_file);
-	if (tidal_id > 0) {
-		bool want = !tidalsync_is_favorite(tidal_id);
-		tidalsync_favorite_toggle(tidal_id, want, qp_tidal_fav_done, NULL);
-		refresh_now_playing_card();
-		player_refresh_now_playing();
-		return;
-	}
+
+	
 
 	const char *slash = strrchr(state.current_file, '/');
 	const char *title = state.metadata.title[0] ? state.metadata.title : (slash ? slash + 1 : state.current_file);
@@ -1055,8 +959,8 @@ static void order_load(void) {
 		// sleep timers, Wi-Fi transfer and gapless. Appending them would change a
 		// panel nobody asked to change, so they wait among the unused ones, where
 		// the settings page shows them.
-		bool waits = i == QP_BTN_DLNA || i == QP_BTN_SLEEP_MUSIC || i == QP_BTN_SLEEP_AUDIOBOOK ||
-					 i == QP_BTN_SLEEP_PODCAST || i == QP_BTN_WIFI_TRANSFER || i == QP_BTN_GAPLESS;
+		bool waits = i == QP_BTN_SLEEP_MUSIC || i == QP_BTN_SLEEP_AUDIOBOOK ||
+					 i == QP_BTN_WIFI_TRANSFER || i == QP_BTN_GAPLESS;
 		if ((saved_version < 2 && i == QP_BTN_FADE) || waits) {
 			hidden[hidden_n++] = (uint8_t)i;
 		} else {
@@ -1163,14 +1067,10 @@ static lv_obj_t *button_widget(quickpanel_button_t which) {
 		return sonixlink_btn;
 	case QP_BTN_PEQ:
 		return peq_btn;
-	case QP_BTN_DLNA:
-		return dlna_btn;
 	case QP_BTN_SLEEP_MUSIC:
 		return sleep_music_btn;
 	case QP_BTN_SLEEP_AUDIOBOOK:
 		return sleep_audiobook_btn;
-	case QP_BTN_SLEEP_PODCAST:
-		return sleep_podcast_btn;
 	case QP_BTN_WIFI_TRANSFER:
 		return wifi_transfer_btn;
 	case QP_BTN_GAPLESS:
@@ -1216,7 +1116,7 @@ static void order_apply(void) {
 	// the second block, the same pitch as the lines above.
 	int extra = at > QP_SLOT_VISIBLE ? at - QP_SLOT_VISIBLE : 0;
 	int lines = (extra + QP_BUTTONS_PER_LINE - 1) / QP_BUTTONS_PER_LINE;
-	expand_full = lines * (CIRCLE_BUTTON_SIZE + CIRCLE_BUTTON_GAP);
+	expand_full = lines * (circle_size + CIRCLE_BUTTON_GAP);
 
 	// With a handle to show the card takes HANDLE_ROOM from the now-playing
 	// card, which has height to spare under its transport; without one both
@@ -1377,14 +1277,12 @@ const lv_image_dsc_t *quickpanel_button_icon(quickpanel_button_t button) {
 		return &icon_sonixlink_quick;
 	case QP_BTN_PEQ:
 		return &icon_peq_quick;
-	case QP_BTN_DLNA:
-		return &icon_dlna_quick;
+
 	case QP_BTN_SLEEP_MUSIC:
 		return &icon_sleep_music_quick;
 	case QP_BTN_SLEEP_AUDIOBOOK:
 		return &icon_sleep_audiobook_quick;
-	case QP_BTN_SLEEP_PODCAST:
-		return &icon_sleep_podcast_quick;
+
 	case QP_BTN_WIFI_TRANSFER:
 		return &icon_wifi_transfer_quick;
 	case QP_BTN_GAPLESS:
@@ -1418,7 +1316,7 @@ static lv_obj_t *make_circle_button(lv_obj_t *parent, const lv_image_dsc_t *glyp
 	lv_obj_set_event_bubble(btn, true);
 	lv_obj_add_event_cb(btn, circle_guard_cb, LV_EVENT_CLICKED, NULL);
 	lv_obj_add_event_cb(btn, circle_guard_cb, LV_EVENT_LONG_PRESSED, NULL);
-	lv_obj_set_size(btn, CIRCLE_BUTTON_SIZE, CIRCLE_BUTTON_SIZE);
+	lv_obj_set_size(btn, circle_size, circle_size);
 	lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
 	lv_obj_add_style(btn, &theme_style_switch, 0); // neutral circle that follows the theme
 	lv_obj_set_style_shadow_width(btn, 0, 0);
@@ -1445,7 +1343,7 @@ static void circle_button_set_on(lv_obj_t *btn, bool on) {
 		lv_obj_set_style_bg_color(btn, theme()->accent, 0);
 		lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
 		if (icon) {
-			lv_obj_set_style_image_recolor(icon, lv_color_white(), 0);
+			lv_obj_set_style_image_recolor(icon, theme()->accent_ink, 0);
 		}
 	} else {
 		lv_obj_remove_local_style_prop(btn, LV_STYLE_BG_COLOR, 0);
@@ -1470,11 +1368,9 @@ static void refresh_audio_buttons(void) {
 	circle_button_set_on(fade_btn, musicsettings_fade_enabled());
 	circle_button_set_on(airplay_btn, airplay_get_enabled());
 	circle_button_set_on(sonixlink_btn, sonixlink_get_enabled());
-	circle_button_set_on(dlna_btn, dlna_get_enabled());
 	circle_button_set_on(peq_btn, peq_get_enabled());
 	circle_button_set_on(sleep_music_btn, sleep_timer_armed(SLEEPTIMER_MUSIC));
 	circle_button_set_on(sleep_audiobook_btn, sleep_timer_armed(SLEEPTIMER_AUDIOBOOK));
-	circle_button_set_on(sleep_podcast_btn, sleep_timer_armed(SLEEPTIMER_PODCAST));
 	circle_button_set_on(wifi_transfer_btn, wifitransfer_get_enabled());
 
 	// Bit-perfect holds the effects off (musicsettings.c): their buttons are
@@ -1760,10 +1656,7 @@ static void sleep_audiobook_clicked_cb(lv_event_t *e) {
 	sleep_timer_clicked(SLEEPTIMER_AUDIOBOOK);
 }
 
-static void sleep_podcast_clicked_cb(lv_event_t *e) {
-	(void)e;
-	sleep_timer_clicked(SLEEPTIMER_PODCAST);
-}
+
 
 static void open_page(lv_obj_t *screen);
 
@@ -1775,34 +1668,13 @@ static void sleep_page_cb(lv_event_t *e) {
 	sleeptimer_kind_t kind = (sleeptimer_kind_t)(intptr_t)lv_event_get_user_data(e);
 	lv_obj_t *screen = kind == SLEEPTIMER_MUSIC		 ? musicsettings_playback_screen()
 					   : kind == SLEEPTIMER_AUDIOBOOK ? audiobooksettings_screen
-													  : podcastpage_settings_screen();
+													  : audiobooksettings_screen;
 	open_page(screen);
 }
 
 // DLNA, the third of the same family: a phone pushes music at the player over
 // the network, so without one there is nothing to push it from.
-static void dlna_clicked_cb(lv_event_t *e) {
-	(void)e;
-	if (long_press_consumed) {
-		long_press_consumed = false;
-		return;
-	}
 
-	bool want = !dlna_get_enabled();
-
-	if (want) {
-		if (!dlna_available()) {
-			gui_notify_popup("dlna_unavailable");
-			return;
-		}
-		if (network_needed("quickpanel_dlna_only_works_over_wi_fi")) {
-			return;
-		}
-	}
-
-	dlna_set_enabled(want);
-	toggled();
-}
 
 // Wi-Fi transfer. The server lives only as long as its page is open (see
 // gui/wireless/wifitransfer.h), so switching it on opens the page with the
@@ -2037,6 +1909,12 @@ void quickpanel_init(gui_config_t *cfg) {
 	lv_obj_set_flex_align(controls_card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 	lv_obj_set_style_pad_gap(controls_card, CARD_ROW_GAP, 0);
 	int row_h = card_h - 2 * CARD_PADDING - BRIGHT_ROW_H - CARD_ROW_GAP;
+	{
+		int inner_w = card_w - 2 * CARD_PADDING;
+		int by_width = (inner_w - (QP_BUTTONS_PER_LINE - 1) * CIRCLE_BUTTON_GAP) / QP_BUTTONS_PER_LINE;
+		int by_height = (row_h - CIRCLE_BUTTON_GAP) / 2;
+		circle_size = LV_MIN(CIRCLE_BUTTON_SIZE, LV_MIN(by_width, by_height));
+	}
 
 	lv_obj_t *row = lv_obj_create(controls_card);
 	quick_row = row;
@@ -2108,9 +1986,6 @@ void quickpanel_init(gui_config_t *cfg) {
 	lv_obj_add_event_cb(peq_btn, peq_clicked_cb, LV_EVENT_CLICKED, NULL);
 	lv_obj_add_event_cb(peq_btn, open_page_cb, LV_EVENT_LONG_PRESSED, peqpage_screen());
 
-	dlna_btn = make_circle_button(row, &icon_dlna_quick);
-	lv_obj_add_event_cb(dlna_btn, dlna_clicked_cb, LV_EVENT_CLICKED, NULL);
-	lv_obj_add_event_cb(dlna_btn, open_page_cb, LV_EVENT_LONG_PRESSED, dlna_screen);
 
 	// Each of the three opens, on a long press, the page of its own kind of
 	// listening, where its length is chosen.
@@ -2123,10 +1998,7 @@ void quickpanel_init(gui_config_t *cfg) {
 	lv_obj_add_event_cb(sleep_audiobook_btn, sleep_page_cb, LV_EVENT_LONG_PRESSED,
 						(void *)(intptr_t)SLEEPTIMER_AUDIOBOOK);
 
-	sleep_podcast_btn = make_circle_button(row, &icon_sleep_podcast_quick);
-	lv_obj_add_event_cb(sleep_podcast_btn, sleep_podcast_clicked_cb, LV_EVENT_CLICKED, NULL);
-	lv_obj_add_event_cb(sleep_podcast_btn, sleep_page_cb, LV_EVENT_LONG_PRESSED,
-						(void *)(intptr_t)SLEEPTIMER_PODCAST);
+
 
 	// A tap opens the page with the server starting; a hold opens it as it is.
 	wifi_transfer_btn = make_circle_button(row, &icon_wifi_transfer_quick);
@@ -2144,9 +2016,10 @@ void quickpanel_init(gui_config_t *cfg) {
 	lv_obj_set_style_pad_all(bright_row, 0, 0);
 	// The knob is 26 px across and centred on the value, so at full scale half of
 	// it falls past the end of the track; the row clips its children, which would
-	// slice the knob down the middle. Keeping the track 13 px short of the row's
-	// right edge gives it room.
-	lv_obj_set_style_pad_right(bright_row, 13, 0);
+	// slice the knob down the middle. Keeping the track short of the row's
+	// right edge by half the knob (16 px track + 8 px padding each side) and its
+	// shadow gives it room.
+	lv_obj_set_style_pad_right(bright_row, 22, 0);
 	lv_obj_set_style_pad_gap(bright_row, 18, 0);
 	lv_obj_set_scrollable(bright_row, false);
 	lv_obj_set_event_bubble(bright_row, true);
@@ -2159,7 +2032,9 @@ void quickpanel_init(gui_config_t *cfg) {
 	lv_obj_set_style_image_recolor_opa(sun, LV_OPA_COVER, 0);
 
 	brightness_slider = lv_slider_create(bright_row);
-	lv_obj_set_height(brightness_slider, 10);
+	// A thick track and a catch area reaching well above and below it: a
+	// finger on a 10 px line kept missing it (device round 4).
+	lv_obj_set_height(brightness_slider, 16);
 	lv_obj_set_flex_grow(brightness_slider, 1);
 	lv_slider_set_range(brightness_slider, BRIGHTNESS_FLOOR, 100);
 	lv_obj_set_style_radius(brightness_slider, LV_RADIUS_CIRCLE, LV_PART_MAIN);
@@ -2174,7 +2049,7 @@ void quickpanel_init(gui_config_t *cfg) {
 	lv_obj_set_style_shadow_width(brightness_slider, 8, LV_PART_KNOB);
 	lv_obj_set_style_shadow_opa(brightness_slider, LV_OPA_30, LV_PART_KNOB);
 	lv_obj_set_style_shadow_color(brightness_slider, lv_color_black(), LV_PART_KNOB);
-	lv_obj_set_ext_click_area(brightness_slider, 18);
+	lv_obj_set_ext_click_area(brightness_slider, 24);
 	lv_obj_add_event_cb(brightness_slider, brightness_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
 	lv_obj_add_event_cb(brightness_slider, brightness_released_cb, LV_EVENT_RELEASED, NULL);
 
@@ -2184,7 +2059,7 @@ void quickpanel_init(gui_config_t *cfg) {
 	// further lines of the grid above. The window clips them, so the stretch is
 	// what uncovers them.
 	int first_lines = QP_SLOT_VISIBLE / QP_BUTTONS_PER_LINE;
-	int first_h = first_lines * CIRCLE_BUTTON_SIZE + (first_lines - 1) * CIRCLE_BUTTON_GAP;
+	int first_h = first_lines * circle_size + (first_lines - 1) * CIRCLE_BUTTON_GAP;
 	extra_clip = lv_obj_create(controls_card);
 	lv_obj_remove_style_all(extra_clip);
 	lv_obj_set_ignore_layout(extra_clip, true);

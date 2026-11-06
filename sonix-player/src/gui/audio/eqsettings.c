@@ -14,6 +14,7 @@
 #include "src/gui/shell/theme.h"
 #include "src/gui/shell/toast.h"
 #include "src/system/audio/eq.h"
+#include "src/system/core/config.h"
 #include "src/system/core/lang.h"
 
 #define PRESET_NAME_MAX 100
@@ -21,6 +22,14 @@
 static gui_config_t *config;
 
 static lv_obj_t *settings_screen;
+
+// The preset last put on, by name: the equaliser page marks its chip until a
+// band is moved by hand.
+void eqsettings_mark(const char *name) {
+	config_set("eq", "preset", name ? name : "");
+	config_save();
+}
+const char *eqsettings_marked(void) { return config_get("eq", "preset", ""); }
 
 // The page's rows, built afresh each time it opens.
 static lv_obj_t *list_container;
@@ -60,6 +69,7 @@ static void default_preset_cb(lv_event_t *e) {
 		return;
 	}
 	eq_apply_preset(&EQ_DEFAULT_PRESETS[index]);
+	eqsettings_mark(EQ_DEFAULT_PRESETS[index].name);
 	applied("eq_preset_applied");
 }
 
@@ -74,6 +84,7 @@ static void preset_clicked_cb(lv_event_t *e) {
 		return;
 	}
 	if (eq_preset_load(name)) {
+		eqsettings_mark(name);
 		applied("preset_loaded");
 	} else {
 		gui_notify_popup("cannot_load_the_preset");
@@ -187,7 +198,7 @@ static void rebuild(void) {
 		lv_label_set_long_mode(empty, LV_LABEL_LONG_WRAP);
 		lv_obj_set_width(empty, lv_pct(100));
 		lv_obj_add_style(empty, &theme_style_text_dim, 0);
-		lv_obj_set_style_text_font(empty, &font_ui_22, 0);
+		lv_obj_set_style_text_font(empty, settingsrow_note_font(), 0);
 	}
 
 	settingsrow_heading(list_container, "eq_default_presets");
@@ -237,6 +248,7 @@ static void name_accept_cb(lv_event_t *e) {
 		gui_notify_popup("cannot_save_the_preset");
 		return;
 	}
+	eqsettings_mark(name);
 
 	name_layer_hide();
 	rebuild();
@@ -259,6 +271,11 @@ static void open_name_dialog_cb(lv_event_t *e) {
 	lv_obj_set_hidden(name_layer, false);
 	lv_obj_move_foreground(name_layer);
 	back_btn_hide_on_screen(settings_screen, true);
+}
+
+void eqsettings_save_new(void) {
+	eqsettings_open();
+	open_name_dialog_cb(NULL);
 }
 
 static void build_name_dialog(gui_config_t *cfg) {

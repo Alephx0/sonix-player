@@ -86,7 +86,7 @@ static lv_obj_t *make_button(lv_obj_t *parent, const char *text, bool accent, lv
 	lv_obj_t *label = lv_label_create(btn);
 	lv_label_set_text(label, tr(text));
 	lv_obj_set_style_text_font(label, &font_ui_24, 0);
-	lv_obj_set_style_text_color(label, accent ? lv_color_white() : theme()->text_primary, 0);
+	lv_obj_set_style_text_color(label, accent ? theme()->accent_ink : theme()->text_primary, 0);
 	lv_obj_center(label);
 
 	if (label_out) {
@@ -154,6 +154,24 @@ void confirm_init(gui_config_t *cfg) {
 	cancel_btn = make_button(buttons, "cancel", false, cancel_cb, &cancel_label);
 	ok_btn = make_button(buttons, "ok", true, ok_cb, &ok_label);
 
+	// The reference layout's dialog: a smaller bold title over quiet body text,
+	// a green pill for the answer and a plain text Cancel beside it.
+	if (theme_reference()) {
+		lv_obj_set_style_radius(card, 16, 0);
+		lv_obj_set_style_pad_all(card, 24, 0);
+		lv_obj_set_style_text_font(title_label, &font_ui_22_bold, 0);
+		lv_obj_set_style_text_font(message_label, &font_ui_18, 0);
+		lv_obj_set_height(buttons, 52);
+		for (int i = 0; i < 2; i++) {
+			lv_obj_t *btn = i ? ok_btn : cancel_btn;
+			lv_obj_set_height(btn, 52);
+			lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
+			lv_obj_set_style_text_font(lv_obj_get_child(btn, 0), &font_ui_20_bold, 0);
+		}
+		lv_obj_remove_style(cancel_btn, &theme_style_switch, 0);
+		lv_obj_set_style_bg_opa(cancel_btn, LV_OPA_TRANSP, 0);
+	}
+
 	theme_register_refresh(refresh_theme);
 }
 
@@ -163,6 +181,7 @@ void confirm_init(gui_config_t *cfg) {
 static void refresh_theme(void) {
 	if (ok_btn) {
 		lv_obj_set_style_bg_color(ok_btn, theme()->accent, 0);
+		lv_obj_set_style_text_color(ok_label, theme()->accent_ink, 0);
 	}
 	if (cancel_label) {
 		lv_obj_set_style_text_color(cancel_label, theme()->text_primary, 0);

@@ -527,7 +527,7 @@ static void add_placeholder(lv_obj_t *parent, const char *text, bool spin) {
 	lv_obj_t *label = lv_label_create(row);
 	lv_label_set_text(label, tr(text));
 	lv_obj_add_style(label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(label, settingsrow_note_font(), 0);
 }
 
 static void rebuild_lists(void) {
@@ -770,7 +770,7 @@ static lv_obj_t *make_section(lv_obj_t *container, const char *title, lv_obj_t *
 	// Full width, otherwise the page's centring flex pulls the heading inward.
 	lv_obj_set_width(label, lv_pct(100));
 	lv_obj_add_style(label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(label, settingsrow_note_font(), 0);
 	lv_obj_set_style_pad_top(label, 6, 0);
 	lv_obj_set_style_pad_hor(label, 4, 0);
 	if (label_out) {

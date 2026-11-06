@@ -7,6 +7,7 @@
 #include "src/gui/fonts/fonts.h"
 #include "src/gui/nowplaying/player.h"
 #include "src/gui/settings/bootlogopage.h"
+#include "src/gui/shell/confirm.h"
 #include "src/gui/shell/corners.h"
 #include "src/gui/shell/settingsrow.h"
 #include "src/gui/shell/switcher.h"
@@ -14,6 +15,7 @@
 #include "src/gui/shell/topbar.h"
 #include "src/system/core/config.h"
 #include "src/system/core/lang.h"
+#include "src/system/device/power.h"
 
 lv_obj_t *appearance_screen;
 
@@ -77,6 +79,42 @@ static void text_size_cb(lv_event_t *e) {
 	refresh_text_size_pills();
 }
 
+// Display size: the choice saved for the next start, which the pills show
+// (the one in effect may differ until the restart).
+static lv_obj_t *display_size_pill[2]; // standard / large
+static int display_size_saved;
+
+static void refresh_display_size_pills(void) {
+	for (int i = 0; i < 2; i++) {
+		settingsrow_pill_active(display_size_pill[i],
+								(i == 1) == (display_size_saved == DISPLAY_ZOOM_LARGE));
+	}
+}
+
+static void display_restart_cb(void *user) {
+	(void)user;
+	display_restart();
+}
+
+// Every page is built against the size, so it takes a restart: saved at once,
+// and the restart offered. Declined, it applies at the next start.
+static void display_size_cb(lv_event_t *e) {
+	if (switcher_back_drag_active()) {
+		return;
+	}
+	int zoom = (int)(intptr_t)lv_event_get_user_data(e);
+	if (zoom == display_size_saved) {
+		return;
+	}
+	display_zoom_save(zoom);
+	display_size_saved = zoom;
+	refresh_display_size_pills();
+	if (zoom != display_zoom()) {
+		confirm_show(tr("Restart to change the display size?"), tr("The player restarts now. The song you were on and your queue are kept."),
+					 tr("Restart"), display_restart_cb, NULL);
+	}
+}
+
 // Paints the pair: the active choice is the filled accent button, the other a
 // quiet neutral, like libadwaita's suggested-action beside a regular button.
 static void refresh_buttons(void) {
@@ -86,7 +124,7 @@ static void refresh_buttons(void) {
 	lv_obj_t *off = dark ? btn_light : btn_dark;
 
 	lv_obj_set_style_bg_color(on, theme()->accent, 0);
-	lv_obj_set_style_text_color(lv_obj_get_child(on, 0), lv_color_white(), 0);
+	lv_obj_set_style_text_color(lv_obj_get_child(on, 0), theme()->accent_ink, 0);
 
 	lv_obj_set_style_bg_color(off, theme()->surface_pressed, 0);
 	lv_obj_set_style_text_color(lv_obj_get_child(off, 0), theme()->text_primary, 0);
@@ -136,7 +174,7 @@ static void refresh_clock_buttons(void) {
 		}
 		if (i == active) {
 			lv_obj_set_style_bg_color(btn_clock[i], theme()->accent, 0);
-			lv_obj_set_style_text_color(lv_obj_get_child(btn_clock[i], 0), lv_color_white(), 0);
+			lv_obj_set_style_text_color(lv_obj_get_child(btn_clock[i], 0), theme()->accent_ink, 0);
 		} else {
 			lv_obj_set_style_bg_color(btn_clock[i], theme()->surface_pressed, 0);
 			lv_obj_set_style_text_color(lv_obj_get_child(btn_clock[i], 0), theme()->text_primary, 0);
@@ -192,6 +230,19 @@ static lv_obj_t *make_choice(lv_obj_t *parent, const char *text, bool dark) {
 	return btn;
 }
 
+// The reference layout draws from one fixed Spotify palette, so the theme,
+// accent and tint choices would do nothing there; they are shown only for the
+// legacy layouts, which still honour them.
+static lv_obj_t *palette_rows[4];
+
+static void refresh_palette_rows(void) {
+	for (size_t i = 0; i < sizeof(palette_rows) / sizeof(palette_rows[0]); i++) {
+		if (palette_rows[i]) {
+			lv_obj_set_hidden(palette_rows[i], theme_reference());
+		}
+	}
+}
+
 void appearance_init(gui_config_t *cfg) {
 	lv_obj_t *container = settingsrow_page(appearance_screen, cfg, "appearance");
 
@@ -239,13 +290,19 @@ void appearance_init(gui_config_t *cfg) {
 	lv_obj_set_style_pad_gap(clock_card, 18, 0);
 	lv_obj_set_scrollable(clock_card, false);
 	lv_obj_set_event_bubble(clock_card, true);
+	if (theme_reference()) {
+		// A flat row like the rest of the page in the reference layout.
+		lv_obj_set_style_bg_opa(clock_card, LV_OPA_TRANSP, 0);
+		lv_obj_set_style_pad_hor(clock_card, 4, 0);
+		lv_obj_set_style_pad_ver(clock_card, 12, 0);
+	}
 	lv_obj_set_flex_flow(clock_card, LV_FLEX_FLOW_COLUMN);
 	lv_obj_set_flex_align(clock_card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
 	lv_obj_t *clock_name = lv_label_create(clock_card);
 	lv_label_set_text(clock_name, tr("appearance_clock_position"));
 	lv_obj_add_style(clock_name, &theme_style_text, 0);
-	lv_obj_set_style_text_font(clock_name, &font_ui_24, 0);
+	lv_obj_set_style_text_font(clock_name, theme_reference() ? &font_ui_20 : &font_ui_24, 0);
 
 	lv_obj_t *clock_row = lv_obj_create(clock_card);
 	lv_obj_set_size(clock_row, lv_pct(100), LV_SIZE_CONTENT);
@@ -310,8 +367,12 @@ void appearance_init(gui_config_t *cfg) {
 	lv_label_set_long_mode(tint_note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(tint_note, lv_pct(100));
 	lv_obj_add_style(tint_note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(tint_note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(tint_note, settingsrow_note_font(), 0);
 	lv_label_set_text(tint_note, tr("appearance_dynamic_tint_note"));
+	palette_rows[0] = card;
+	palette_rows[1] = accent_card;
+	palette_rows[2] = lv_obj_get_parent(tint_toggle);
+	palette_rows[3] = tint_note;
 
 	// The picture shown while the player boots, which follows the theme and
 	// the accent unless one of the user's own is chosen.
@@ -325,6 +386,22 @@ void appearance_init(gui_config_t *cfg) {
 		settingsrow_pill(text_size_pills, "appearance_text_normal", FONTS_TEXT_NORMAL, text_size_cb);
 	text_size_pill[FONTS_TEXT_LARGE] =
 		settingsrow_pill(text_size_pills, "appearance_text_large", FONTS_TEXT_LARGE, text_size_cb);
+
+	// How big everything is: the whole interface laid out smaller and drawn up
+	// to the panel (see main.c). Large is the R1's default.
+	display_size_saved = (int)config_get_int("ui", "zoom", display_zoom());
+	lv_obj_t *display_size_pills;
+	settingsrow_pills(container, "Display size", &display_size_pills);
+	display_size_pill[0] = settingsrow_pill(display_size_pills, "Standard", DISPLAY_ZOOM_STANDARD,
+											display_size_cb);
+	display_size_pill[1] =
+		settingsrow_pill(display_size_pills, "Large", DISPLAY_ZOOM_LARGE, display_size_cb);
+	lv_obj_t *display_size_note = lv_label_create(container);
+	lv_label_set_long_mode(display_size_note, LV_LABEL_LONG_WRAP);
+	lv_obj_set_width(display_size_note, lv_pct(100));
+	lv_obj_add_style(display_size_note, &theme_style_text_dim, 0);
+	lv_obj_set_style_text_font(display_size_note, settingsrow_note_font(), 0);
+	lv_label_set_text(display_size_note, tr("Large makes everything on the screen bigger: text, icons, rows and artwork. Changing it restarts the player."));
 
 	// A fifth card, and a plain switch: whether the status
 	// bar prints the charge as a number as well as drawing it.
@@ -343,7 +420,7 @@ void appearance_init(gui_config_t *cfg) {
 	lv_label_set_long_mode(statusbar_note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(statusbar_note, lv_pct(100));
 	lv_obj_add_style(statusbar_note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(statusbar_note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(statusbar_note, settingsrow_note_font(), 0);
 	lv_label_set_text(statusbar_note, tr("appearance_statusbar_always_note"));
 
 	// Rounds off the four corners of the screen, over every page and overlay.
@@ -356,8 +433,12 @@ void appearance_init(gui_config_t *cfg) {
 	refresh_clock_buttons();
 	refresh_accent_buttons();
 	refresh_text_size_pills();
+	refresh_display_size_pills();
 	theme_register_refresh(refresh_buttons);
 	theme_register_refresh(refresh_text_size_pills);
+	theme_register_refresh(refresh_display_size_pills);
 	theme_register_refresh(refresh_clock_buttons);
 	theme_register_refresh(refresh_accent_buttons);
+	refresh_palette_rows();
+	theme_register_refresh(refresh_palette_rows);
 }

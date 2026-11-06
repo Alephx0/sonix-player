@@ -17,7 +17,6 @@
 #include "src/system/core/lang.h"
 #include "src/system/device/power.h"
 #include "src/system/remote/airplay.h"
-#include "src/system/streaming/radio.h"
 
 lv_obj_t *metronomepage_screen;
 
@@ -271,8 +270,7 @@ static void stop(void) {
 // Anything sounding: a track, a station, a phone playing to the player over
 // Bluetooth or AirPlay. The metronome never plays over it.
 static bool something_playing(void) {
-	if (audio_get_status() == AUDIO_STATUS_PLAYING || radio_is_playing() || radio_is_connecting() ||
-		btreceiver_is_streaming()) {
+	if (audio_get_status() == AUDIO_STATUS_PLAYING || btreceiver_is_streaming()) {
 		return true;
 	}
 	airplay_state_t airplay;
@@ -544,7 +542,7 @@ void metronomepage_init(gui_config_t *cfg) {
 
 	tempo_label = lv_label_create(page);
 	lv_obj_add_style(tempo_label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(tempo_label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(tempo_label, settingsrow_note_font(), 0);
 
 	slider = lv_slider_create(page);
 	lv_obj_set_width(slider, lv_pct(92));

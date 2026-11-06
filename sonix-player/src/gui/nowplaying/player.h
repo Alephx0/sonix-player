@@ -4,7 +4,6 @@
 #include "src/gui/nowplaying/cover.h"
 #include "src/gui/shell/gui.h"
 #include "src/system/library/library.h"
-#include "src/system/streaming/podcast.h" // podcast_feed_t
 
 #include "lvgl/lvgl.h"
 
@@ -20,6 +19,8 @@ void player_play_file(const char *filepath);
 // that set up playback through device_state directly (queue jumps, list
 // playback).
 void player_refresh_now_playing(void);
+// Repaints the shuffle and repeat buttons after a change made elsewhere.
+void player_refresh_modes(void);
 
 // Redraws only the artist line, after "Use track artist" has been switched.
 void player_refresh_artist(void);
@@ -64,6 +65,12 @@ typedef enum {
 player_layout_t player_layout_get(void);
 void player_layout_set(player_layout_t layout);
 
+// The progress line under the title drawn as the track's waveform instead
+// ([player] progress_wave; off by default). Local files only, as in the
+// alternative arrangement; the slider over it still does the seeking.
+bool player_progress_wave(void);
+void player_progress_wave_set(bool on);
+
 // Whether the Standard and Studio arrangements take the sleeve's colour as
 // their accent, as Waveform always does. Off by default; saved in the config.
 bool player_cover_accent(void);
@@ -102,7 +109,6 @@ void player_screen_next(void);
 
 // The feed of the episode being played, for the control centre's star button.
 // Returns true and fills id/feed when a podcast is playing.
-bool player_current_podcast_feed(long long *id_out, podcast_feed_t *feed_out);
 
 bool player_sheet_is_open(void);
 
@@ -117,6 +123,11 @@ void player_sheet_close(bool animate);
 // direction: true for a surface behind the sheet (drag up to bring it in),
 // false for the sheet itself (drag down to push it away).
 void player_sheet_attach_drag(lv_obj_t *obj, bool opening);
+
+// The mini-player: a drag that brings the sheet in has to start on it while it
+// is on screen (elsewhere a swipe up is a scroll). With none showing, only the
+// bottom edge of the screen brings the sheet in.
+void player_sheet_set_handle(lv_obj_t *obj);
 
 // Boot-time "Remember track": loads the remembered track, paused at position.
 void player_restore_track(const char *filepath, double position);

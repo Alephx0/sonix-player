@@ -1,0 +1,5 @@
+# Everything here is copied byte for byte into a device's rootfs. Text files
+# are checked out with LF whatever core.autocrlf says: a "#!/bin/sh\r" launcher
+# cannot be started and the device stays on its logo. Binaries are detected and
+# left alone.
+* text=auto eol=lf

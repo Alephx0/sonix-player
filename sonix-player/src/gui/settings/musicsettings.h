@@ -31,6 +31,11 @@ lv_obj_t *musicsettings_fade_screen(void);
 // The playback options page, which holds the music sleep timer: what the
 // control centre's sleep button for music opens on a long press.
 lv_obj_t *musicsettings_playback_screen(void);
+// The library pages, which Settings lists under Your Library in the
+// reference layout.
+lv_obj_t *musicsettings_scan_screen(void);
+lv_obj_t *musicsettings_library_screen(void);
+lv_obj_t *musicsettings_nowplaying_screen(void);
 bool musicsettings_fade_enabled(void);
 void musicsettings_set_fade_enabled(bool enabled);
 

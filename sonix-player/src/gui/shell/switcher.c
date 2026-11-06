@@ -1,4 +1,5 @@
 #include "switcher.h"
+#include "src/gui/shell/rowswipe.h"
 
 #include <stdio.h>
 
@@ -63,6 +64,20 @@ static void place_back_btn(bool below_top_bar) {
 	// asked to stay up there too, and then it goes under it as anywhere else.
 	int y = back_btn_padding + (below_top_bar ? back_btn_top_bar_height : player_top());
 	lv_obj_align(back_btn, LV_ALIGN_TOP_LEFT, back_btn_padding, y);
+	// Spotify's pushed pages (Settings, Recents, an album over its colour) put
+	// the chevron on a dark disc; Now Playing's collapse chevron stays bare.
+	bool disc = below_top_bar && theme_reference();
+	lv_obj_set_style_radius(back_btn, LV_RADIUS_CIRCLE, 0);
+	// The theme tints a focused or pressed button with the accent; the disc
+	// keeps its own grey in every state it can be in.
+	static const lv_style_selector_t states[] = {LV_STATE_DEFAULT, LV_STATE_FOCUSED, LV_STATE_FOCUS_KEY, LV_STATE_PRESSED,
+												 LV_STATE_FOCUSED | LV_STATE_PRESSED};
+	for (unsigned k = 0; k < sizeof(states) / sizeof(states[0]); k++) {
+		lv_obj_set_style_bg_color(back_btn, lv_color_hex(states[k] & LV_STATE_PRESSED ? 0x2a2a2a : 0x1f1f1f), states[k]);
+		lv_obj_set_style_bg_grad_dir(back_btn, LV_GRAD_DIR_NONE, states[k]);
+		lv_obj_set_style_bg_opa(back_btn, disc ? LV_OPA_90 : LV_OPA_TRANSP, states[k]);
+		lv_obj_set_style_outline_width(back_btn, 0, states[k]);
+	}
 }
 
 // Where the back button goes. A page can be reached by more than one route --
@@ -88,6 +103,15 @@ static void history_push(lv_obj_t *screen) {
 	}
 
 	screen_history[screen_history_len++] = screen;
+}
+
+bool switcher_in_history(lv_obj_t *screen) {
+	for (int i = 0; i < screen_history_len; i++) {
+		if (screen_history[i] == screen) {
+			return true;
+		}
+	}
+	return false;
 }
 
 static lv_obj_t *history_pop(void) {
@@ -365,7 +389,7 @@ static void back_drag_cb(lv_event_t *e) {
 			// scrolling something, this press belongs to the scroll, full
 			// stop. Otherwise the incidental horizontal drift of a fast
 			// flick crosses the threshold and the list shimmies sideways.
-			if (lv_indev_get_scroll_obj(indev)) {
+			if (lv_indev_get_scroll_obj(indev) || rowswipe_active()) {
 				back_dragging = false;
 				return;
 			}
@@ -436,16 +460,6 @@ void switch_screen(lv_obj_t *target_screen) {
 	// The player is not a page: it is a panel that slides in over whatever is
 	// already on screen, so there is nothing to load and nothing to remember.
 	if (target_screen == player_screen) {
-		// Except when arriving from a page the player opened itself: the queue,
-		// an audiobook's chapters, a Qobuz list. Tapping a track there brings
-		// the player back up, but if the sheet slid over the queue, the next
-		// chevron press would pull the queue out again instead of the page the
-		// player was first opened from. Picking a track from the queue is not a
-		// step forward: it is the same playback, and the queue is done.
-		//
-		// So the queue is closed here, exactly as the chevron would (see
-		// back_btn_cb): the player return is consumed, the page underneath is
-		// popped, and the sheet reopens over that.
 		if (back_goes_to_player()) {
 			player_return_screen = NULL;
 			lv_obj_t *previous = history_pop();
@@ -578,11 +592,6 @@ void switcher_set_back_guard(lv_obj_t *screen, bool (*handler)(void)) {
 	fprintf(stderr, "switcher: no room for another back guard (the table holds %d)\n", BACK_GUARDS_MAX);
 }
 
-// The question the drag preview has to ask without moving anything: going back
-// now, does the page stay the same? Pages that keep a stack of their own --
-// Qobuz, Tidal, podcasts, every list that lives on one screen -- answer here,
-// and the drag uses it to avoid drawing another screen's page underneath when
-// that is not where the release will land.
 void switcher_set_back_guard_peek(lv_obj_t *screen, bool (*peek)(void)) {
 	if (!screen) {
 		return;
@@ -769,6 +778,8 @@ void back_btn_player_mode(bool in_player) {
 		lv_obj_set_hidden(back_btn, true);
 	}
 	chevron_in_player = in_player;
+	// Spotify collapses Now Playing downward, and says so with a down chevron.
+	lv_image_set_src(back_btn_icon, in_player && theme_reference() ? &icon_chevron_down : &icon_chevron_left);
 	chevron_apply_color();
 	place_back_btn(!in_player);
 }

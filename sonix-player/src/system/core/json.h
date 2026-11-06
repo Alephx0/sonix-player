@@ -4,27 +4,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-// A small JSON parser for streaming-service responses.
-//
-// radio.c gets by without one: it scans for keys by hand in the raw text, and
-// for radio-browser.info -- an array of flat objects, all strings and numbers
-// -- that works in twenty lines.
-//
-// Qobuz and Tidal nest four or five levels deep
-//
-//     {"tracks":{"items":[{"album":{"image":{"small":"..."}},"performer":{...}}]}}
-//
-// where searching the raw text for "small" finds the first occurrence in
-// whatever object it happens to sit in. A real parser is the only way to read
-// the right field.
-//
-// One pass fills an array of tokens in document order, each with its span in
-// the text, its child count and its parent. No string is copied until it is
-// asked for -- a Qobuz response is a hundred kilobytes or so, and copying it
-// twice on a device with 64 MB is not free.
-//
-// The document holds a pointer to the text, not a copy: the text must stay
-// alive and unmodified for as long as the document is read.
 
 typedef enum {
 	JSON_UNDEFINED = 0,
@@ -50,9 +29,6 @@ typedef struct {
 	int count;
 } json_doc_t;
 
-// How deep nesting may go before the document is rejected. Without a limit a
-// document of nothing but opening brackets takes down the stack. Qobuz and
-// Tidal never pass the fifth level.
 #define JSON_MAX_DEPTH 64
 
 // Parses `text`. False on malformed JSON, out of memory, or nesting past the

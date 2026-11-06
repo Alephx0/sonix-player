@@ -139,4 +139,7 @@ void medialist_open_paths(const char *title, const char *const *paths, const cha
 void medialist_playlist_renamed(const char *old_name, const char *new_name);
 void medialist_playlist_deleted(const char *name);
 
+#ifdef HOST_BUILD
+void medialist_probe_find_text(const char *text);
+#endif
 #endif /* MEDIALIST_H */

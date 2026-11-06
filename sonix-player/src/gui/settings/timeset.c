@@ -92,7 +92,7 @@ static void dst_paint(void) {
 		lv_obj_set_style_bg_color(dst_pills[i], active ? theme()->accent : theme()->surface_pressed, 0);
 		lv_obj_t *label = lv_obj_get_child(dst_pills[i], 0);
 		if (label) {
-			lv_obj_set_style_text_color(label, active ? lv_color_white() : theme()->text_primary, 0);
+			lv_obj_set_style_text_color(label, active ? theme()->accent_ink : theme()->text_primary, 0);
 		}
 	}
 }
@@ -1219,7 +1219,7 @@ void timeset_init(gui_config_t *cfg) {
 	lv_obj_t *confirm_label = lv_label_create(confirm);
 	lv_label_set_text(confirm_label, tr("confirm"));
 	lv_obj_set_style_text_font(confirm_label, &font_ui_24, 0);
-	lv_obj_set_style_text_color(confirm_label, lv_color_white(), 0);
+	lv_obj_set_style_text_color(confirm_label, theme()->accent_ink, 0);
 	lv_obj_center(confirm_label);
 
 	build_timezone_panel(cfg);

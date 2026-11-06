@@ -288,7 +288,7 @@ static lv_obj_t *make_heading(lv_obj_t *parent, const char *tag, int y) {
 	lv_obj_t *label = lv_label_create(parent);
 	lv_label_set_text(label, tr(tag));
 	lv_obj_add_style(label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(label, settingsrow_note_font(), 0);
 	lv_obj_set_pos(label, 4, y + 10);
 	return label;
 }
@@ -376,7 +376,7 @@ void musictiles_init(gui_config_t *cfg) {
 	// How many of the tiles are on the page, level with the first heading.
 	in_use_count = lv_label_create(body);
 	lv_obj_add_style(in_use_count, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(in_use_count, &font_ui_22, 0);
+	lv_obj_set_style_text_font(in_use_count, settingsrow_note_font(), 0);
 	lv_obj_align(in_use_count, LV_ALIGN_TOP_RIGHT, -4, 10);
 
 	for (int i = 0; i < MUSIC_TILE_COUNT; i++) {

@@ -134,7 +134,7 @@ void imageview_init(gui_config_t *cfg) {
 	lv_obj_set_width(failed, box_w);
 	lv_obj_set_style_text_align(failed, LV_TEXT_ALIGN_CENTER, 0);
 	lv_obj_add_style(failed, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(failed, &font_ui_22, 0);
+	lv_obj_set_style_text_font(failed, settingsrow_note_font(), 0);
 	lv_obj_center(failed);
 	lv_obj_set_hidden(failed, true);
 

@@ -9,7 +9,6 @@
 
 #include "src/system/audio/audio.h"
 #include "src/system/core/utils.h"
-#include "src/system/streaming/radio.h"
 
 #define RATE 44100
 #define CHUNK 441 // 10 ms
@@ -92,7 +91,7 @@ static void *clicker_main(void *unused) {
 	(void)unused;
 	// The page does not start it over anything playing (metronomepage.c), and
 	// whatever started in the meantime has the output.
-	if (audio_get_status() == AUDIO_STATUS_PLAYING || radio_is_playing() || radio_is_connecting()) {
+	if (audio_get_status() == AUDIO_STATUS_PLAYING) {
 		printf("metronome: something started playing; not starting\n");
 		done = true;
 		return NULL;

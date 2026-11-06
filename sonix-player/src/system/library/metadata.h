@@ -42,6 +42,7 @@ typedef struct {
 	float album_gain_db;
 	float track_peak; // 0 when the file does not say
 	float album_peak;
+	char composer[128]; // COMPOSER / TCOM; empty when the tags have none
 } song_metadata_t;
 
 // Reads whatever tag metadata is available for the file (ID3v1/ID3v2 for MP3,

@@ -32,10 +32,11 @@ if a.action=='start':
     config=out/'device_config.ini'
     if not a.preserve_config or not config.exists():
         config.write_text(f'[ui]\nlanguage=English\ntheme=dark\n[clock]\nconfigured=1\n[power]\nscreen_off_seconds=0\nstandby_mem=0\n[screen]\nplayer_layout_alt={layout}\n[player]\nremember_track=1\n')
-    env=dict(os.environ,DISPLAY='localhost:'+display,XAUTHORITY=str(auth),SONIX_PANEL='480x800',SONIX_SD_ROOT=str(a.card.resolve() if a.card else repo/'artifacts/offline-fixture/sd'),SONIX_CONFIG=str(config),SONIX_EBOOK_CONFIG=str(out/'ebook.ini'),SONIX_NO_MOUNT='1',SONIX_NO_SYSSERVER='1',SDL_VIDEODRIVER='x11',SDL_RENDER_DRIVER='software')
+    env=dict(os.environ,DISPLAY='localhost:'+display,XAUTHORITY=str(auth),SONIX_PANEL='480x800',SONIX_ZOOM=os.environ.get('SONIX_ZOOM','100'),SONIX_SD_ROOT=str(a.card.resolve() if a.card else repo/'artifacts/offline-fixture/sd'),SONIX_CONFIG=str(config),SONIX_EBOOK_CONFIG=str(out/'ebook.ini'),SONIX_NO_MOUNT='1',SONIX_NO_SYSSERVER='1',SDL_VIDEODRIVER='x11',SDL_RENDER_DRIVER='software')
     alsa=out/'alsa.conf';alsa.write_text('pcm.!default { type pulse }\nctl.!default { type pulse }\n')
     env['ALSA_CONFIG_PATH']=str(alsa)
-    app=subprocess.Popen([str(repo/'sonix-player/sonix_player_host')],cwd=repo/'sonix-player',env=env,stdin=subprocess.DEVNULL,stdout=(out/'simulator.log').open('w'),stderr=subprocess.STDOUT,start_new_session=True)
+    binary=Path(env.get('SONIX_UI_TEST_BINARY',str(repo/'sonix-player/sonix_player_host')))
+    app=subprocess.Popen([str(binary)],cwd=repo/'sonix-player',env=env,stdin=subprocess.DEVNULL,stdout=(out/'simulator.log').open('w'),stderr=subprocess.STDOUT,start_new_session=True)
     window=''
     for _ in range(100):
         if app.poll() is not None:raise SystemExit('Simulator exited')
@@ -45,6 +46,9 @@ if a.action=='start':
     if not window:raise SystemExit('No visible SDL window')
     state={'pid':app.pid,'xvfb':xvfb.pid,'window':window,'display':env['DISPLAY'],'auth':str(auth)}
     state_file.write_text(json.dumps(state));time.sleep(3)
+    # At a display size the window is created at the layout size, centred, and
+    # then grown to the panel: put it back in the corner, or a capture is cut.
+    subprocess.run(['xdotool','windowmove',window,'0','0'],env=env,check=True)
 else:
     state=json.loads(state_file.read_text())
     env=dict(os.environ,DISPLAY=state['display'],XAUTHORITY=state['auth'])

@@ -1,5 +1,10 @@
 # Supplied SpotiFLAC source: native integration follow-up
 
+Latest implementation: [original backend integration](spotiflac-native-core.md).
+The historical Deezer milestone below is retained as evidence, not fulfillment
+of the user's 1:1 requirement. SpotiFLAC track/album search and album browsing
+now run through the original source; full provider downloads remain unfinished.
+
 Reviewed 2026-10-28 at commit
 `90f51a4da5bff0ec51183dd5e789a78e6f6a009d` in
 [1111Windows/SpotiFLAC](https://github.com/1111Windows/SpotiFLAC/tree/90f51a4da5bff0ec51183dd5e789a78e6f6a009d).
@@ -64,7 +69,8 @@ bounded decoded memory does not mean an automatically bounded lifetime disk cach
 
 ## Remaining differences
 
-This is not exact SpotBye compatibility. Spotify web metadata, playlist search,
+This is not exact SpotBye compatibility. Beyond the later original-backend
+track/album connection, playlist search,
 full online discography categories/featured credits, complete contributor graphs,
 global release-date ordering, cross-service source matching, preview playback and
 Tidal/Qobuz/Amazon/Deezer full-audio downloads remain unfinished. Artist browsing

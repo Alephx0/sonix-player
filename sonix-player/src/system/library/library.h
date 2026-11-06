@@ -55,10 +55,7 @@ void library_scan_folders_set(const char *const *names, int count);
 // run in progress is stopped first: the scan does everything it would.
 bool library_scan_start(const char *root);
 
-// Adds a completed download on the existing scan worker without clearing the
-// library, changing chosen folders, or enabling Detect changes. UI thread only.
-// False while another scan owns the worker; the caller should retry later.
-bool library_import_download(const char *path);
+bool library_import_file(const char *path);
 
 // "Detect changes": at startup and whenever the card comes back -- put in
 // again, returned by a computer, or left by the Wi-Fi transfer -- the index is
@@ -201,8 +198,19 @@ void library_set_update_listener(library_update_listener_t listener);
 // would have nothing to show.
 bool library_is_open(void);
 
+// Called once on the interface thread: from then on a wait for the database on
+// that thread long enough to be felt is logged with the function that waited.
+void library_set_ui_thread(void);
+
+// From the interface thread, every pass: how long the screen has gone
+// untouched. Background indexing that holds the database for long waits for a
+// few quiet seconds rather than make a touch wait for it.
+void library_note_ui_idle(uint32_t idle_ms);
+
 // True from the moment a scan starts until its thread has finished.
 bool library_scan_running(void);
+// True once the running scan has indexed its tracks; lyrics may still be read.
+bool library_scan_tracks_done(void);
 
 // Tracks written to the index so far -- what the progress page counts up.
 int library_scan_found(void);
@@ -272,6 +280,8 @@ typedef enum {
 	LIBRARY_FILTER_YEAR,
     LIBRARY_FILTER_HOME_REPEAT,
     LIBRARY_FILTER_HOME_REDISCOVER,
+    // Spotify's Daylist, offline: songs played around this hour of the day.
+    LIBRARY_FILTER_HOME_DAYLIST,
 } library_filter_t;
 
 // Streams the whole result set, sorted by the collation, one row per call:
@@ -431,6 +441,9 @@ typedef struct {
 
 // Adds an entry at the end, with the title and artist it is to be shown by.
 void library_history_add(const char *path, const char *name, const char *artist, long long played_at);
+// The same, with what it was played from (the queue's context kind and name).
+void library_history_add_in(const char *path, const char *name, const char *artist, long long played_at,
+							const char *kind, const char *context);
 
 // Every entry, oldest first, in an array the caller frees. Returns how many.
 int library_history_items(library_history_item_t **out);
@@ -568,6 +581,10 @@ int library_index_window(const library_index_t *ix, int offset, int count, libra
 // when a list is started, so the queue does not have to be a second copy of the
 // paths.
 library_index_t *library_index_clone(const library_index_t *ix);
+/* Page-local filtering; sort 0 original, 1 title, 2 artist, 3 album, 4 library date added.
+ * Keep the original handle for playback/editing. Result retains entry IDs. */
+library_index_t *library_index_find_view(const library_index_t *base,const char *query,int sort);
+int library_index_source_position(const library_index_t *view,int position,const library_index_t *base);
 
 // What a handle was built from, in a form that can be written down and used to
 // build the same handle again after a reboot.
@@ -596,6 +613,13 @@ int library_index_find_name(const library_index_t *ix, const char *name);
 // Favourites count separately from the index: starring a track rewrites one row
 // of one table and must not invalidate a list of tracks.
 unsigned library_revision(library_list_t kind);
+// Changes whenever anything Home's shelves show may have: the tracks, liked
+// songs, playlists, plays, history and the collections opened. Lock-free.
+unsigned library_home_revision(void);
+// The path of one track of a list (tracks, by filter, or most played) for a
+// cover: the nth, or the first when there are fewer. One indexed row.
+bool library_sample_path(library_list_t kind, library_filter_t filter, const char *value, int nth, char *out,
+						 size_t out_size);
 
 // Search across the index, one callback per hit. `path` is set for tracks
 // only. Returns the number of hits delivered.
@@ -768,7 +792,7 @@ bool library_playback_state_load(char *path_out, size_t path_size, double *posit
 // shuffle deal already applied),
 // `current_index` the position within it, `custom` whether it is a library
 // list (never rebuilt from a folder) or a plain folder queue.
-void library_queue_save(const char *const *paths, int count, int current_index, bool custom);
+bool library_queue_save(const char *const *paths, int count, int current_index, bool custom);
 
 // Cheap partial update for the common case: the position moved, the list did
 // not. Rewriting a few thousand rows on every track change is not free.
@@ -791,7 +815,7 @@ bool library_queue_load_album(char *out, int size);
 // `extra_slots[i]` is where extra[i] sits in the playing order, which is what
 // puts it back where it was rather than in front of playback. Pass NULL to
 // store no slots.
-void library_queue_save_query(const library_index_spec_t *spec, int position, const char *const *extra,
+bool library_queue_save_query(const library_index_spec_t *spec, int position, const char *const *extra,
 							  const int *extra_slots, int extra_count);
 bool library_queue_load_query(library_index_spec_t *spec, int *position_out);
 
@@ -808,12 +832,15 @@ int library_queue_load_extra(char ***paths_out, int **slots_out);
 int library_queue_load(char ***paths_out, int *index_out, bool *custom_out);
 void library_queue_free(char **paths, int count);
 
-/* Bounded, indexed local discography. category: 0 all, 1 albums/unknown,
- * 2 explicit singles/EPs, 3 credited appearances outside the owned release. */
+/* Bounded, indexed local discography. category: 0 all, 1 albums,
+ * 2 explicit singles/EPs, 3 credited appearances outside the owned release,
+ * Untyped owned releases remain browsable under Albums, labelled Release.
+ * 4 unclassified credits/types. Local track count never implies a Single/EP. */
 typedef struct {
     char value[300], title[256], artist[256], path[512], date[11], type[64];
     int category;
 } library_release_t;
+bool library_release_type_set(const char *value,const char *type);
 int library_discography(const char *artist,int category,int offset,int count,library_release_t *out);
 typedef struct {
     library_index_spec_t spec;
@@ -826,4 +853,85 @@ void library_home_touch(library_list_t kind,library_filter_t filter,const char *
 void library_home_resume_save(const library_index_spec_t *spec,const char *path,double position);
 int library_home_added(library_home_context_t *out,int capacity);
 int library_home_contexts(library_home_context_t *out,int capacity,bool frequent);
+
+/* Recents: the play history newest first, a bounded page at a time. */
+typedef struct {
+    char path[512], name[256], artist[256];
+    long long played_at; /* 0 when the clock was not set */
+    char kind[24], context[256]; /* what it was played from; empty when not known */
+} library_history_row_t;
+int library_history_page(int offset,int count,library_history_row_t *out);
+
+/* Listening stats over the last LIBRARY_STATS_DAYS days of counted plays
+ * (HOME_PLAYS). Songs carry their own path; an artist row carries the path
+ * of its most played track, for artwork. */
+#define LIBRARY_STATS_DAYS 28
+typedef struct {
+    char name[256], artist[256], path[512];
+    int plays;
+} library_stat_row_t;
+int library_stats_top_songs(library_stat_row_t *out,int capacity);
+int library_stats_top_artists(library_stat_row_t *out,int capacity);
+void library_stats_totals(int *plays,int *songs,int *artists);
+/* The same over days from..to (days since 1970, UTC; inclusive). */
+int library_stats_today(void);
+int library_stats_range_top_songs(int from,int to,library_stat_row_t *out,int capacity);
+int library_stats_range_top_artists(int from,int to,library_stat_row_t *out,int capacity);
+void library_stats_range_totals(int from,int to,int *plays,int *songs,int *artists);
+/* Seconds heard, added to today's total; minutes heard over days from..to. */
+void library_note_listened(int seconds);
+int library_listen_minutes(int from,int to);
+
+/* Autoplay: up to cap songs to continue after `seed` (its artist and genre
+ * first, then the rest, shuffled), skipping the seed and recent plays. */
+/* Smart playlists: a rule kept with a playlist and filled from the library
+ * (refresh() returns the songs written, -1 when the playlist has no rule). */
+enum { LIBRARY_SMART_MOST_PLAYED, LIBRARY_SMART_RECENT, LIBRARY_SMART_NEVER_PLAYED, LIBRARY_SMART_LOSSLESS,
+       LIBRARY_SMART_GENRE, LIBRARY_SMART_ARTIST, LIBRARY_SMART_YEAR, LIBRARY_SMART_RULES };
+void library_smart_set(const char *name, int rule, const char *value); // rule < 0 forgets it
+bool library_smart_get(const char *name, int *rule, char *value, size_t size);
+int library_smart_refresh(const char *name);
+/* Playlist cover: the track whose art stands for a playlist (NULL/"" clears),
+ * and the playlist's albums with one track each, to choose from. */
+void library_playlist_cover_set(const char *name, const char *path);
+bool library_playlist_cover_get(const char *name, char *out, size_t size);
+int library_playlist_albums(const char *name, char (*titles)[128], char (*paths)[512], int cap);
+/* Hide in this playlist: the song stays, playing the playlist skips it. */
+void library_playlist_hide(const char *name, const char *path, bool hide);
+bool library_playlist_hidden(const char *name, const char *path);
+/* Snooze: keep a song out of Autoplay, radio and recommendations for `days`
+ * (0 lifts it); whether it is snoozed now. */
+void library_snooze(const char *path, int days);
+bool library_snoozed(const char *path);
+/* Lyrics timing: ms later (negative: earlier) a song's synced lyrics show. */
+void library_lyric_offset_set(const char *path, int ms);
+int library_lyric_offset_get(const char *path);
+/* Long-track resume: a position to come back to (0 clears it), and the one
+ * saved for a path (0 when none). */
+void library_resume_set(const char *path, double position);
+double library_resume_get(const char *path);
+/* Songs to suggest for a playlist (by its artists and genres, not in it). */
+int library_playlist_recommend(const char *name, char (*out)[512], int cap);
+/* Storage overview: songs per file extension (upper case), most first. */
+int library_format_counts(char (*ext)[8], int *counts, int cap);
+/* Library health, read-only: 0 untagged (no artist or album), 1 no genre,
+ * 2 possible duplicates (same title and artist; extra copies counted),
+ * 3 lossy files. Examples are paths, out[cap][512]. */
+#define LIBRARY_HEALTH_KINDS 4
+int library_health_count(int kind);
+int library_health_examples(int kind, char (*out)[512], int cap);
+/* Composers (from COMPOSER / TCOM tags): the list with track counts, one
+ * composer's tracks, and one track's composer. */
+int library_composers(char (*names)[128], int *counts, int cap);
+int library_composer_paths(const char *composer, char (*out)[512], int cap);
+bool library_track_composer(const char *path, char *out, size_t size);
+/* Liked Songs by genre: top genres of the liked songs; liked songs of one. */
+int library_liked_genres(char (*names)[64], int *counts, int cap);
+int library_liked_genre_paths(const char *genre, char (*out)[512], int cap);
+/* Smart Filters: the library's biggest genres (names[cap][64], with album +
+ * artist counts), and whether an album (kind 0, its album value), artist (1)
+ * or playlist (2, its name) is in one. */
+int library_top_genres(char (*names)[64], int *counts, int cap);
+bool library_in_genre(int kind, const char *key, const char *genre);
+int library_autoplay_paths(const char *seed,char (*out)[512],int cap);
 #endif /* LIBRARY_H */

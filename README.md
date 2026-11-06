@@ -1,9 +1,18 @@
 ﻿# Sonix Player
 
-This branch is the **R1 native discovery development fork**. Start with the
-[implementation status, builds, tests and screenshots](docs/custom-firmware/README.md).
-There is no validated flash image for this branch. Stock 2.0 radio compatibility
-is unresolved; the installation instructions below describe upstream releases.
+This branch is the **HiBy R1 local-only, Spotify-inspired C/LVGL player**.
+Music, audiobooks, collections, search, queues and settings use the native UI.
+The former online discovery/download/provider/verification integration is removed.
+
+**[Download the November 6 R1 package](https://github.com/Alephx0/sonix-player/releases/tag/r1-ui-2026.11.06)**
+and read its [installation, checksum and validation notes](docs/releases/r1-ui-2026-11-06.md).
+The player was tested on the connected R1; this exact package is a hardware-scoped
+prerelease awaiting the owner's flash. Other R1 board/radio revisions are not
+validated. See the [UI specification](docs/UI_SPEC.md), [audit](docs/UI_AUDIT.md),
+and [local-only scope](docs/custom-firmware/local-ui.md).
+
+The upstream description below is retained as historical background; its online
+features and upstream release links do not describe this branch's local-only build.
 
 A replacement player for the **HiBy R3 Pro II** and the **HiBy R1**, written on
 LVGL.

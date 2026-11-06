@@ -1,5 +1,4 @@
 #include "system.h"
-#include "src/system/discovery/download_queue.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -32,17 +31,10 @@
 #include "src/system/playback/device_state.h"
 #include "src/system/library/audiobookdb.h"
 #include "src/system/audio/eq.h"
-#include "src/system/remote/dlna.h"
 #include "src/system/gearboy/gbdb.h"
 #include "src/system/input/hookclicks.h"
 #include "src/system/input/keymap.h"
 #include "src/system/core/panel.h"
-#include "src/system/streaming/qobuzcache.h"
-#include "src/system/streaming/podcastcache.h"
-#include "src/system/streaming/podcastsubs.h"
-#include "src/system/streaming/podcaststate.h"
-#include "src/system/streaming/radio.h"
-#include "src/system/streaming/tidalcache.h"
 #include "src/system/library/library.h"
 #include "src/system/core/logging.h"
 #include "src/system/library/playlists.h"
@@ -798,7 +790,6 @@ static void card_databases_detach(void) {
 		return;
 	}
 	card_attached = false;
-	download_queue_shutdown(); // release download descriptors before unmount
 
 	// Playback first. The playback thread keeps the track's descriptor open for
 	// the whole track -- and with "remember track" a track is loaded and paused
@@ -810,7 +801,7 @@ static void card_databases_detach(void) {
 	// of play would otherwise read as "the track ended, start it again".
 	device_state_note_storage_gone();
 	audio_stop();
-	podcaststate_set_root(NULL);
+
 
 	logging_suspend_for_usb(); // closes the on-card log file
 	btlog_card_release();
@@ -824,7 +815,6 @@ static void card_databases_attach(const char *root) {
 		return;
 	}
 	card_attached = true;
-	download_queue_init(root); // restored work stays paused
 
 	// PATH_MAX, because the card root comes from a mount point and a mount point
 	// can be as long as any path.
@@ -852,12 +842,7 @@ static void card_databases_attach(const char *root) {
 	eq_presets_set_dir(root);
 	peq_presets_set_dir(root);
 	mseb_presets_set_dir(root);
-	qobuzcache_set_root(root);
-	tidalcache_set_root(root);
-	podcastcache_set_root(root);
-	podcastsubs_set_root(root);
-	podcaststate_set_root(root);
-	dlna_set_root(root);
+
 	gbdb_set_root(root);
 
 	// The log, from the setting rather than from a remembered flag: a flag does
@@ -875,8 +860,8 @@ void storage_card_files_recheck(void) {
 	}
 	library_reopen_if_replaced();
 	audiobookdb_reopen_if_replaced();
-	radio_store_reopen_if_replaced();
-	podcastsubs_reload_if_replaced();
+
+
 	cover_cache_reopen_if_replaced();
 }
 
@@ -1048,7 +1033,7 @@ void storage_release_for_shutdown(void) {
 
 	card_databases_detach(); // playback, the log, the library and audiobook databases
 	cover_set_cache_dir(NULL); // the thumbnail cache moves to /tmp
-	radio_store_close();
+
 	sync();
 
 	// Unmounting is what every driver leaves clean. When something still holds

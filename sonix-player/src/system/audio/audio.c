@@ -2,7 +2,6 @@
 #include "src/system/audio/alsa-controls.h"
 #include "src/system/bluetooth/bluetooth.h"
 #include "src/system/decode/decode.h"
-#include "src/system/decode/growfile.h"
 #include "src/system/decode/sndfile.h"
 #include "src/system/audio/replaygain.h"
 #include "src/system/audio/speed.h"
@@ -825,12 +824,6 @@ static int pcm_forced_buffer_ms;
 // than one tick of the timer that advances the queue.
 #define GAPLESS_HOLD_MS 600
 
-// How long a file that is still downloading is waited on before it is declared
-// unreadable. Six seconds in half-second steps: long enough for a slow network
-// to deliver the header, short enough not to look like a freeze -- and the
-// wait gives up on the first command anyway. See play_decoded_file().
-#define DECODER_GROW_RETRIES 12
-#define DECODER_GROW_RETRY_MS 500
 
 static bool gapless_enabled;
 
@@ -1670,16 +1663,6 @@ static snd_pcm_t *open_pcm_device_now(int channels, int sample_rate, int bits_pe
 		}
 	}
 
-	// The software parameters are always set, and the important one is the
-	// start threshold: the stream only starts on a full buffer.
-	//
-	// Otherwise the stream starts on the first period written -- 25 ms of
-	// reserve at 176.4 kHz -- and any system hiccup (the SD card contended with
-	// a download, a cover being decoded) turns straight into an underrun. After
-	// a seek or an unpause that becomes a "Broken pipe" on every write: the
-	// stream restarts with a single period queued and dies before the next one.
-	// Starting on a full buffer gives every start and restart the whole buffer
-	// as reserve.
 	{
 		snd_pcm_uframes_t buffer_frames = 0;
 		snd_pcm_hw_params_get_buffer_size(hw_params, &buffer_frames);
@@ -2492,154 +2475,13 @@ static bool retry_track_once(const char *filepath, const char *reason) {
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Rebuffering
-//
-// Only tracks that are played while still downloading need this. The rule is
-// the usual one for anything playing off a network: play while there is enough
-// ahead, and when too little is left, stop and wait until there is plenty
-// again. The two thresholds differ on purpose -- stop at two seconds, resume
-// at eight -- otherwise the wait would be re-entered on every buffer, which is
-// stuttering by another name.
-// ---------------------------------------------------------------------------
 
-#define REBUFFER_LOW_SECS 2.0	// below this much ahead, stop
-#define REBUFFER_HIGH_SECS 8.0	// and do not resume before this much is back
-#define REBUFFER_MAX_WAIT_MS 60000
 
-// Seconds of music ahead of the play position, or -1 when the file is no
-// longer growing (and there is then nothing to wait for).
-static double growing_headroom_secs(decoder_t *dec, int sample_rate, uint64_t at_frame) {
-	uint64_t reachable = decoder_seekable_limit(dec);
-	if (reachable == 0 || sample_rate <= 0) {
-		return -1.0;
-	}
-	if (reachable <= at_frame) {
-		return 0.0;
-	}
-	return (double)(reachable - at_frame) / (double)sample_rate;
-}
-
-static void rebuffer_if_starved(decoder_t *dec, int sample_rate, uint64_t at_frame) {
-	double head = growing_headroom_secs(dec, sample_rate, at_frame);
-	if (head < 0 || head >= REBUFFER_LOW_SECS) {
-		return;
-	}
-
-	fprintf(stderr, "audio[%ld]: buffer run out (%.1f s ahead): waiting\n", log_ms(), head);
-
-	int waited_ms = 0;
-	while (waited_ms < REBUFFER_MAX_WAIT_MS) {
-		// A new command -- stop, pause, another track -- outranks the wait:
-		// leave at once and let the main loop deal with it.
-		pthread_mutex_lock(&audio_mutex);
-		bool leave = audio_command != AUDIO_CMD_PLAY || play_request || stop_thread || seek_request;
-		pthread_mutex_unlock(&audio_mutex);
-		if (leave) {
-			return;
-		}
-
-		// The download finished (or died): nothing more is coming, carry on
-		// with what is there.
-		if (!decoder_is_growing(dec)) {
-			return;
-		}
-
-		head = growing_headroom_secs(dec, sample_rate, at_frame);
-		if (head < 0 || head >= REBUFFER_HIGH_SECS) {
-			fprintf(stderr, "audio[%ld]: resuming with %.1f s buffered\n", log_ms(), head);
-			return;
-		}
-
-		usleep(100 * 1000);
-		waited_ms += 100;
-	}
-
-	fprintf(stderr, "audio[%ld]: a minute of waiting and the buffer will not fill: carrying on anyway\n", log_ms());
-}
-
-// The safety net for when the estimate above is wrong.
-//
-// The check above works from a ratio (bytes downloaded over total bytes,
-// carried onto frames) and is only an estimate: it can report headroom while
-// the decoder is already reading at the edge of the download, where reads
-// trickle and the card underruns continuously.
-//
-// A short read from a growing file is not an estimate: it is proof that the
-// edge has been reached. So this waits on real bytes: it takes where the
-// download has got to, computes the file's rate (total bytes over total
-// duration, both known), and does not resume before REBUFFER_HIGH_SECS
-// seconds of file are in hand beyond that point.
-static void rebuffer_after_short_read(decoder_t *dec, int sample_rate, uint64_t at_frame) {
-	long done = 0, total = 0;
-	if (!decoder_grow_span(dec, &done, &total) || total <= 0) {
-		return; // not growing (any more): nothing to wait for
-	}
-
-	// The flag can be stale: raised while playing at the edge, followed by a
-	// backwards seek. When there is already enough ahead of the play position
-	// there is no starvation to wait out, and waiting anyway would leave the
-	// music stuck at the seek target with the data already on disk.
-	double head = growing_headroom_secs(dec, sample_rate, at_frame);
-	if (head >= REBUFFER_LOW_SECS) {
-		return;
-	}
-	uint64_t total_frames = decoder_total_pcm_frames(dec);
-	if (total_frames == 0 || sample_rate <= 0) {
-		return;
-	}
-	double total_secs = (double)total_frames / (double)sample_rate;
-	if (total_secs <= 0) {
-		return;
-	}
-	double file_rate = (double)total / total_secs; // file bytes per second of music
-
-	long target = done + (long)(file_rate * REBUFFER_HIGH_SECS);
-	if (target > total) {
-		target = total;
-	}
-
-	fprintf(stderr, "audio[%ld]: reading at the edge of the download (%ld KB): waiting for the buffer\n", log_ms(),
-			done / 1024);
-
-	int waited_ms = 0;
-	while (waited_ms < REBUFFER_MAX_WAIT_MS) {
-		pthread_mutex_lock(&audio_mutex);
-		bool leave = audio_command != AUDIO_CMD_PLAY || play_request || stop_thread || seek_request;
-		pthread_mutex_unlock(&audio_mutex);
-		if (leave) {
-			return; // a command outranks the wait
-		}
-
-		if (!decoder_grow_span(dec, &done, &total)) {
-			fprintf(stderr, "audio[%ld]: the download is finished, resuming\n", log_ms());
-			return;
-		}
-		if (done >= target) {
-			fprintf(stderr, "audio[%ld]: resuming with the buffer full (%ld KB)\n", log_ms(), done / 1024);
-			return;
-		}
-
-		usleep(100 * 1000);
-		waited_ms += 100;
-	}
-	fprintf(stderr, "audio[%ld]: a minute at the edge and it is not growing: carrying on anyway\n", log_ms());
-}
 
 // Play routine for uncompressed WAV files: PCM data is streamed straight from
 // the file, no decode step needed.
 static void play_decoded_file(const char *filepath, decode_format_t format);
 
-// What a seek does to the queued audio.
-//
-// A card: dropped and prepared, so the new position is heard at once.
-//
-// bluealsa: left alone. A drop makes bluealsa release the A2DP transport, and
-// a prepare does not acquire it back -- the writes after it are accepted and
-// the headphones hear nothing, or a transport torn down and set up again
-// under a run of seeks. The queue (under 700 ms) plays out and the new
-// position follows it. `already_dropped`: the stream was dropped anyway (a
-// wait for a download), so it is prepared again as a card would be.
 static void seek_flush(snd_pcm_t *pcm, bool already_dropped) {
 	if (pcm_is_bluetooth(pcm) && !already_dropped) {
 		return;
@@ -2851,13 +2693,6 @@ static void play_wav_file(const char *filepath) {
 			usleep(pcm_handle ? 50000 : 200000);
 			continue;
 		} else {
-			// RESUME is a one-shot command: consumed here, back to
-			// AUDIO_CMD_PLAY. A command left at RESUME poisons every "is a
-			// command pending?" test (audio_command != AUDIO_CMD_PLAY) -- the
-			// growfile waits would give up immediately, the wait for room in
-			// the card's buffer would return -EINTR and throw away a block of
-			// samples per pass, and the "retry after rebuffering" path at the
-			// end of a track would loop without ever declaring the end.
 			if (audio_command == AUDIO_CMD_RESUME) {
 				audio_command = AUDIO_CMD_PLAY;
 			}
@@ -3012,13 +2847,6 @@ static void play_wav_file(const char *filepath) {
 				break;
 			}
 
-			// Track completed naturally -- unless a stop or another track
-			// arrived while the last read was blocked. That is not an end but
-			// an interrupted read, and calling it "finished" advances the queue
-			// on top of what the user just asked for.
-			//
-			// It happens with tracks played while still downloading:
-			// abandoning the download makes the read in flight return empty.
 			pthread_mutex_lock(&audio_mutex);
 			bool natural_end = audio_command != AUDIO_CMD_STOP && !play_request;
 			audio_command = AUDIO_CMD_STOP;
@@ -3177,30 +3005,6 @@ static void play_decoded_file(const char *filepath, decode_format_t format) {
 		dec = decoder_open(filepath, format);
 	}
 
-	// A file still downloading is not a broken file: it is not all there yet.
-	//
-	// A streamed track starts playing while it arrives, as soon as the cache
-	// reports enough. Between that report and this open there are a couple of
-	// thread hops, and now and then the decoder arrives a moment too early: the
-	// FLAC header is not complete and decoder_open() refuses.
-	//
-	// So it waits: while the file grows, bytes are arriving and retrying is
-	// worthwhile. The wait gives up on any command (another track, a stop, a
-	// pause), so it blocks nothing.
-	for (int wait = 0; !dec && growfile_is_growing(filepath) && wait < DECODER_GROW_RETRIES; wait++) {
-		pthread_mutex_lock(&audio_mutex);
-		bool leave = audio_command != AUDIO_CMD_PLAY || play_request || stop_thread;
-		pthread_mutex_unlock(&audio_mutex);
-		if (leave) {
-			break;
-		}
-		if (wait == 0) {
-			fprintf(stderr, "audio[%ld]: '%s' is still downloading, waiting instead of giving up\n", log_ms(),
-					filepath);
-		}
-		usleep(DECODER_GROW_RETRY_MS * 1000);
-		dec = decoder_open(filepath, format);
-	}
 
 	if (!dec) {
 		fprintf(stderr, "Audio: Failed to open decoder for: %s\n", filepath);
@@ -3393,62 +3197,7 @@ static void play_decoded_file(const char *filepath, decode_format_t format) {
 				target_frame = total_frames;
 			}
 
-			// The requested point may not have downloaded yet. Clamping the
-			// request to where the download has reached would mean asking for
-			// 1:17 and landing at 0:51; a streaming app does the other thing --
-			// it stops on the requested point, downloads up to it, and resumes
-			// from there.
-			//
-			// So when the requested point is past the edge, wait for the edge
-			// to reach it -- progress bar parked on the requested point, card
-			// silent, and the wait giving up on any command (including another
-			// seek: the last touch always wins).
-			uint64_t reachable = decoder_seekable_limit(dec);
-			bool dropped_while_waiting = false;
-			if (reachable > 0 && target_frame > reachable && decoder_is_growing(dec)) {
-				fprintf(stderr, "audio[%ld]: the requested point has not downloaded yet: waiting for it\n", log_ms());
-				// Silence while waiting, when there is a stream to silence: a
-				// seek can arrive with the device handed back.
-				if (pcm_handle) {
-					snd_pcm_drop(pcm_handle);
-					dropped_while_waiting = true;
-				}
-
-				// The bar sits on the requested point: that is where this is going.
-				pthread_mutex_lock(&audio_mutex);
-				progress_current_secs = (double)target_frame / sample_rate;
-				pthread_mutex_unlock(&audio_mutex);
-
-				while (true) {
-					pthread_mutex_lock(&audio_mutex);
-					bool leave = audio_command != AUDIO_CMD_PLAY || play_request || seek_request;
-					pthread_mutex_unlock(&audio_mutex);
-					if (leave) {
-						break; // the top of the loop handles it
-					}
-					if (!decoder_is_growing(dec)) {
-						break; // finished (or died): go as far as possible
-					}
-					reachable = decoder_seekable_limit(dec);
-					if (reachable >= target_frame) {
-						fprintf(stderr, "audio[%ld]: the requested point has downloaded, resuming from there\n", log_ms());
-						break;
-					}
-					usleep(100 * 1000);
-				}
-				reachable = decoder_seekable_limit(dec);
-			}
-			// As far as is reachable now: if the wait was interrupted (or the
-			// download died) this is still the closest point to the requested
-			// one that actually exists.
-			if (reachable > 0 && target_frame > reachable) {
-				target_frame = reachable;
-			}
-
-			// If the seek fails -- which happens on a file still downloading
-			// when the requested point has not arrived -- go back to where the
-			// decoder was rather than leaving it nowhere: the music carries on
-			// from where it was, far better than playback dying for good.
+			// Recover the previous position if a damaged local file cannot seek.
 			uint64_t was_at = (uint64_t)(bytes_played / frame_bytes);
 			if (!decoder_seek_to_frame(dec, target_frame)) {
 				if (decoder_seek_to_frame(dec, was_at)) {
@@ -3465,15 +3214,11 @@ static void play_decoded_file(const char *filepath, decode_format_t format) {
 				decimate_reset(&decim);
 			}
 
-			// And the starvation flag recorded before the seek: it belonged to
-			// the old position (growfile_seek already clears it; this is the
-			// second turn of the key for formats that seek by other routes).
-			(void)decoder_take_starved(dec);
 
 			// As in the WAV loop above: no device means no stream to flush, and
 			// asking alsa to drop a null one aborts the audio thread.
 			if (pcm_handle) {
-				seek_flush(pcm_handle, dropped_while_waiting);
+				seek_flush(pcm_handle, false);
 				is_paused = false;
 				bt_seek_probe_arm(pcm_handle);
 			}
@@ -3629,20 +3374,7 @@ static void play_decoded_file(const char *filepath, decode_format_t format) {
 			}
 		}
 
-		// --- the reserve of a track that is still downloading ----------------
-		//
-		// A streamed track plays while it downloads. Ahead of the play position
-		// is a reserve of bytes already received; when the network slows down
-		// the reserve is consumed and the decoder asks for data that is not
-		// there. Trickling onwards means the read blocks, the card runs its
-		// buffer dry and underruns, recovers and underruns again -- audible
-		// stutter, and after eight consecutive attempts the write gives up and
-		// the track dies.
-		//
-		// A streaming app instead stops, refills, and resumes. So does this.
-		if (decoder_is_growing(dec)) {
-			rebuffer_if_starved(dec, sample_rate, bytes_played / (uint64_t)frame_bytes);
-		}
+		
 
 		// How many frames came out (what goes to the card) and how many went
 		// in (what the position in the track advances by). The two are the
@@ -3710,36 +3442,9 @@ static void play_decoded_file(const char *filepath, decode_format_t format) {
 			}
 		}
 
-		// Has the decoder reached the edge of the download? Two signals:
-		//
-		//   * the read came back short (the simple case);
-		//   * the read came back full but had to wait (decoder_take_starved).
-		//     growfile fills the read by waiting for chunks, so from here it
-		//     looks normal -- except every read costs a tenth of a second and
-		//     every write is an underrun.
-		//
-		// Either way, do not trickle onwards: stop and refill, like any
-		// streaming app. (What the read already produced is still played below:
-		// the gap starts after the last good sample.)
-		uint64_t read_count = decim_factor > 1 ? input_frames : frames_read;
-		if (decoder_is_growing(dec) && (read_count < chunk_frames || decoder_take_starved(dec))) {
-			rebuffer_after_short_read(dec, sample_rate, (uint64_t)(bytes_played / frame_bytes));
-			if (frames_read == 0) {
-				// Nothing at all came out: retry after refilling. Falling
-				// through would declare "track finished" for a track merely
-				// stuck at the edge. If the download did die, the next pass
-				// sees a file that no longer grows and the cut-short branch
-				// decides the ending.
-				continue;
-			}
-		}
+		
 
 		if (frames_read == 0) {
-			// First of all: the read can have come back empty not because the
-			// file ended but because a pending command made it give up
-			// (growfile's wake-up). Pause, stop, another track, a seek --
-			// whichever it is, the top of the loop handles it: a pause must
-			// pause, not end the track.
 			pthread_mutex_lock(&audio_mutex);
 			bool command_pending = audio_command != AUDIO_CMD_PLAY || play_request || seek_request;
 			pthread_mutex_unlock(&audio_mutex);
@@ -3766,23 +3471,6 @@ static void play_decoded_file(const char *filepath, decode_format_t format) {
 				break;
 			}
 
-			// End of track -- if it really is the end.
-			//
-			// The queue must never walk on by itself. It advances when a track
-			// reaches its end and in no other case. Two lies that look like an
-			// end are rejected here:
-			//
-			//   * a stop or another track arrived while blocked in the last
-			//     read. That is an interrupted read, not an end: treating it as
-			//     one sends the queue on top of what the user just asked for;
-			//   * the file ended well short of its duration. This happens to
-			//     tracks played while downloading: if the download dies, what is
-			//     on disk stops halfway and the read comes back empty. It looks
-			//     like the end of the track, but the track is twice as long.
-			//
-			// Without the second test the player walks itself through the whole
-			// list: every truncated track advances the queue, and the next one --
-			// not downloaded yet -- is truncated in turn.
 			uint64_t declared = decoder_total_pcm_frames(dec);
 			uint64_t reached = (uint64_t)(bytes_played / frame_bytes);
 			bool cut_short = declared > 0 && sample_rate > 0 && reached + (uint64_t)sample_rate < declared;
@@ -4074,11 +3762,6 @@ static void *playback_thread_func(void *arg) {
 	return NULL;
 }
 
-// What growfile asks every tenth of a second while the audio thread waits for
-// a chunk that is not coming: is there a reason to give up? A stop, a pause,
-// another track queued, or a seek. Without it the thread stays in that wait for
-// up to twenty seconds after the key was pressed, and from outside the player
-// looks dead: prev does nothing and local tracks will not start.
 static bool playback_reader_should_abort(void) {
 	pthread_mutex_lock(&audio_mutex);
 	bool out = audio_command != AUDIO_CMD_PLAY || play_request || stop_thread || seek_request;
@@ -4091,7 +3774,6 @@ int audio_init(void) {
 	if (initialized)
 		return 0;
 
-	growfile_set_reader_abort_cb(playback_reader_should_abort);
 	playback_wake_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
 
 	set_volume_percent(40); // a sane, audible default on the new dB taper

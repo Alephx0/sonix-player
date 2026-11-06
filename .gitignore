@@ -21,6 +21,7 @@ streaming-keys.key
 streaming-keys.bin
 
 sonix-player/audio-target
+sonix-player/.deps/
 
 sonix-player/compile_commands.json
 sonix-player/rockbox-toolchain

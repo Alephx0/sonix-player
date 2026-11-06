@@ -41,26 +41,17 @@
 #include "src/system/audio/eq.h"
 #include "src/system/audio/headset.h"
 #include "src/system/input/keymap.h"
-#include "src/system/streaming/qobuz.h"
-#include "src/system/streaming/tidal.h"
-#include "src/system/remote/dlna.h"
+#include "src/system/input/touch_calibration.h"
 #include "src/system/gearboy/gbdb.h"
 #include "src/system/gearboy/gearboy.h"
 #include "src/system/remote/sonixlink.h"
 #include "src/system/core/panel.h"
-#include "src/system/streaming/qobuzcache.h"
-#include "src/system/streaming/podcastcache.h"
-#include "src/system/streaming/podcastsubs.h"
-#include "src/system/streaming/podcaststate.h"
-#include "src/system/streaming/tidalcache.h"
-#include "src/system/streaming/streamkeys.h"
 #include "src/system/lastfm/lastfm.h"
 #include "src/system/library/library.h"
 #include "src/system/core/logging.h"
 #include "src/system/playback/playlist.h"
 #include "src/system/library/playlists.h"
 #include "src/system/device/power.h"
-#include "src/system/streaming/radio.h"
 #include "src/system/device/screenshot.h"
 #include "src/system/device/sysinfo.h"
 #include "src/system/net/tls.h"
@@ -69,18 +60,12 @@
 #include "src/system/core/utils.h"
 #include "src/system/net/webcgi.h"
 #include "src/system/net/wifi.h"
-#include "src/system/discovery/download_queue.h"
-#include "src/system/discovery/preferences.h"
-#include "src/system/discovery/download_import.h"
 
 
 static volatile sig_atomic_t running = 1;
 
-// The scanner and downloads never touch LVGL. Completed files are handed to
-// the library on the UI thread, one at a time, through its existing worker.
-static void downloaded_library_poll(lv_timer_t *timer) {
+static void local_library_poll(lv_timer_t *timer) {
 	(void)timer;
-	download_import_poll();
 }
 
 #ifdef HOST_BUILD
@@ -966,6 +951,10 @@ static void install_signal_guards(void) {
 // lv_timer_handler(). See the loop itself for why this cap exists.
 #define MAIN_LOOP_MAX_SLEEP_MS 250
 
+// A pass of lv_timer_handler() this long is a visible hitch: logged, with the
+// page, so a report of "it stutters" comes with where.
+#define UI_SLOW_PASS_MS 150
+
 // ---------------------------------------------------------------------------
 // Kinetic scroll tuning.
 //
@@ -1058,6 +1047,36 @@ static void tune_pointer(lv_indev_t *indev) {
 #define PANEL_MIN_WIDTH 320
 #define PANEL_MIN_HEIGHT 480
 
+// ---------------------------------------------------------------------------
+// Display size
+//
+// The R1's panel is 480x800 on a 3-inch screen, about 311 pixels to the inch:
+// laid out pixel for pixel, the interface came out at well under the size of
+// the same thing on a phone (2026-11-05). Large lays it out at 384x640 and
+// draws that up to the panel, 1.25 times larger in every direction, and draws
+// 36% fewer pixels doing it. Standard is the panel pixel for pixel. Read once,
+// before the display exists: every page is built against the size.
+// ---------------------------------------------------------------------------
+
+static int ui_zoom = DISPLAY_ZOOM_STANDARD;
+
+int display_zoom(void) { return ui_zoom; }
+
+void display_zoom_save(int zoom) {
+	config_set_int("ui", "zoom", zoom == DISPLAY_ZOOM_LARGE ? DISPLAY_ZOOM_LARGE : DISPLAY_ZOOM_STANDARD);
+	config_save();
+}
+
+// SONIX_ZOOM wins (the tests pin it); then the setting; then Large on the R1,
+// whose screen is the small one, and Standard on anything else.
+static void read_ui_zoom(void) {
+	const sysinfo_model_t *model = sysinfo_model();
+	int fallback = model && strcmp(model->name, "HiBy R1") == 0 ? DISPLAY_ZOOM_LARGE : DISPLAY_ZOOM_STANDARD;
+	const char *env = getenv("SONIX_ZOOM");
+	int zoom = env && env[0] ? atoi(env) : (int)config_get_int("ui", "zoom", fallback);
+	ui_zoom = zoom == DISPLAY_ZOOM_LARGE ? DISPLAY_ZOOM_LARGE : DISPLAY_ZOOM_STANDARD;
+}
+
 // The panel size for gui_config_t, in this order: SONIX_PANEL ("480x800"); the
 // model named in system-info.json; the model whose panel exactly matches the
 // framebuffer (fb_w/fb_h, 0 where there is none); SCREEN_WIDTH x SCREEN_HEIGHT.
@@ -1090,6 +1109,58 @@ static void panel_size(int *width, int *height, int fb_w, int fb_h) {
 		printf("panel: %dx%d is too small to lay out, using %dx%d\n", *width, *height, SCREEN_WIDTH, SCREEN_HEIGHT);
 		*width = SCREEN_WIDTH;
 		*height = SCREEN_HEIGHT;
+	}
+
+	// What the pages are laid out at: the panel, less the display size.
+	*width = *width * DISPLAY_ZOOM_STANDARD / ui_zoom;
+	*height = *height * DISPLAY_ZOOM_STANDARD / ui_zoom;
+}
+
+// The first words a page shows, to name it in the log: pages have no names of
+// their own. Bounded, and only called for a pass that was already slow.
+static const char *first_text_in(lv_obj_t *obj, int *budget) {
+	if (!obj || --*budget < 0) {
+		return NULL;
+	}
+	if (lv_obj_check_type(obj, &lv_label_class) && !lv_obj_is_hidden(obj)) {
+		const char *text = lv_label_get_text(obj);
+		if (text && text[0]) {
+			return text;
+		}
+	}
+	uint32_t count = lv_obj_get_child_count(obj);
+	for (uint32_t i = 0; i < count; i++) {
+		const char *text = first_text_in(lv_obj_get_child(obj, (int32_t)i), budget);
+		if (text) {
+			return text;
+		}
+	}
+	return NULL;
+}
+
+static const char *first_text_on(lv_obj_t *screen) {
+	int budget = 300;
+	const char *text = first_text_in(screen, &budget);
+	return text ? text : "?";
+}
+
+// How long each repaint takes, logged when it is long enough to be felt, with
+// how much of the screen it covered: the passes that were slow without the
+// database in them were drawing (2026-11-05).
+#define DRAW_SLOW_MS 80
+static uint32_t custom_tick_get(void);
+static uint32_t draw_started;
+static void draw_timing_cb(lv_event_t *e) {
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_REFR_START) {
+		draw_started = custom_tick_get();
+	} else if (code == LV_EVENT_REFR_READY) {
+		uint32_t ms = custom_tick_get() - draw_started;
+		if (ms >= DRAW_SLOW_MS) {
+			lv_display_t *disp = lv_event_get_current_target(e);
+			printf("draw: %u ms (layout %dx%d)\n", (unsigned)ms, (int)lv_display_get_horizontal_resolution(disp),
+				   (int)lv_display_get_vertical_resolution(disp));
+		}
 	}
 }
 
@@ -1143,6 +1214,11 @@ static lv_display_t *init_host_display(void) {
 	int width = 0, height = 0;
 	panel_size(&width, &height, 0, 0); // the window is made from it: nothing to ask
 
+	// Filtered like the device's scaling (see zoom_blit), so a capture of the
+	// window looks like the panel.
+	if (ui_zoom != DISPLAY_ZOOM_STANDARD) {
+		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+	}
 	lv_display_t *disp = lv_sdl_window_create(width, height);
 	if (!disp) {
 		fprintf(stderr, "Error: Failed to create SDL2 window\n");
@@ -1151,6 +1227,9 @@ static lv_display_t *init_host_display(void) {
 
 	// Non-resizeable, which also makes tiling window managers float it.
 	lv_sdl_window_set_resizeable(disp, false);
+	if (ui_zoom != DISPLAY_ZOOM_STANDARD) {
+		lv_sdl_window_set_zoom(disp, (float)ui_zoom / DISPLAY_ZOOM_STANDARD);
+	}
 
 	// Flushing the backbuffers once here avoids the initial viewport shift.
 	SDL_Renderer *renderer = (SDL_Renderer *)lv_sdl_window_get_renderer(disp);
@@ -1340,6 +1419,8 @@ static struct fb_var_screeninfo fb_var;
 static lv_display_t *fb_display;   // the page-flipping display, NULL on the fallback
 static lv_indev_t *fb_touch;	   // so the calibration can be flipped with the screen
 static bool fb_rotated;
+static touch_calibration_t fb_touch_calibration;
+static bool fb_touch_calibrated;
 static uint8_t *rot_page;		   // the RAM page LVGL draws into while rotated
 
 // What this frame touched, and what each framebuffer page has not been given
@@ -1404,10 +1485,135 @@ static void blit_rotated_180(uint16_t *dst, const uint16_t *src, const lv_area_t
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Display size: LVGL draws into one RAM page the size of the layout (the panel
+// less the zoom), and what it draws is scaled up into the framebuffer page --
+// turned as well, when the screen is rotated. The page bookkeeping is the
+// rotated path's, in layout coordinates.
+//
+// The scaling is bilinear, in RGB565 spread across a 32-bit word so the three
+// channels blend in one multiply each. Each output column and row has its two
+// source lines and the weight between them worked out once, at startup.
+// ---------------------------------------------------------------------------
+
+static bool fb_zoomed;
+static uint8_t *zoom_page;		  // the layout-sized RAM page LVGL draws into
+static int32_t zoom_w, zoom_h;	  // its size
+static int32_t *zoom_x0, *zoom_y0; // per output column / row: the first source column / row
+static uint8_t *zoom_wx, *zoom_wy; // and the weight of the second one, 0..32
+static uint32_t *zoom_row[2];	  // two source rows blended horizontally, spread
+static int32_t zoom_row_y[2];	  // which source row each holds, -1 for none
+
+static inline uint32_t spread565(uint16_t c) { return ((uint32_t)c | ((uint32_t)c << 16)) & 0x07E0F81Fu; }
+static inline uint16_t pack565(uint32_t s) { return (uint16_t)((s & 0xF81Fu) | ((s >> 16) & 0x07E0u)); }
+static inline uint32_t blend_spread(uint32_t a, uint32_t b, uint32_t w) {
+	return ((a * (32 - w) + b * w) >> 5) & 0x07E0F81Fu;
+}
+
+// The two source positions and the weight for each of `out` output pixels over
+// `in` source pixels, sampling at pixel centres.
+static bool zoom_axis(int32_t in, int32_t out, int32_t **first, uint8_t **weight) {
+	*first = malloc((size_t)out * sizeof(**first));
+	*weight = malloc((size_t)out);
+	if (!*first || !*weight) {
+		return false;
+	}
+	for (int32_t o = 0; o < out; o++) {
+		// (o + 0.5) * in / out - 0.5, in 1/32 steps.
+		int32_t pos = (int32_t)((((int64_t)o * 2 + 1) * in * 32 / (2 * (int64_t)out)) - 16);
+		if (pos < 0) {
+			pos = 0;
+		}
+		int32_t i = pos >> 5;
+		uint8_t w = (uint8_t)(pos & 31);
+		if (i >= in - 1) {
+			i = in - 1;
+			w = 0;
+		}
+		(*first)[o] = i;
+		(*weight)[o] = w;
+	}
+	return true;
+}
+
+// Source row `y`, blended across for every output column, into a row slot.
+static const uint32_t *zoom_source_row(const uint16_t *src, int32_t y, int32_t out_w) {
+	for (int k = 0; k < 2; k++) {
+		if (zoom_row_y[k] == y) {
+			return zoom_row[k];
+		}
+	}
+	// Replace the slot that does not hold y - 1: rows are asked for in order.
+	int k = zoom_row_y[0] == y - 1 ? 1 : 0;
+	const uint16_t *line = src + (size_t)y * zoom_w;
+	uint32_t *row = zoom_row[k];
+	for (int32_t x = 0; x < out_w; x++) {
+		int32_t i = zoom_x0[x];
+		uint32_t a = spread565(line[i]);
+		uint8_t w = zoom_wx[x];
+		row[x] = w ? blend_spread(a, spread565(line[i + 1]), w) : a;
+	}
+	zoom_row_y[k] = y;
+	return row;
+}
+
+// Scales the layout-page rectangle `area` up into `dst`, a whole framebuffer
+// page, turned through 180 degrees when `rotated`. Every output pixel that
+// samples a source pixel inside `area` is written.
+static void zoom_blit(uint16_t *dst, const uint16_t *src, const lv_area_t *area, bool rotated) {
+	int32_t out_w = (int32_t)fb_var.xres, out_h = (int32_t)fb_var.yres;
+	// The output rows and columns whose samples reach into the area: a pixel
+	// either side of it, for the bilinear neighbour.
+	int32_t ox1 = (area->x1 - 1) * out_w / zoom_w, ox2 = (area->x2 + 2) * out_w / zoom_w + 1;
+	int32_t oy1 = (area->y1 - 1) * out_h / zoom_h, oy2 = (area->y2 + 2) * out_h / zoom_h + 1;
+	ox1 = ox1 < 0 ? 0 : ox1;
+	oy1 = oy1 < 0 ? 0 : oy1;
+	ox2 = ox2 >= out_w ? out_w - 1 : ox2;
+	oy2 = oy2 >= out_h ? out_h - 1 : oy2;
+
+	zoom_row_y[0] = zoom_row_y[1] = -1;
+	for (int32_t y = oy1; y <= oy2; y++) {
+		int32_t sy = zoom_y0[y];
+		uint8_t wy = zoom_wy[y];
+		const uint32_t *top = zoom_source_row(src, sy, out_w);
+		const uint32_t *bottom = wy ? zoom_source_row(src, sy + 1, out_w) : top;
+		if (rotated) {
+			uint16_t *row = dst + (size_t)(out_h - 1 - y) * out_w + (out_w - 1);
+			for (int32_t x = ox1; x <= ox2; x++) {
+				row[-x] = pack565(wy ? blend_spread(top[x], bottom[x], wy) : top[x]);
+			}
+		} else {
+			uint16_t *row = dst + (size_t)y * out_w;
+			for (int32_t x = ox1; x <= ox2; x++) {
+				row[x] = pack565(wy ? blend_spread(top[x], bottom[x], wy) : top[x]);
+			}
+		}
+	}
+}
+
+// Sets up the scaled page, or leaves the display pixel for pixel when the
+// memory is not there. False when it could not.
+static bool zoom_setup(int32_t layout_w, int32_t layout_h) {
+	zoom_w = layout_w;
+	zoom_h = layout_h;
+	int32_t out_w = (int32_t)fb_var.xres, out_h = (int32_t)fb_var.yres;
+	zoom_page = calloc((size_t)zoom_w * zoom_h, 2);
+	zoom_row[0] = malloc((size_t)out_w * sizeof(uint32_t));
+	zoom_row[1] = malloc((size_t)out_w * sizeof(uint32_t));
+	if (!zoom_page || !zoom_row[0] || !zoom_row[1] || !zoom_axis(zoom_w, out_w, &zoom_x0, &zoom_wx) ||
+		!zoom_axis(zoom_h, out_h, &zoom_y0, &zoom_wy)) {
+		fprintf(stderr, "fb: no memory for the display size's page; drawing pixel for pixel\n");
+		free(zoom_page);
+		zoom_page = NULL;
+		return false;
+	}
+	return true;
+}
+
 static void fb_pan_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px) {
 	bool second_page;
 
-	if (fb_rotated) {
+	if (fb_rotated || fb_zoomed) {
 		// Collect this frame's damage; the copy happens once, on the last
 		// area, into the page that is NOT on screen.
 		area_merge(&rot_frame_dirty, area);
@@ -1424,8 +1630,12 @@ static void fb_pan_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *
 		area_merge(&redraw, &rot_frame_dirty);
 
 		if (!area_is_empty(&redraw)) {
-			blit_rotated_180((uint16_t *)(fb_mem + (second_page ? fb_page_size : 0)), (const uint16_t *)px, &redraw,
-							 (int32_t)fb_var.xres, (int32_t)fb_var.yres);
+			uint16_t *page = (uint16_t *)(fb_mem + (second_page ? fb_page_size : 0));
+			if (fb_zoomed) {
+				zoom_blit(page, (const uint16_t *)zoom_page, &redraw, fb_rotated);
+			} else {
+				blit_rotated_180(page, (const uint16_t *)px, &redraw, (int32_t)fb_var.xres, (int32_t)fb_var.yres);
+			}
 		}
 
 		area_clear(&rot_page_pending[target]);
@@ -1508,7 +1718,22 @@ static lv_display_t *try_panned_display(void) {
 		return NULL;
 	}
 
-	lv_display_t *disp = lv_display_create((int32_t)fb_var.xres, (int32_t)fb_var.yres);
+	// Display size: the layout's own page, scaled up into these two. Only for
+	// a panel the zoom divides exactly, which the R1's does (480x800 to 384x640).
+	int32_t layout_w = (int32_t)fb_var.xres, layout_h = (int32_t)fb_var.yres;
+	if (ui_zoom != DISPLAY_ZOOM_STANDARD) {
+		int32_t w = layout_w * DISPLAY_ZOOM_STANDARD / ui_zoom, h = layout_h * DISPLAY_ZOOM_STANDARD / ui_zoom;
+		if (w * ui_zoom == layout_w * DISPLAY_ZOOM_STANDARD && h * ui_zoom == layout_h * DISPLAY_ZOOM_STANDARD &&
+			zoom_setup(w, h)) {
+			layout_w = w;
+			layout_h = h;
+			fb_zoomed = true;
+		} else {
+			ui_zoom = DISPLAY_ZOOM_STANDARD; // the pages are laid out pixel for pixel then
+		}
+	}
+
+	lv_display_t *disp = lv_display_create(layout_w, layout_h);
 	if (!disp) {
 		munmap(fb_mem, fb_page_size * 2);
 		close(fb_fd);
@@ -1517,12 +1742,23 @@ static lv_display_t *try_panned_display(void) {
 	}
 
 	lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
-	lv_display_set_buffers(disp, fb_mem, fb_mem + fb_page_size, (uint32_t)fb_page_size,
-						   LV_DISPLAY_RENDER_MODE_DIRECT);
+	if (fb_zoomed) {
+		lv_display_set_buffers(disp, zoom_page, NULL, (uint32_t)(layout_w * layout_h * 2), LV_DISPLAY_RENDER_MODE_DIRECT);
+		area_clear(&rot_frame_dirty);
+		area_set_full(&rot_page_pending[0]);
+		area_set_full(&rot_page_pending[1]);
+	} else {
+		lv_display_set_buffers(disp, fb_mem, fb_mem + fb_page_size, (uint32_t)fb_page_size,
+							   LV_DISPLAY_RENDER_MODE_DIRECT);
+	}
 	lv_display_set_flush_cb(disp, fb_pan_flush_cb);
 	fb_display = disp;
 
-	printf("fb: double-buffered, page flip on FBIOPAN_DISPLAY (%ux%u)\n", fb_var.xres, fb_var.yres);
+	printf("fb: double-buffered, page flip on FBIOPAN_DISPLAY (%ux%u)", fb_var.xres, fb_var.yres);
+	if (fb_zoomed) {
+		printf(", laid out at %dx%d and drawn up %d%%", (int)layout_w, (int)layout_h, ui_zoom);
+	}
+	printf("\n");
 	return disp;
 }
 
@@ -1538,11 +1774,6 @@ uint16_t *display_capture_frame(int *out_w, int *out_h) {
 		return NULL; // plain fbdev fallback, no second page
 	}
 
-	// One block, kept for the life of the process instead of allocating one
-	// per shot: nearly 700 KB contiguous, which is exactly the request malloc
-	// refuses on this device while Qobuz is downloading and a decoder is open.
-	//
-	// The caller must not free it (see screenshot.c): the block stays here.
 	static uint16_t *copy;
 	static size_t copy_size;
 	if (!copy || copy_size != fb_page_size) {
@@ -1642,7 +1873,13 @@ void display_set_rotated(bool rotated) {
 		return;
 	}
 
-	if (rotated) {
+	if (fb_zoomed) {
+		// Already drawing into a RAM page: the scaling turns it as it copies.
+		area_clear(&rot_frame_dirty);
+		area_set_full(&rot_page_pending[0]);
+		area_set_full(&rot_page_pending[1]);
+		fb_rotated = rotated;
+	} else if (rotated) {
 		if (!rot_page) {
 			rot_page = malloc(fb_page_size);
 		}
@@ -1669,12 +1906,9 @@ void display_set_rotated(bool rotated) {
 
 	// The touch panel turns with the picture: an inverted calibration maps
 	// the top-left corner of the glass to the bottom-right of the screen.
-	if (fb_touch) {
-		if (fb_rotated) {
-			lv_evdev_set_calibration(fb_touch, (int)fb_var.xres - 1, (int)fb_var.yres - 1, 0, 0);
-		} else {
-			lv_evdev_set_calibration(fb_touch, 0, 0, (int)fb_var.xres - 1, (int)fb_var.yres - 1);
-		}
+	if (fb_touch && fb_touch_calibrated) {
+		touch_calibration_t c = touch_calibration_oriented(fb_touch_calibration, fb_rotated);
+		lv_evdev_set_calibration(fb_touch, c.min_x, c.min_y, c.max_x, c.max_y);
 	}
 
 	// Both framebuffer pages still hold the picture the other way up. One
@@ -1747,6 +1981,43 @@ static bool find_touch_node(char *out, size_t out_size) {
 	return false;
 }
 
+static bool touch_read_axis(void *context, unsigned axis, struct input_absinfo *info) {
+	int fd = *(int *)context;
+	return ioctl(fd, EVIOCGABS(axis), info) == 0;
+}
+
+// The touch panel's coordinates are the panel's own pixels, whatever range its
+// driver advertises. The R1's hyn_ts advertises ABS_MT_POSITION 0..720 x
+// 0..1280 and no ABS_X at all, yet reports 0..479 x 0..799 (read over adb,
+// 2026-11-05): passed through uncalibrated, pixel for pixel, taps land where
+// the finger is, on this player and on upstream Sonix's. Calibrating to the
+// advertised range would put every tap at two thirds of the way there; with
+// no calibration at all, Display size Large put them 25% too far. So the
+// calibration is the panel's pixel range, which LVGL scales to the layout. The
+// advertised range is logged beside it.
+static void calibrate_target_touch(lv_indev_t *touch, const char *node) {
+	touch_calibration_t advertised;
+	int fd = open(node, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+	bool known = fd >= 0 && touch_calibration_read(touch_read_axis, &fd, &advertised);
+	if (fd >= 0) close(fd);
+	if (!fb_display) {
+		fprintf(stderr, "input: no page-flipping display; keeping driver calibration on %s\n", node);
+		return;
+	}
+	fb_touch_calibration = (touch_calibration_t){0, 0, (int)fb_var.xres - 1, (int)fb_var.yres - 1};
+	fb_touch_calibrated = true;
+	if (known) {
+		printf("input: %s advertises (%d,%d)-(%d,%d); calibrating to the panel's pixels instead\n", node,
+			   advertised.min_x, advertised.min_y, advertised.max_x, advertised.max_y);
+	}
+	touch_calibration_t c = touch_calibration_oriented(fb_touch_calibration, fb_rotated);
+	lv_evdev_set_calibration(touch, c.min_x, c.min_y, c.max_x, c.max_y);
+	lv_display_t *display = lv_indev_get_display(touch);
+	printf("input: %s range (%d,%d)-(%d,%d) -> %dx%d logical pixels\n", node,
+		   c.min_x, c.min_y, c.max_x, c.max_y,
+		   (int)lv_display_get_horizontal_resolution(display), (int)lv_display_get_vertical_resolution(display));
+}
+
 static lv_display_t *init_target_display(void) {
 	// Tear-free page flipping when the framebuffer supports it...
 	lv_display_t *disp = try_panned_display();
@@ -1754,6 +2025,7 @@ static lv_display_t *init_target_display(void) {
 	// ...and LVGL's plain single-buffer driver when it does not.
 	if (!disp) {
 		fprintf(stderr, "fb: page flipping unavailable, falling back to the plain fbdev driver\n");
+		ui_zoom = DISPLAY_ZOOM_STANDARD; // that driver draws pixel for pixel
 		disp = lv_linux_fbdev_create();
 		if (!disp) {
 			fprintf(stderr, "Error: Failed to create Linux framebuffer display\n");
@@ -1788,6 +2060,7 @@ static lv_display_t *init_target_display(void) {
 
 	if (touch) {
 		lv_indev_set_display(touch, disp);
+		calibrate_target_touch(touch, fb_touch_node);
 		tune_pointer(touch);
 		fb_touch = touch;
 		printf("Touch screen input driver successfully registered.\n");
@@ -1904,7 +2177,6 @@ int main(int argc, char **argv) {
 	bool first_start = stat(config_file, &config_st) != 0;
 #endif
 	config_init(config_file);
-	discovery_preferences_load();
 
 	// A start by the cable is the charging screen alone, until the power key is
 	// held: before anything else opens the display, the keys or the audio.
@@ -1964,12 +2236,8 @@ int main(int argc, char **argv) {
 	// the update file's name, the converter's name and the serial number.
 	sysinfo_load();
 
-	// The streaming services' application keys, and Qobuz with them. Before
-	// the GUI builds its pages, because the Qobuz page is drawn one way or
-	// the other depending on whether the keys are there.
-	streamkeys_init();
-	qobuz_init();
-	tidal_init();
+
+
 	lastfm_init();
 
 	lv_init();
@@ -1998,6 +2266,9 @@ int main(int argc, char **argv) {
 	}
 
 	lv_tick_set_cb(custom_tick_get);
+
+	// Before the display: it is created at the size the zoom lays out at.
+	read_ui_zoom();
 
 #ifdef HOST_BUILD
 	printf("Initializing Host Build (SDL2 simulation)...\n");
@@ -2075,9 +2346,13 @@ int main(int argc, char **argv) {
 	// The panel: the model, not the framebuffer. See panel_size().
 	int panel_w = 0, panel_h = 0;
 #ifndef HOST_BUILD
-	int fb_w = (int)lv_display_get_horizontal_resolution(disp);
-	int fb_h = (int)lv_display_get_vertical_resolution(disp);
+	// The panel's own size, not the display's: with a display size set the
+	// display is the layout, smaller than the glass.
+	int fb_w = fb_display ? (int)fb_var.xres : (int)lv_display_get_horizontal_resolution(disp);
+	int fb_h = fb_display ? (int)fb_var.yres : (int)lv_display_get_vertical_resolution(disp);
 	panel_size(&panel_w, &panel_h, fb_w, fb_h);
+	fb_w = (int)lv_display_get_horizontal_resolution(disp);
+	fb_h = (int)lv_display_get_vertical_resolution(disp);
 
 	// What the framebuffer says it is, beside what the interface is being laid
 	// out at. They should agree; when they do not, this line is the one that
@@ -2156,11 +2431,8 @@ int main(int argc, char **argv) {
 		char db_path[600];
 		snprintf(db_path, sizeof(db_path), "%s/.local/library.db", db_root);
 		library_open(db_path);
-		// The same file the app downloads: one index, served as it is.
 		sonixlink_set_db_path(db_path);
 
-		// The thumbnails the player has already made for its own lists: the app
-		// downloads that same file rather than having a second one built for it.
 		char thumbs_path[600];
 		snprintf(thumbs_path, sizeof(thumbs_path), "%s/.local/thumbnails", db_root);
 		sonixlink_set_thumbs_path(thumbs_path);
@@ -2170,7 +2442,7 @@ int main(int argc, char **argv) {
 		audiobookdb_open(db_path);
 
 		// And the radio's own: the starred stations and the last few played.
-		radio_store_open(db_root);
+
 	}
 
 	// TLS, so an https:// station can be opened at all. Warmed up here rather
@@ -2180,18 +2452,9 @@ int main(int argc, char **argv) {
 	// which bundle was found -- which is the first thing to look at when
 	// https stations fail.
 	tls_set_card_root(gui_cfg.sd_root_path);
-	// Where downloaded stream tracks go. The real card is used -- the same
-	// root the Qobuz page and the card watcher use -- and not
-	// gui_cfg.sd_root_path, which on the simulator is a different folder: the
-	// cache and the code that cleans it must agree on one root.
-	const char *card_root = storage_sd_root();
-	qobuzcache_set_root(card_root && card_root[0] ? card_root : gui_cfg.sd_root_path);
-	tidalcache_set_root(card_root && card_root[0] ? card_root : gui_cfg.sd_root_path);
-	podcastcache_set_root(card_root && card_root[0] ? card_root : gui_cfg.sd_root_path);
-	podcastsubs_set_root(card_root && card_root[0] ? card_root : gui_cfg.sd_root_path);
-	podcaststate_set_root(card_root && card_root[0] ? card_root : gui_cfg.sd_root_path);
+
 	// And where a track arriving over DLNA lands: same card, same reason.
-	dlna_set_root(card_root && card_root[0] ? card_root : gui_cfg.sd_root_path);
+
 	// And where the emulator looks for Games/GB and Games/GBC. Unlike the
 	// lines above this uses gui_cfg.sd_root_path and not storage_sd_root():
 	// those write a cache, which belongs on the real card, while games are
@@ -2204,8 +2467,6 @@ int main(int argc, char **argv) {
 	// Rows pointing into the stream caches are dropped once at boot: a cache
 	// file may be gone, and starring a streamed track goes to the account
 	// rather than to the local database.
-	library_forget_under(qobuzcache_dir());
-	library_forget_under(tidalcache_dir());
 	if (!tls_available()) {
 		fprintf(stderr, "tls: unavailable; https radio stations cannot be opened\n");
 	}
@@ -2233,8 +2494,7 @@ int main(int argc, char **argv) {
 	// Restore paused transfers and completed-file history without requiring a
 	// new online search. The worker stays asleep until a transfer is requested.
 	if (gui_cfg.sd_root_path && storage_sd_writable())
-		download_queue_init(gui_cfg.sd_root_path);
-	lv_timer_create(downloaded_library_poll, 1000, NULL);
+	lv_timer_create(local_library_poll, 1000, NULL);
 
 	// "Rotate screen", as it was left. After gui_init so there are screens to
 	// redraw, and before the first frame the user sees.
@@ -2402,11 +2662,23 @@ int main(int argc, char **argv) {
 	// not opened) poll() on a negative fd is exactly a timed sleep, and the
 	// bridge timer polls fast in that case.
 	watchdog_start();
+	library_set_ui_thread();
+	lv_display_add_event_cb(disp, draw_timing_cb, LV_EVENT_REFR_START, NULL);
+	lv_display_add_event_cb(disp, draw_timing_cb, LV_EVENT_REFR_READY, NULL);
 
 	printf("Entering main event loop...\n");
 	while (running) {
 		ui_heartbeat++;
+		uint32_t pass_started = custom_tick_get();
 		uint32_t time_till_next = lv_timer_handler();
+		// A pass long enough to be felt as a stutter, with the page it was on.
+		// The database wait, if that is what it was, is logged by the library.
+		uint32_t pass_ms = custom_tick_get() - pass_started;
+		library_note_ui_idle(lv_display_get_inactive_time(NULL));
+		if (pass_ms >= UI_SLOW_PASS_MS) {
+			printf("ui: one pass took %u ms on the page showing \"%s\"\n", (unsigned)pass_ms,
+				   first_text_on(lv_screen_active()));
+		}
 		power_keep_animations_paused();
 		if (time_till_next > MAIN_LOOP_MAX_SLEEP_MS) {
 			time_till_next = MAIN_LOOP_MAX_SLEEP_MS; // also catches LV_NO_TIMER_READY
@@ -2422,6 +2694,5 @@ int main(int argc, char **argv) {
 
 	printf("\n");
 
-	download_queue_shutdown();
 	return 0;
 }

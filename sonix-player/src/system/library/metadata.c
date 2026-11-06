@@ -19,36 +19,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-// Optional attribution sidecar emitted by the discovery downloader. Fill only
-// missing embedded metadata: keep the downloaded audio bytes unchanged. Bound
-// and validate local data too; reject oversized files and symlink redirection.
-static void read_discovery_metadata(const char *filepath, song_metadata_t *out) {
-	char path[1024];
-	if (snprintf(path, sizeof(path), "%s.source.json", filepath) >= (int)sizeof(path)) return;
-	int fd = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
-	if (fd < 0) return;
-	struct stat st, audio;
-	char body[8193];
-	if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size < 2 || st.st_size > 8192 ||
-		stat(filepath, &audio) || !S_ISREG(audio.st_mode)) { close(fd); return; }
-	size_t done = 0;
-	while (done < (size_t)st.st_size) {
-		ssize_t n = read(fd, body + done, (size_t)st.st_size - done);
-		if (n <= 0) { close(fd); return; }
-		done += (size_t)n;
-	}
-	close(fd);
-	body[done] = 0;
-	json_doc_t doc;
-	if (!json_parse(body, &doc)) return;
-	int root = json_root(&doc);
-	if (json_obj_llong(&doc, root, "bytes", -1) == audio.st_size) {
-		if (!out->title[0]) json_obj_str(&doc, root, "title", out->title, sizeof(out->title));
-		if (!out->artist[0]) json_obj_str(&doc, root, "artist", out->artist, sizeof(out->artist));
-		if (!out->album[0]) json_obj_str(&doc, root, "album", out->album, sizeof(out->album));
-	}
-	json_free(&doc);
-}
+
 
 // Standard ID3v1 genre list, used to resolve numeric genre references from
 // both ID3v1 tags and ID3v2 TCON frames written in the old "(N)" style. Past
@@ -467,6 +438,9 @@ static void apply_vorbis_comment(song_metadata_t *out, const char *comment, size
 	} else if (strcmp(key, "ALBUMARTIST") == 0 || strcmp(key, "ALBUM ARTIST") == 0 || strcmp(key, "ALBUM_ARTIST") == 0) {
 		dst = out->album_artist;
 		dst_size = sizeof(out->album_artist);
+	} else if (strcmp(key, "COMPOSER") == 0) {
+		dst = out->composer;
+		dst_size = sizeof(out->composer);
 	} else if (strcmp(key, "ALBUM") == 0) {
 		dst = out->album;
 		dst_size = sizeof(out->album);
@@ -1383,7 +1357,8 @@ static bool read_id3v2(FILE *f, song_metadata_t *out) {
 					  strcmp(frame_id, "TPE1") == 0 || strcmp(frame_id, "TPE2") == 0 || strcmp(frame_id, "TALB") == 0 ||
 					  strcmp(frame_id, "TCON") == 0 || strcmp(frame_id, "TRCK") == 0 || strcmp(frame_id, "TPOS") == 0 ||
 					  strcmp(frame_id, "TYER") == 0 || strcmp(frame_id, "TDRC") == 0 || strcmp(frame_id, "TORY") == 0 ||
-					  strcmp(frame_id, "TDOR") == 0 || strcmp(frame_id, "TDRL") == 0 || strcmp(frame_id, "TXXX") == 0 || strcmp(frame_id, "TCMP") == 0;
+					  strcmp(frame_id, "TDOR") == 0 || strcmp(frame_id, "TDRL") == 0 || strcmp(frame_id, "TXXX") == 0 || strcmp(frame_id, "TCMP") == 0 ||
+					  strcmp(frame_id, "TCOM") == 0;
 
 		bool lyrics_frame = lyrics_wanted && (strcmp(frame_id, "USLT") == 0 || strcmp(frame_id, "SYLT") == 0);
 		bool comment_frame = description_wanted && strcmp(frame_id, "COMM") == 0;
@@ -1472,6 +1447,8 @@ static bool read_id3v2(FILE *f, song_metadata_t *out) {
 				copy_bounded(out->artist, sizeof(out->artist), decoded);
 			} else if (strcmp(frame_id, "TPE2") == 0) {
 				copy_bounded(out->album_artist, sizeof(out->album_artist), decoded);
+			} else if (strcmp(frame_id, "TCOM") == 0) {
+				copy_bounded(out->composer, sizeof(out->composer), decoded);
 			} else if (strcmp(frame_id, "TCMP") == 0) {
 				out->compilation = flag_is_set(decoded, strlen(decoded));
 			} else if (strcmp(frame_id, "TALB") == 0) {
@@ -2370,23 +2347,6 @@ static void read_ape_metadata(const char *filepath, song_metadata_t *out) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Sidecar files
-//
-// A track downloaded from a streaming service can arrive with no tags at all:
-// Qobuz FLACs are often bare. What the file does not say the API does, and the
-// downloader writes it alongside, in "<file>.tags":
-//
-//     title=...
-//     artist=...
-//     album=...
-//     track=3
-//
-// It is read after the real tags and overrides whatever they said (see the
-// note in read_sidecar_tags). The same function then serves the player, the
-// details page, the favourites and the library scan without any of them
-// knowing that streaming exists.
-// ---------------------------------------------------------------------------
 
 static void read_sidecar_tags(const char *filepath, song_metadata_t *out) {
 	char path[600];
@@ -2414,13 +2374,6 @@ static void read_sidecar_tags(const char *filepath, song_metadata_t *out) {
 			continue;
 		}
 
-		// The sidecar wins over the file's own tags. It exists only beside a
-		// cached track (Qobuz, Tidal, a podcast episode) and was written from
-		// what the service says, while the file's tags are whatever someone else
-		// published -- a podcast episode's MP3 very often carries the tags of the
-		// show, or of the most recent episode, or none at all.
-		//
-		// Music on the card is unaffected: no .tags file is there.
 		if (strcmp(key, "title") == 0) {
 			snprintf(out->title, sizeof(out->title), "%s", value);
 		} else if (strcmp(key, "artist") == 0) {
@@ -2608,7 +2561,6 @@ void metadata_read(const char *filepath, song_metadata_t *out) {
 	}
 	}
 
-	read_discovery_metadata(filepath, out);
 	read_sidecar_tags(filepath, out);
 	clean_fields(out);
 }

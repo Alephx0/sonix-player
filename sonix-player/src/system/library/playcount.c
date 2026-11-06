@@ -27,6 +27,9 @@ static struct {
 	double last_position;
 } play;
 
+// Seconds heard and not yet added to the day's listening time.
+static double unsaved;
+
 static double now_seconds(void) {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -58,6 +61,14 @@ void playcount_note_playback(const playcount_playback_t *now) {
 		double step = t - play.last_tick;
 		if (step > 0 && step < STEP_MAX_SECS) {
 			play.listened += step;
+			// Minutes listened (Listening stats), handed over a minute at a time.
+			if (!now->skip) {
+				unsaved += step;
+				if (unsaved >= 60.0) {
+					library_note_listened((int)unsaved);
+					unsaved -= (int)unsaved;
+				}
+			}
 		}
 	}
 	play.was_playing = now->playing;

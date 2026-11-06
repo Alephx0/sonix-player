@@ -604,7 +604,7 @@ static bool write_config(const char *web_root, int port, const char *conf_path, 
 	fprintf(f, "port=%d\n", port);
 	fprintf(f, "pidfile=%s\n", pidfile);
 	fprintf(f, "logfile=/dev/null\n");
-	fprintf(f, "cgipat=**.cgi|list|upload|download|create|move|delete|sonix-list\n");
+	fprintf(f, "cgipat=**.cgi|list|upload|create|move|delete|sonix-list\n");
 
 	// Nothing served here may be cached without asking first.
 	//
@@ -666,7 +666,7 @@ static void stop_server(void) {
 		run(CGIC_DISABLE, argv);
 	} else {
 		static const char *const names[] = {"thttpd",		"udp_server", "list.cgi", "upload.cgi",
-											"download.cgi", "create.cgi", "move.cgi",  "delete.cgi"};
+											"create.cgi", "move.cgi",  "delete.cgi"};
 		for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
 			char *const argv[] = {(char *)"killall", (char *)names[i], NULL};
 			run("/usr/bin/killall", argv);

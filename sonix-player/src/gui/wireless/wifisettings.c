@@ -516,7 +516,7 @@ static void rebuild_list(void) {
 		lv_obj_t *searching = lv_label_create(row);
 		lv_label_set_text(searching, tr("wifi_searching_again"));
 		lv_obj_add_style(searching, &theme_style_text_dim, 0);
-		lv_obj_set_style_text_font(searching, &font_ui_22, 0);
+		lv_obj_set_style_text_font(searching, settingsrow_note_font(), 0);
 		return;
 	}
 
@@ -533,7 +533,7 @@ static void rebuild_list(void) {
 		lv_obj_t *none = lv_label_create(list);
 		lv_label_set_text(none, tr("wifi_no_networks_found"));
 		lv_obj_add_style(none, &theme_style_text_dim, 0);
-		lv_obj_set_style_text_font(none, &font_ui_22, 0);
+		lv_obj_set_style_text_font(none, settingsrow_note_font(), 0);
 		lv_obj_set_style_pad_top(none, 10, 0);
 	}
 }
@@ -735,7 +735,7 @@ static void build_password_page(gui_config_t *cfg) {
 	lv_obj_t *hint = lv_label_create(password_screen);
 	lv_label_set_text(hint, tr("wifi_network_password"));
 	lv_obj_add_style(hint, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(hint, &font_ui_22, 0);
+	lv_obj_set_style_text_font(hint, settingsrow_note_font(), 0);
 	lv_obj_align(hint, LV_ALIGN_TOP_LEFT, cfg->padding, top);
 
 	password_field = lv_textarea_create(password_screen);
@@ -812,7 +812,7 @@ static lv_obj_t *make_heading(lv_obj_t *parent, const char *tag) {
 	lv_label_set_text(heading, tr(tag));
 	lv_obj_set_width(heading, lv_pct(100));
 	lv_obj_add_style(heading, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(heading, &font_ui_22, 0);
+	lv_obj_set_style_text_font(heading, settingsrow_note_font(), 0);
 	lv_obj_set_style_pad_top(heading, 6, 0);
 	lv_obj_set_style_pad_hor(heading, 4, 0);
 	return heading;

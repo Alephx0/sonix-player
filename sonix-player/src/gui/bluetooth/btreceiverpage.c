@@ -312,7 +312,7 @@ void btreceiverpage_init(gui_config_t *cfg) {
 	lv_label_set_long_mode(device_label, LV_LABEL_LONG_DOT);
 	lv_obj_set_style_text_align(device_label, LV_TEXT_ALIGN_CENTER, 0);
 	lv_obj_add_style(device_label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(device_label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(device_label, settingsrow_note_font(), 0);
 	lv_obj_set_style_margin_top(device_label, 10, 0);
 	lv_label_set_text(device_label, "");
 
@@ -334,7 +334,7 @@ void btreceiverpage_init(gui_config_t *cfg) {
 	lv_label_set_long_mode(status_label, LV_LABEL_LONG_WRAP);
 	lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
 	lv_obj_add_style(status_label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(status_label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(status_label, settingsrow_note_font(), 0);
 	lv_obj_set_style_margin_top(status_label, 10, 0);
 	lv_label_set_text(status_label, "");
 	status_normal_color = lv_obj_get_style_text_color(status_label, LV_PART_MAIN);

@@ -30,6 +30,23 @@ static theme_palette_t palette_dark = {
 	.text_primary = LV_COLOR_MAKE(255, 255, 255),
 	.text_secondary = LV_COLOR_MAKE(160, 160, 160),
 	.accent = LV_COLOR_MAKE(53, 132, 228),
+	.accent_ink = LV_COLOR_MAKE(255, 255, 255),
+	.dark = true,
+};
+
+// The reference layout's fixed palette, from docs/DESIGN_SYSTEM.md: #121212
+// page, #282828 raised surface, #3e3e3e pressed, #b3b3b3 secondary text and
+// Spotify green with black ink. Not tinted and not affected by the accent.
+static const theme_palette_t palette_reference = {
+	.screen_bg = LV_COLOR_MAKE(18, 18, 18),
+	.surface = LV_COLOR_MAKE(40, 40, 40),
+	.surface_pressed = LV_COLOR_MAKE(62, 62, 62),
+	.panel = LV_COLOR_MAKE(18, 18, 18),
+	.cover_bg = LV_COLOR_MAKE(40, 40, 40),
+	.text_primary = LV_COLOR_MAKE(255, 255, 255),
+	.text_secondary = LV_COLOR_MAKE(179, 179, 179),
+	.accent = LV_COLOR_MAKE(30, 215, 96),
+	.accent_ink = LV_COLOR_MAKE(0, 0, 0),
 	.dark = true,
 };
 
@@ -47,6 +64,7 @@ static theme_palette_t palette_light = {
 	.text_primary = LV_COLOR_MAKE(50, 50, 50),
 	.text_secondary = LV_COLOR_MAKE(115, 115, 115),
 	.accent = LV_COLOR_MAKE(53, 132, 228),
+	.accent_ink = LV_COLOR_MAKE(255, 255, 255),
 	.dark = false,
 };
 
@@ -64,7 +82,10 @@ static bool dynamic_tint;
 // accent or tint change; `active` points here while the tint is on.
 static theme_palette_t tinted;
 
-static theme_palette_t *active = &palette_dark;
+static const theme_palette_t *active = &palette_dark;
+
+// Whether the reference layout's fixed palette is in force.
+static bool reference;
 
 // The accent presets, Adwaita's named accents, ordered as requested: blue
 // (the default), then warm to cool -- orange, yellow, green, purple, pink.
@@ -146,6 +167,10 @@ static lv_color_t tint_with(lv_color_t c, lv_color_t accent, float strength) {
 
 // Points `active` at the chosen preset, or at a tinted copy of it.
 static void rebuild_active(void) {
+	if (reference) {
+		active = &palette_reference;
+		return;
+	}
 	theme_palette_t *base = dark_selected ? &palette_dark : &palette_light;
 
 	if (!dynamic_tint) {
@@ -181,7 +206,8 @@ static void apply_palette(void) {
 
 	lv_style_set_image_recolor(&theme_style_icon, active->text_primary);
 
-	lv_style_set_bg_color(&theme_style_switch, active->surface_pressed);
+	// Spotify's off track is a mid grey that reads against the #121212 page.
+	lv_style_set_bg_color(&theme_style_switch, reference ? lv_color_make(83, 83, 83) : active->surface_pressed);
 	lv_style_set_bg_color(&theme_style_switch_checked, active->accent);
 
 	lv_style_set_bg_color(&theme_style_accent_bg, active->accent);
@@ -234,6 +260,7 @@ void theme_init(void) {
 	palette_light.accent = ACCENT_COLORS[accent_index];
 
 	dynamic_tint = config_get_bool("ui", "dynamic_tint", false);
+	reference = config_get_int("screen", "player_layout_alt", 3) == 3;
 
 	rebuild_active();
 	apply_palette();
@@ -279,7 +306,7 @@ const theme_palette_t *theme(void) { return active; }
 bool theme_is_dark(void) { return active->dark; }
 
 void theme_set_dark(bool dark) {
-	if (active->dark == dark) {
+	if (dark_selected == dark) {
 		return;
 	}
 	theme_toggle();
@@ -379,7 +406,7 @@ void theme_toggle(void) {
 	rebuild_active();
 	apply_palette();
 
-	config_set_bool("ui", "dark_theme", active->dark);
+	config_set_bool("ui", "dark_theme", dark_selected);
 	config_save();
 
 	// The boot logo follows the theme and the accent; see bootlogo.h.
@@ -419,5 +446,17 @@ void theme_set_dynamic_tint(bool on) {
 	config_set_bool("ui", "dynamic_tint", on);
 	config_save();
 
+	refresh_all();
+}
+
+bool theme_reference(void) { return reference; }
+
+void theme_set_reference(bool on) {
+	if (reference == on) {
+		return;
+	}
+	reference = on;
+	rebuild_active();
+	apply_palette();
 	refresh_all();
 }

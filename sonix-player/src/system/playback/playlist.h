@@ -144,6 +144,20 @@ bool playlist_is_junk_name(const char *name);
 void playlist_set_album(const char *album);
 const char *playlist_album(void);
 
+// Re-deals a shuffled context with the playing track first (explicit Play).
+void playlist_shuffle_restart(void);
+
+// What the queue's context is called, for "Next from <name>": set by whoever
+// loads a named list right after loading it; "" when unnamed. Persisted, and
+// put back by the boot restore through playlist_restore_context_name().
+void playlist_set_context_name(const char *name);
+const char *playlist_context_name(void);
+// The same with the context's kind in capitals ("PLAYLIST", "ARTIST",
+// "SEARCH"), shown as "PLAYING FROM <kind>"; "" when only the name is known.
+void playlist_set_context(const char *kind, const char *name);
+const char *playlist_context_kind(void);
+void playlist_restore_context_name(void);
+
 // Called by the boot restore once the label has been put back, so that putting
 // it back is not itself written down again.
 void playlist_note_album_restored(void);
@@ -254,6 +268,8 @@ int playlist_repeat_mode(void); /* 0 off, 1 context, 2 current */
 void playlist_set_repeat(int repeat);
 void playlist_reshuffle(void);
 bool playlist_priority_add(const char *path);
+// The same, first in line: the next track to play.
+bool playlist_priority_add_next(const char *path);
 int playlist_priority_count(void);
 bool playlist_is_priority(int index);
 void playlist_priority_clear(void);

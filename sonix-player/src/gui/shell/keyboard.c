@@ -27,6 +27,10 @@
 // textarea being typed into and what the accent key does.
 // ---------------------------------------------------------------------------
 
+static bool reference_keyboard(void){return config_get_int("screen","player_layout_alt",3)==3;}
+static lv_color_t keyboard_accent(void){return reference_keyboard()?lv_color_hex(0x1ed760):theme()->accent;}
+static lv_color_t keyboard_accept_ink(void){return reference_keyboard()?lv_color_black():lv_color_white();}
+
 #define KB_MAX_KEYS KB_LAYOUT_MAX_KEYS
 
 // What the Japanese layout's letter rows type: romaji turned into hiragana or
@@ -698,7 +702,7 @@ static void kb_refresh_caps(keyboard_t *kb) {
 	// double tap), on both keyboards.
 	lv_image_set_src(kb->shift_icon, kb->caps ? &icon_caps_lock : &icon_shift);
 	if (kb->symbols ? kb->symbols2 : kb->shift) {
-		lv_obj_set_style_bg_color(kb->shift_btn, theme()->accent, 0);
+		lv_obj_set_style_bg_color(kb->shift_btn, keyboard_accent(), 0);
 		lv_obj_set_style_bg_opa(kb->shift_btn, LV_OPA_COVER, 0);
 		lv_obj_set_style_image_recolor(kb->shift_icon, lv_color_white(), 0);
 	} else {
@@ -746,7 +750,7 @@ static void kb_refresh_caps(keyboard_t *kb) {
 		lv_image_set_src(kb->t9_shift_icon, kb->caps ? &icon_caps_lock : &icon_shift);
 		// In number mode shift turns to the second symbol set; the 0 is on 9.
 		if (kb->t9_numbers ? kb->symbols2 : kb->shift) {
-			lv_obj_set_style_bg_color(kb->t9_shift_btn, theme()->accent, 0);
+			lv_obj_set_style_bg_color(kb->t9_shift_btn, keyboard_accent(), 0);
 			lv_obj_set_style_bg_opa(kb->t9_shift_btn, LV_OPA_COVER, 0);
 			lv_obj_set_style_image_recolor(kb->t9_shift_icon, lv_color_white(), 0);
 		} else {
@@ -1158,7 +1162,7 @@ static void kb_variants_paint(keyboard_t *kb) {
 	for (int i = 0; i < kb->variant_count; i++) {
 		bool on = i == kb->variant_sel;
 		if (on) {
-			lv_obj_set_style_bg_color(kb->variant_cell[i], theme()->accent, 0);
+			lv_obj_set_style_bg_color(kb->variant_cell[i], keyboard_accent(), 0);
 			lv_obj_set_style_bg_opa(kb->variant_cell[i], LV_OPA_COVER, 0);
 			lv_obj_set_style_text_color(kb->variant_label[i], lv_color_white(), 0);
 		} else {
@@ -1437,14 +1441,20 @@ static void kb_attach_preview(lv_obj_t *btn, key_ref_t *ref) {
 static void kb_refresh_theme(void) {
 	for (keyboard_t *kb = kb_list; kb; kb = kb->next) {
 		if (kb->accept_btn) {
-			lv_obj_set_style_bg_color(kb->accept_btn, theme()->accent, 0);
-		}
+			lv_obj_set_style_bg_color(kb->accept_btn, keyboard_accent(), 0);
+            lv_obj_t *ink=lv_obj_get_child(kb->accept_btn,0);
+            if(ink){lv_obj_set_style_text_color(ink,keyboard_accept_ink(),0);lv_obj_set_style_image_recolor(ink,keyboard_accept_ink(),0);}
+        }
 		if (kb->t9_accept_btn) {
-			lv_obj_set_style_bg_color(kb->t9_accept_btn, theme()->accent, 0);
-		}
+			lv_obj_set_style_bg_color(kb->t9_accept_btn, keyboard_accent(), 0);
+            lv_obj_t *ink=lv_obj_get_child(kb->t9_accept_btn,0);
+            if(ink){lv_obj_set_style_text_color(ink,keyboard_accept_ink(),0);lv_obj_set_style_image_recolor(ink,keyboard_accept_ink(),0);}
+        }
 		if (kb->kp_accept_btn) {
-			lv_obj_set_style_bg_color(kb->kp_accept_btn, theme()->accent, 0);
-		}
+			lv_obj_set_style_bg_color(kb->kp_accept_btn, keyboard_accent(), 0);
+            lv_obj_t *ink=lv_obj_get_child(kb->kp_accept_btn,0);
+            if(ink){lv_obj_set_style_text_color(ink,keyboard_accept_ink(),0);lv_obj_set_style_image_recolor(ink,keyboard_accept_ink(),0);}
+        }
 		if (kb->tray) {
 			lv_obj_set_style_bg_color(kb->tray, kb_tray_color(), 0);
 			lv_obj_set_style_bg_opa(kb->tray, LV_OPA_COVER, 0);
@@ -1560,14 +1570,14 @@ static void kb_build_japanese(keyboard_t *kb) {
 	if (on_accept) {
 		lv_obj_add_event_cb(kb->kp_accept_btn, on_accept, LV_EVENT_CLICKED, user);
 	}
-	lv_obj_set_style_bg_color(kb->kp_accept_btn, theme()->accent, 0);
+	lv_obj_set_style_bg_color(kb->kp_accept_btn, keyboard_accent(), 0);
 	if (accept_icon) {
 		lv_obj_t *glyph = kb_key_icon(kb->kp_accept_btn, accept_icon);
-		lv_obj_set_style_image_recolor(glyph, lv_color_white(), 0);
+		lv_obj_set_style_image_recolor(glyph, keyboard_accept_ink(), 0);
 	} else {
 		lv_obj_t *label = kb_key_label(kb->kp_accept_btn);
 		lv_label_set_text(label, tr(accept_text ? accept_text : "ok"));
-		lv_obj_set_style_text_color(label, lv_color_white(), 0);
+		lv_obj_set_style_text_color(label, keyboard_accept_ink(), 0);
 	}
 
 	// The kanji candidates: a strip standing on the tray, in the host page like
@@ -1620,6 +1630,22 @@ static void kb_japanese_ensure(keyboard_t *kb) {
 	kb_build_japanese(kb);
 }
 
+static void kb_free_async(void *data) { free(data); }
+
+static void kb_destroy_cb(lv_event_t *e) {
+	keyboard_t *kb = lv_event_get_user_data(e);
+	keyboard_t **link = &kb_list;
+	while (*link && *link != kb) link = &(*link)->next;
+	if (*link) *link = kb->next;
+	if (kb->t9_timer) lv_timer_delete(kb->t9_timer);
+	kb->t9_timer = NULL;
+	lv_obj_t *screen = lv_obj_get_screen(kb->tray);
+	if (screen) lv_obj_remove_event_cb_with_user_data(screen, kb_screen_left_cb, kb);
+	// Child keys may receive PRESS_LOST while LVGL finishes deleting the tray.
+	// Their event references must outlive that traversal.
+	lv_async_call(kb_free_async, kb);
+}
+
 keyboard_t *keyboard_create(lv_obj_t *parent, int width, int height, lv_obj_t *field,
 							const lv_image_dsc_t *accept_icon, const char *accept_text, lv_event_cb_t on_accept,
 							void *user) {
@@ -1638,6 +1664,7 @@ keyboard_t *keyboard_create(lv_obj_t *parent, int width, int height, lv_obj_t *f
 	kb->accept_user = user;
 
 	kb->tray = lv_obj_create(parent);
+	lv_obj_add_event_cb(kb->tray, kb_destroy_cb, LV_EVENT_DELETE, kb);
 	lv_obj_set_size(kb->tray, width, height);
 	lv_obj_align(kb->tray, LV_ALIGN_BOTTOM_MID, 0, 0);
 	lv_obj_set_style_bg_color(kb->tray, kb_tray_color(), 0);
@@ -1715,14 +1742,14 @@ keyboard_t *keyboard_create(lv_obj_t *parent, int width, int height, lv_obj_t *f
 	if (on_accept) {
 		lv_obj_add_event_cb(kb->accept_btn, on_accept, LV_EVENT_CLICKED, user);
 	}
-	lv_obj_set_style_bg_color(kb->accept_btn, theme()->accent, 0);
+	lv_obj_set_style_bg_color(kb->accept_btn, keyboard_accent(), 0);
 	if (accept_icon) {
 		lv_obj_t *glyph = kb_key_icon(kb->accept_btn, accept_icon);
-		lv_obj_set_style_image_recolor(glyph, lv_color_white(), 0);
+		lv_obj_set_style_image_recolor(glyph, keyboard_accept_ink(), 0);
 	} else {
 		lv_obj_t *label = kb_key_label(kb->accept_btn);
 		lv_label_set_text(label, tr(accept_text ? accept_text : "ok"));
-		lv_obj_set_style_text_color(label, lv_color_white(), 0);
+		lv_obj_set_style_text_color(label, keyboard_accept_ink(), 0);
 	}
 
 	// --- the T9 panel ---
@@ -1773,14 +1800,14 @@ keyboard_t *keyboard_create(lv_obj_t *parent, int width, int height, lv_obj_t *f
 	if (on_accept) {
 		lv_obj_add_event_cb(kb->t9_accept_btn, on_accept, LV_EVENT_CLICKED, user);
 	}
-	lv_obj_set_style_bg_color(kb->t9_accept_btn, theme()->accent, 0);
+	lv_obj_set_style_bg_color(kb->t9_accept_btn, keyboard_accent(), 0);
 	if (accept_icon) {
 		lv_obj_t *glyph = kb_key_icon(kb->t9_accept_btn, accept_icon);
-		lv_obj_set_style_image_recolor(glyph, lv_color_white(), 0);
+		lv_obj_set_style_image_recolor(glyph, keyboard_accept_ink(), 0);
 	} else {
 		lv_obj_t *label = kb_key_label(kb->t9_accept_btn);
 		lv_label_set_text(label, tr(accept_text ? accept_text : "ok"));
-		lv_obj_set_style_text_color(label, lv_color_white(), 0);
+		lv_obj_set_style_text_color(label, keyboard_accept_ink(), 0);
 	}
 
 	// The pause that commits a multitap character. Paused until something is
@@ -1916,6 +1943,16 @@ static void caret_park(lv_obj_t *field) { caret_set_blink(field, 0); }
 
 static void caret_unpark(lv_obj_t *field) { caret_set_blink(field, KB_CARET_BLINK_MS); }
 
+static void caret_deleted_cb(lv_event_t *e) {
+	lv_obj_t *field = lv_event_get_target(e);
+	for (int i = 0; i < caret_field_count; i++) {
+		if (caret_fields[i] == field) {
+			caret_fields[i] = caret_fields[--caret_field_count];
+			break;
+		}
+	}
+}
+
 void keyboard_style_caret(lv_obj_t *field) {
 	if (!field) {
 		return;
@@ -1934,6 +1971,7 @@ void keyboard_style_caret(lv_obj_t *field) {
 	}
 	if (!known && caret_field_count < KB_MAX_CARETS) {
 		caret_fields[caret_field_count++] = field;
+		lv_obj_add_event_cb(field, caret_deleted_cb, LV_EVENT_DELETE, NULL);
 		kb_register_refresh();
 	}
 
@@ -1941,7 +1979,7 @@ void keyboard_style_caret(lv_obj_t *field) {
 	for (unsigned i = 0; i < sizeof(parts) / sizeof(parts[0]); i++) {
 		lv_obj_set_style_bg_opa(field, LV_OPA_TRANSP, parts[i]);
 		lv_obj_set_style_border_side(field, LV_BORDER_SIDE_LEFT, parts[i]);
-		lv_obj_set_style_border_color(field, theme()->accent, parts[i]);
+		lv_obj_set_style_border_color(field, keyboard_accent(), parts[i]);
 		lv_obj_set_style_border_opa(field, LV_OPA_COVER, parts[i]);
 		lv_obj_set_style_border_width(field, KB_CARET_WIDTH, parts[i]);
 		// Styled again at every theme change: a parked caret stays parked.
@@ -2085,3 +2123,9 @@ void keyboard_refresh_type(void) {
 		keyboard_reset(kb);
 	}
 }
+
+#ifdef HOST_BUILD
+unsigned keyboard_probe_count(void) {
+    unsigned count=0;for(keyboard_t *kb=kb_list;kb;kb=kb->next)count++;return count;
+}
+#endif

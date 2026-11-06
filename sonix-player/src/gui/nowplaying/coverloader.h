@@ -28,7 +28,10 @@
 // for the cover at the head of one of them and 104..107 for the episodes being
 // listened to -- so the pools never trample each other's requests.
 /* Playlist browsing reuses medialist slots; no second artwork pool. */
-#define COVERLOADER_SLOTS 190
+#define COVERLOADER_SLOTS 220 // 182..195 are Home's (homeview.c HOME_SLOT)
+/* Recents and Listening stats rows (activity.c): a pool reassigned as rows scroll into view. */
+#define COVERLOADER_ACTIVITY_BASE 196
+#define COVERLOADER_ACTIVITY_COUNT 24
 #define COVERLOADER_QUEUE_BASE 162
 #define COVERLOADER_MEMBERS_BASE 174
 #define COVERLOADER_INSTANT_BASE 120
@@ -53,6 +56,9 @@
 // one (Music > Library). One picture, the size of most of the
 // screen's width.
 #define COVERLOADER_ALBUM_HEAD 90
+// The player's cover shown large over the dimmed page (player.c, cover focus).
+// 10 and 11 are free between the browser's rows and the index pages.
+#define COVERLOADER_COVER_FOCUS 11
 
 // Starts the worker. Safe to call more than once.
 void coverloader_start(void);

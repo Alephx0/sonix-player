@@ -933,7 +933,7 @@ void sonixlink_page_init(gui_config_t *cfg) {
 	lv_obj_set_width(status_label, lv_pct(100));
 	lv_label_set_long_mode(status_label, LV_LABEL_LONG_WRAP);
 	lv_obj_add_style(status_label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(status_label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(status_label, settingsrow_note_font(), 0);
 	lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
 	lv_obj_set_style_pad_hor(status_label, 4, 0);
 	lv_obj_set_style_margin_top(status_label, 20, 0);

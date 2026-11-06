@@ -186,7 +186,7 @@ static void tab_clicked_cb(lv_event_t *e) {
 
 static void set_tab_active(int index, bool active) {
 	lv_obj_set_style_bg_color(tabs[index], active ? theme()->accent : theme()->surface_pressed, 0);
-	lv_obj_set_style_image_recolor(tab_icons[index], active ? lv_color_white() : theme()->text_primary, 0);
+	lv_obj_set_style_image_recolor(tab_icons[index], active ? theme()->accent_ink : theme()->text_primary, 0);
 }
 
 static void redraw_tabbar(const airpods_state_t *state) {
@@ -472,7 +472,7 @@ void airpodspage_init(gui_config_t *cfg) {
 	waiting_label = lv_label_create(card);
 	lv_label_set_text(waiting_label, tr("airpods_battery_reading"));
 	lv_obj_add_style(waiting_label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(waiting_label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(waiting_label, settingsrow_note_font(), 0);
 	lv_obj_set_hidden(waiting_label, true);
 
 	build_tabbar(container);

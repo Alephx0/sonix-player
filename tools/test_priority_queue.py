@@ -15,6 +15,7 @@ with tempfile.TemporaryDirectory(prefix='sonix-priority-') as temp:
                     str(player / 'build_host/main.o'), str(work / 'app_main.o')], check=True)
     objects.append(str(work / 'app_main.o'))
     libs = subprocess.check_output(['pkg-config', '--libs', 'sdl2', 'freetype2', 'opusfile', 'wavpack'], text=True).split()
+    libs.insert(0, str(player / ".deps/webp/host/libwebpdecoder.a"))
     source = player / 'tests/priority_queue.c'
     subprocess.run(['gcc', '-DHOST_BUILD=1', '-I' + str(player), '-c', str(source), '-o', str(work / 'test.o')], check=True)
     subprocess.run(['g++', '-o', str(work / 'test'), str(work / 'test.o'), *objects,

@@ -16,6 +16,7 @@ typedef struct {
 	lv_color_t text_primary;
 	lv_color_t text_secondary;
 	lv_color_t accent;		   // the blue used for active things
+	lv_color_t accent_ink;	   // text and glyphs drawn on an accent fill
 	bool dark;
 } theme_palette_t;
 
@@ -89,5 +90,12 @@ void theme_set_dark(bool dark);
 // alone entirely. Off by default, persists in the config.
 bool theme_dynamic_tint(void);
 void theme_set_dynamic_tint(bool on);
+
+// The reference (Spotify-style) layout draws every page from one fixed dark
+// palette: #121212 page, #282828 raised surface, #b3b3b3 secondary text and
+// green #1ed760 with black ink. The dark/light, accent and tint preferences
+// stay stored for the legacy layouts and come back when one is chosen.
+bool theme_reference(void);
+void theme_set_reference(bool on);
 
 #endif // THEME_H

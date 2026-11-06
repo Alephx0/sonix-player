@@ -270,7 +270,7 @@ static lv_obj_t *make_heading(lv_obj_t *parent, const char *tag, int y) {
 	lv_obj_t *label = lv_label_create(parent);
 	lv_label_set_text(label, tr(tag));
 	lv_obj_add_style(label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(label, settingsrow_note_font(), 0);
 	lv_obj_set_pos(label, 4, y + 10);
 	return label;
 }

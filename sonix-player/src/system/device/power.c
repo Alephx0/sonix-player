@@ -3,14 +3,12 @@
  */
 
 #include "power.h"
-#include "src/system/discovery/download_queue.h"
 
 // LVGL 9.2 made lv_timer_t opaque. There is a lv_timer_set_period() but no
 // getter, and both places here have to read the period before changing it.
 #include "lvgl/src/misc/lv_timer_private.h"
 
 #include "src/system/audio/waveform.h"
-#include "src/system/device/ota.h"
 #include "src/system/device/system.h"
 
 #include <dirent.h>
@@ -23,16 +21,10 @@
 #include "src/system/library/audiobookdb.h"
 #include "src/system/device/clock.h"
 #include "src/system/playback/device_state.h"
-#include "src/system/remote/dlna.h"
 #include "src/system/remote/sonixlink.h"
-#include "src/system/streaming/qobuzcache.h"
-#include "src/system/streaming/podcastcache.h"
-#include "src/system/streaming/podcastdl.h"
-#include "src/system/streaming/tidalcache.h"
 #include "src/system/device/adb.h"
 #include "src/system/library/library.h"
 #include "src/system/remote/airplay.h"
-#include "src/system/streaming/radio.h"
 #include "src/system/net/wifi.h"
 #include "src/system/net/wifitransfer.h"
 #include "src/system/lastfm/lastfm.h"
@@ -598,51 +590,15 @@ static uint32_t g_radio_park_after_ms = RADIO_PARK_AFTER_MS_DEFAULT;
 static bool g_wifi_parked; // this module switched it off, so it switches it back on
 static bool g_bt_parked;
 
-// Whether what is playing right now comes off the network. The download flags
-// tested by wifi_in_use() do not cover it: they are raised while a fetch is
-// wanted and dropped as soon as the bytes are in, so an album whose next track
-// is already cached looks exactly like an idle device -- and parking the radio
-// there means the track after that never arrives. What decides is who owns the
-// file being played.
-//
-// radio_is_playing(), not radio_is_active(): a station merely loaded and
-// stopped uses nothing, and counting it as in-use would leave the radio on and
-// the automatic shutdown disabled for the rest of the day after one listen.
-static bool streaming_playback_active(void) {
-	if (radio_is_playing()) {
-		return true;
-	}
-	if (audio_get_status() == AUDIO_STATUS_STOPPED) {
-		return false;
-	}
 
-	char path[512];
-	audio_get_current_file(path, sizeof(path));
-	if (!path[0]) {
-		return false;
-	}
-	return qobuzcache_owns(path) || tidalcache_owns(path) || podcastcache_owns(path);
-}
 
-// Whether the network is the point rather than an idle drain: an AirPlay
-// receiver waiting to be found, a DLNA server, a browser halfway through an
-// upload, a station streaming, a Qobuz/Tidal/podcast fetch or a Last.fm request
-// in flight.
-//
-// The *_network_wanted() halves matter as much as the downloading ones: between
-// the end of one track and the first bytes of the next there is an HTTPS request
-// during which nothing plays and nothing downloads, and parking the radio in
-// that gap stops the next track from ever arriving.
 static bool wifi_in_use(void) {
 	// A scan or a connect in flight counts as use: parking the radio out from
 	// under wpa_supplicant mid-association leaves the driver to sort out a
 	// teardown it did not expect.
-	return wifi_busy() || wifi_scan_running() || streaming_playback_active() || airplay_get_enabled() ||
-		   dlna_get_enabled() || sonixlink_get_enabled() ||
-		   wifitransfer_get_enabled() || qobuzcache_downloading_id() > 0 ||
-		   qobuzcache_network_wanted() || tidalcache_downloading_id() > 0 || tidalcache_network_wanted() ||
-		   podcastcache_downloading_id() > 0 || podcastcache_network_wanted() || podcastdl_busy() ||
-		   lastfm_network_wanted() || ota_busy() || download_busy();
+	return wifi_busy() || wifi_scan_running() || airplay_get_enabled() ||
+		   sonixlink_get_enabled() ||
+		   wifitransfer_get_enabled() || lastfm_network_wanted();
 }
 
 // Pushes the next suspend attempt out by the anti-hammer delay. A radio that has
@@ -696,10 +652,8 @@ static bool player_is_busy(bool playing, uint32_t input_idle) {
 		   usb_storage_active() ||				   // the card exported over USB
 		   gearboy_running() ||					   // the emulator
 		   library_scan_running() ||			   // a scan, which is also writing to the card
-		   audiobookdb_scan_running() || wifitransfer_running() || dlna_running() || airplay_running() ||
-		   sonixlink_is_connected() || // a phone driving the player, not a switch left on
-		   qobuzcache_downloading_id() > 0 || tidalcache_downloading_id() > 0 || podcastcache_downloading_id() > 0 ||
-		   ota_busy(); // a firmware update being fetched
+		   audiobookdb_scan_running() || wifitransfer_running() || airplay_running() ||
+		   sonixlink_is_connected(); // a phone driving the player
 }
 
 static void park_bluetooth_now(void) {
@@ -1029,15 +983,9 @@ void power_shutdown(void) {
 
 	// The radio database is on the card: close it so its journal is tidied
 	// away before the power goes, rather than left for the next boot to find.
-	radio_store_close();
 
-	// Streamed and downloaded tracks are transient and must not survive a
-	// power cycle: without this the hidden folders carry a gigabyte of files
-	// the user never put there and will not listen to again.
-	qobuzcache_clear_on_exit();
-	tidalcache_clear_on_exit();
-	podcastcache_clear_on_exit();
-	dlna_clear_on_exit();
+
+
 
 	// Dark the panel first: `poweroff` goes through init's shutdown hooks,
 	// which it must -- the raw syscall with USB attached leaves the PMIC to
@@ -1582,6 +1530,19 @@ void power_screen_on(void) {
 		return;
 	}
 	g_screen_on = true;
+	// Each step of the wake, for the log: the whole of it holds the interface,
+	// and a tap made meanwhile is lost (2026-11-05).
+	uint32_t wake_t0 = monotonic_ms(), wake_mark = wake_t0;
+	char wake_steps[160] = "";
+	int wake_len = 0;
+#define WAKE_STEP(name)                                                                                                \
+	do {                                                                                                               \
+		uint32_t t = monotonic_ms();                                                                                   \
+		if (wake_len >= 0 && (size_t)wake_len < sizeof(wake_steps))                                                   \
+			wake_len += snprintf(wake_steps + wake_len, sizeof(wake_steps) - (size_t)wake_len, " %s %u", name,       \
+								 (unsigned)(t - wake_mark));                                                           \
+		wake_mark = t;                                                                                                 \
+	} while (0)
 
 	// And disarms the automatic-shutdown RTC alarm: there is a user. The
 	// shutdown timer goes back to zero here and stays there until the screen is
@@ -1600,6 +1561,7 @@ void power_screen_on(void) {
 	// stack take seconds, and they may as well be the seconds the panel spends
 	// waking up.
 	unpark_radios();
+	WAKE_STEP("radios");
 
 	// The level the screen comes back at is the one the user chose, however dim.
 	// No too-dim floor is applied here: that guess belongs at init, where the
@@ -1611,6 +1573,7 @@ void power_screen_on(void) {
 	// The clock first: the screen is about to show it, and a screen-off spell
 	// may well have included a suspend the system clock did not count.
 	clock_resync();
+	WAKE_STEP("clock");
 
 	// Before anything is drawn: whatever wants to own the first frame of the
 	// wake (the screensaver) is raised here, while the panel is still blank.
@@ -1619,6 +1582,7 @@ void power_screen_on(void) {
 	if (g_wake_hook) {
 		(void)g_wake_hook();
 	}
+	WAKE_STEP("hook");
 
 	// Nothing is drawn while the panel is dark (refr_request_cb), and the
 	// unblank below presents whatever the framebuffer holds: the page as it was
@@ -1627,8 +1591,10 @@ void power_screen_on(void) {
 	// panel is still off -- only the areas that changed, as the dark used to
 	// draw them as they came.
 	lv_refr_now(g_disp);
+	WAKE_STEP("draw");
 
 	screen_power(true);			 // panel, backlight and touch controller back up
+	WAKE_STEP("unblank");
 	usleep(SCREEN_ON_SETTLE_US); // let the panel + backlight finish re-initializing
 	set_indevs_enabled(true);
 	indev_timers_set_paused(false);
@@ -1651,6 +1617,7 @@ void power_screen_on(void) {
 	// clock says it is, and runs the completion of the ones already over, so
 	// the wake frame below shows a closed sheet closed rather than half way.
 	lv_anim_refr_now();
+	WAKE_STEP("timers");
 	// ... and force an immediate, full repaint of the framebuffer. The blank
 	// cleared the panel to black, so the whole UI must be redrawn; this is not
 	// gated on g_refr_timer, and lv_refr_now() draws even if the timer is paused.
@@ -1670,6 +1637,7 @@ void power_screen_on(void) {
 	lv_obj_invalidate(lv_layer_top());
 	lv_refr_now(g_disp);
 	display_wake_end(g_disp);
+	WAKE_STEP("repaint");
 
 	// The panel came back at its pre-blank (dim) level, and the backlight driver
 	// may not have restored the configured brightness on unblank. Forcing the
@@ -1681,7 +1649,10 @@ void power_screen_on(void) {
 
 	led_set_standby(false);
 
-	fprintf(stderr, "power: screen on (brightness=%ld)\n", g_cfg.brightness);
+	WAKE_STEP("fade");
+#undef WAKE_STEP
+	fprintf(stderr, "power: screen on (brightness=%ld) in %u ms:%s\n", g_cfg.brightness,
+			(unsigned)(monotonic_ms() - wake_t0), wake_steps);
 }
 
 void power_toggle_screen(void) {
@@ -1739,7 +1710,7 @@ static void power_timer_cb(lv_timer_t *timer) {
 	// with the phone paused is exactly the idle state the timer exists for.
 	// The metronome counts as music: a player clicking in a pocket with the
 	// screen dark must not go to sleep under it.
-	bool playing = (audio_get_status() == AUDIO_STATUS_PLAYING) || radio_is_playing() || btreceiver_is_streaming() ||
+	bool playing = (audio_get_status() == AUDIO_STATUS_PLAYING) || btreceiver_is_streaming() ||
 				   metronome_running();
 	if (playing) {
 		g_last_playing_ms = now;

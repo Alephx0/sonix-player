@@ -67,11 +67,6 @@ int decoder_channels(const decoder_t *dec);
 int decoder_source_bits(const decoder_t *dec); // 16 for mp3/ogg, the real depth for flac
 int decoder_sample_rate(const decoder_t *dec);
 
-// The file the frames are read from, and where the track lies inside it as
-// fractions of the file's frames: 0 and 1 for an ordinary file, the track's
-// stretch of the disc image for a CUE track. For work that reads a whole track
-// once and wants the kernel to forget it behind itself. False when there is no
-// plain file to name (a download still being written).
 bool decoder_source_span(const decoder_t *dec, char *file, size_t size, double *begin, double *end);
 
 // True for lossy formats (MP3, AAC, Vorbis, Opus).
@@ -81,17 +76,6 @@ bool decoder_source_span(const decoder_t *dec, char *file, size_t size, double *
 // The figure that characterises a lossy file is its bitrate.
 bool decoder_is_lossy(const decoder_t *dec);
 
-// The nominal bitrate in kbps: the one written in the file (the first frame's
-// header for an MP3, the esds for an AAC), not the average from bytes divided
-// by seconds.
-//
-// 0 when unknown: a lossless format, a variable-bitrate MP3 (where the first
-// header's number would be a lie), an AAC that declares nothing. Whoever
-// displays the number needs an answer for zero too.
-//
-// On Qobuz and Tidal tracks it is the only usable number: the cache file is
-// still growing while it plays, and bytes-over-seconds would give a bitrate
-// that visibly climbs.
 int decoder_bitrate_kbps(const decoder_t *dec);
 
 // "MP3", "AAC", "FLAC", "ALAC", "Opus", "Vorbis", "WavPack", "APE". Empty string when
@@ -138,37 +122,9 @@ bool decoder_dsd_to_pcm(decoder_t *dec);
 // Seek decoder to the specified frame index. Returns nonzero on success, 0 on failure.
 int decoder_seek_to_frame(decoder_t *dec, uint64_t frame_index);
 
-// The furthest frame that can be seeked to right now. For a normal file that is
-// the end; for one still downloading it is how far it has got, minus a margin
-// (the byte-to-time ratio of a FLAC is not exact).
-//
-// Callers must consult this first and clamp their request, so the position they
-// show and the position the music resumes at are the same.
 uint64_t decoder_seekable_limit(decoder_t *dec);
 
-// True if this file is still growing while being read.
-//
-// Playback needs to know. Ahead of the read head sits a reserve of bytes
-// downloaded but not yet played, and it can run out when the network slows
-// down. Playback must then stop and let the reserve refill rather than let the
-// sound card run dry.
-bool decoder_is_growing(const decoder_t *dec);
 
-// How many bytes have been downloaded and how many there will be in total, for
-// a growing file. False for a normal file or once the download has finished.
-//
-// Bytes, not frames: the frame estimate (decoder_seekable_limit) is good enough
-// for the progress bar but it is a proportion, and a proportion can claim there
-// is margin while the decoder is already at the edge. To know how much is
-// really left, look at the bytes.
-bool decoder_grow_span(decoder_t *dec, long *done, long *total);
-
-// True (and cleared by reading) if since the last call a read had to wait for
-// bytes not yet downloaded: the decoder reached the edge of the download. Reads
-// still complete after waiting, so it is invisible from outside; this is the
-// only way to know, and it is the signal on which playback pauses to rebuild
-// its reserve.
-bool decoder_take_starved(decoder_t *dec);
 
 void decoder_close(decoder_t *dec);
 

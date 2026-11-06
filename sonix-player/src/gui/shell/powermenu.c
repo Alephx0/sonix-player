@@ -17,11 +17,6 @@
 #include "src/system/core/lang.h"
 #include "src/system/device/power.h"
 #include "src/system/device/system.h"
-#include "src/system/streaming/qobuzcache.h"
-#include "src/system/streaming/podcastcache.h"
-#include "src/system/streaming/tidalcache.h"
-#include "src/system/remote/dlna.h"
-#include "src/system/streaming/radio.h"
 
 // ---------------------------------------------------------------------------
 // The power menu, iOS-style: two slide-to-confirm pills over a near-opaque
@@ -105,11 +100,8 @@ static void do_reboot(void) {
 	printf("power: rebooting\n");
 	device_state_remember_flush();
 	clock_shutdown();
-	radio_store_close();
-	qobuzcache_clear_on_exit();
-	tidalcache_clear_on_exit();
-	podcastcache_clear_on_exit();
-	dlna_clear_on_exit();
+
+
 	power_screen_off(); // same instant-feedback trick as the shutdown
 	storage_release_for_shutdown();
 	sync();
@@ -126,6 +118,19 @@ static void do_reboot(void) {
 	sleep(8);
 	reboot(RB_AUTOBOOT);
 	execl("/bin/sh", "sh", "-c", "reboot", (char *)NULL);
+}
+
+// A setting that only takes effect at startup (Display size). The R1 has no
+// way to start the player again but to restart the device: sonix_launch
+// reboots it whenever the player exits. The simulator just exits.
+void display_restart(void) {
+#ifdef HOST_BUILD
+	printf("power: restart asked for; the simulator exits\n");
+	device_state_remember_flush();
+	exit(0);
+#else
+	do_reboot();
+#endif
 }
 
 static void cancel_cb(lv_event_t *e) {

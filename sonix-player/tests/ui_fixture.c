@@ -3,8 +3,10 @@
 #include "src/system/library/collections.h"
 #include "src/system/library/library.h"
 #include "src/system/library/playlists.h"
+#include "src/system/library/audiobookdb.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 int main(int argc, char **argv) {
 	assert(argc == 2);
@@ -29,7 +31,26 @@ int main(int argc, char **argv) {
 			assert(playlists_add_track(names[n], path));
 		}
 	}
+	/* Optional long-library fixture: seed via the real APIs, rather than
+	 * adding M3Us after the one-time legacy import already completed. */
+	const char *many = getenv("SONIX_FIXTURE_PLAYLISTS");
+	int extra = many ? atoi(many) : 0;
+	assert(extra >= 0 && extra <= 500);
+	for (int i = 0; i < extra; i++) {
+		char name[64];
+		snprintf(name, sizeof(name), "Mix %03d", i);
+		assert(playlists_create(name));
+		assert(collections_put(COLLECTION_PLAYLIST, name, name, "You", true));
+		snprintf(path, sizeof(path), "%s/Music/track001.flac", argv[1]);
+		assert(playlists_add_track(name, path));
+	}
 	collections_catalog_sync();
 	library_close();
-	puts("UI fixture ready: 257 tracks, four playlists");
+    snprintf(db,sizeof(db),"%s/.local/audiobooks.db",argv[1]);assert(audiobookdb_open(db));
+    snprintf(path,sizeof(path),"%s/Audiobooks",argv[1]);assert(audiobookdb_scan_start(path));
+    for(int i=0;audiobookdb_scan_running() && i<12000;i++)usleep(10000);
+    assert(!audiobookdb_scan_running());assert(audiobookdb_count()==3);
+    snprintf(path,sizeof(path),"%s/Audiobooks/book0.flac",argv[1]);audiobookdb_save_position(path,path,45);audiobookdb_touch(path);
+    audiobookdb_close();
+	puts("UI fixture ready: 257 tracks, four playlists, three audiobooks");
 }

@@ -18,7 +18,6 @@
 #include "src/system/device/usb.h"
 #include "src/system/net/http.h"
 #include "src/system/net/wifi.h"
-#include "src/system/streaming/streamkeys.h"
 
 #define API_URL "https://ws.audioscrobbler.com/2.0/"
 #define API_TIMEOUT_SECS 15
@@ -1122,8 +1121,8 @@ void lastfm_init(void) {
 	if (started) {
 		return;
 	}
-	api_key = streamkeys_lastfm_key();
-	api_secret = streamkeys_lastfm_secret();
+	api_key = config_get("lastfm", "api_key", "");
+	api_secret = config_get("lastfm", "api_secret", "");
 	build_paths();
 
 	pthread_condattr_t attr;

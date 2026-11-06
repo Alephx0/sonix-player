@@ -29,7 +29,7 @@ void collection_header_build(lv_obj_t *parent,int width,const char *title,const 
     lv_obj_set_size(out->cover,UI_COLLECTION_COVER,UI_COLLECTION_COVER);
     lv_obj_add_style(out->cover,&theme_style_card,0);
     lv_obj_set_style_pad_all(out->cover,0,0);
-    lv_image_set_inner_align(out->cover,LV_IMAGE_ALIGN_CONTAIN);
+    lv_image_set_inner_align(out->cover,LV_IMAGE_ALIGN_CENTER);
     lv_image_set_src(out->cover,&icon_album_big);
     lv_obj_add_style(out->cover,&theme_style_icon,0);
     lv_obj_set_style_image_recolor_opa(out->cover,LV_OPA_COVER,0);

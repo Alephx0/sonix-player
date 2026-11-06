@@ -182,7 +182,7 @@ static lv_obj_t *add_note(lv_obj_t *parent, const char *tag) {
 	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(note, lv_pct(100));
 	lv_obj_add_style(note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
 	lv_label_set_text(note, tr(tag));
 	return note;
 }

@@ -6,11 +6,28 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-static char root[512];
+#include <pthread.h>
+static char card_root_path[512];
+static pthread_mutex_t root_lock = PTHREAD_MUTEX_INITIALIZER;
 static unsigned revision;
-void collections_init(const char *card_root) { snprintf(root, sizeof(root), "%s", card_root ? card_root : ""); }
-unsigned collections_revision(void) { return revision; }
+static void sortkey_sql(sqlite3_context *ctx, int argc, sqlite3_value **v) {
+    (void)argc;
+    char key[LIBRARY_SORT_KEY_MAX];
+    library_sort_key((const char *)sqlite3_value_text(v[0]), key, sizeof(key));
+    sqlite3_result_text(ctx, key, -1, SQLITE_TRANSIENT);
+}
+void collections_init(const char *card_root) {
+    pthread_mutex_lock(&root_lock);
+    snprintf(card_root_path,sizeof(card_root_path),"%s",card_root?card_root:"");
+    pthread_mutex_unlock(&root_lock);
+}
+unsigned collections_revision(void) { return __atomic_load_n(&revision,__ATOMIC_ACQUIRE); }
 static sqlite3 *open_db(void) {
+	char root[512];
+	pthread_mutex_lock(&root_lock);
+	/* Snapshot the mount; workers never observe a partially updated path. */
+	snprintf(root,sizeof(root),"%s",card_root_path);
+	pthread_mutex_unlock(&root_lock);
 	if (root[0] != '/' || access(root, W_OK))
 		return NULL;
 	char path[600];
@@ -30,6 +47,10 @@ static sqlite3 *open_db(void) {
 		return NULL;
 	}
 	sqlite3_busy_timeout(db, 250);
+	/* Normalize once per row, not at every comparison. This shares the
+	 * library's Unicode case/accent folding and A-Z index convention. */
+	sqlite3_create_function(db, "collection_sortkey", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC,
+	                        NULL, sortkey_sql, NULL, NULL);
 	if (sqlite3_exec(db, "PRAGMA cache_size=-128; CREATE TABLE IF NOT EXISTS collection(kind INTEGER NOT NULL,key TEXT NOT NULL,title TEXT NOT NULL,creator TEXT NOT NULL,saved INTEGER NOT NULL,added INTEGER NOT NULL,recent INTEGER NOT NULL DEFAULT 0,pin INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(kind,key));", NULL, NULL, NULL) != SQLITE_OK) {
 		sqlite3_close(db);
 		return NULL;
@@ -74,7 +95,7 @@ bool collections_put(collection_kind_t kind, const char *key, const char *title,
 	sqlite3_finalize(s);
 	sqlite3_close(db);
 	if (ok)
-		revision++;
+		__atomic_add_fetch(&revision,1,__ATOMIC_RELEASE);
 	return ok;
 }
 static void read_row(sqlite3_stmt *s, collection_item_t *out) {
@@ -124,7 +145,7 @@ bool collections_touch(collection_kind_t kind, const char *key) {
 	sqlite3_finalize(s);
 	sqlite3_close(db);
 	if (ok)
-		revision++;
+		__atomic_add_fetch(&revision,1,__ATOMIC_RELEASE);
 	return ok;
 }
 bool collections_pin(collection_kind_t kind, const char *key, bool pin) {
@@ -143,7 +164,7 @@ bool collections_pin(collection_kind_t kind, const char *key, bool pin) {
 	sqlite3_finalize(s);
 	sqlite3_close(db);
 	if (ok)
-		revision++;
+		__atomic_add_fetch(&revision,1,__ATOMIC_RELEASE);
 	return ok;
 }
 bool collections_forget(collection_kind_t kind, const char *key) {
@@ -161,7 +182,7 @@ bool collections_forget(collection_kind_t kind, const char *key) {
 	sqlite3_finalize(s);
 	sqlite3_close(db);
 	if (ok)
-		revision++;
+		__atomic_add_fetch(&revision,1,__ATOMIC_RELEASE);
 	return ok;
 }
 bool collections_rename(collection_kind_t kind, const char *key, const char *new_key, const char *title) {
@@ -185,7 +206,7 @@ bool collections_rename(collection_kind_t kind, const char *key, const char *new
 	sqlite3_finalize(s);
 	sqlite3_close(db);
 	if (ok)
-		revision++;
+		__atomic_add_fetch(&revision,1,__ATOMIC_RELEASE);
 	return ok;
 }
 int collections_list(int filter, collection_sort_t sort, int offset, collection_item_t *out, int capacity) {
@@ -198,7 +219,7 @@ int collections_list(int filter, collection_sort_t sort, int offset, collection_
 		return 0;
 	sqlite3_stmt *s = NULL;
 	char sql[500];
-	const char *order = sort == COLLECTION_ADDED ? "added DESC" : sort == COLLECTION_NAME ? "title COLLATE NOCASE" : sort == COLLECTION_CREATOR ? "creator COLLATE NOCASE,title COLLATE NOCASE" : "recent DESC,added DESC";
+	const char *order = sort == COLLECTION_ADDED ? "added DESC" : sort == COLLECTION_NAME ? "collection_sortkey(title)" : sort == COLLECTION_CREATOR ? "collection_sortkey(creator),collection_sortkey(title)" : "recent DESC,added DESC";
 	snprintf(sql, sizeof(sql), "SELECT kind,key,title,creator,saved,added,recent,pin FROM collection WHERE saved=1 AND (?1=0 OR kind=?1) ORDER BY CASE WHEN pin>0 THEN 0 ELSE 1 END,pin,%s,kind,key LIMIT ?2 OFFSET ?3", order);
 	int count = 0;
 	if (sqlite3_prepare_v2(db, sql, -1, &s, NULL) == SQLITE_OK) {
@@ -225,7 +246,11 @@ bool collections_catalog_sync(void) {
 	if (!db)
 		return false;
 	char path[600];
-	snprintf(path, sizeof(path), "%s/.local/library.db", root);
+	/* The library beside this connection, even if the selected mount changes. */
+	snprintf(path,sizeof(path),"%s",sqlite3_db_filename(db,"main"));
+	char *leaf=strrchr(path,'/');
+	if(!leaf) {sqlite3_close(db);return false;}
+	snprintf(leaf+1,sizeof(path)-(size_t)(leaf+1-path),"library.db");
 	sqlite3_stmt *s = NULL;
 	bool ok = false;
 	if (sqlite3_prepare_v2(db, "ATTACH DATABASE ?1 AS music", -1, &s, NULL) == SQLITE_OK) {
@@ -244,9 +269,14 @@ bool collections_catalog_sync(void) {
 		sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
 	sqlite3_close(db);
 	if (ok)
-		revision++;
+		__atomic_add_fetch(&revision,1,__ATOMIC_RELEASE);
 	return ok;
 }
+/* What Your Library lists for a filter, a search and a folder: shared by the
+ * page read and the count. */
+/* An empty search matches everything without normalizing every title/creator.
+ * The old expression did this work again for each page and scrollbar count. */
+#define BROWSE_WHERE " FROM collection c LEFT JOIN catalog a ON a.kind=c.kind AND a.key=c.key WHERE c.kind<>4 AND (c.saved=1 OR a.key IS NOT NULL) AND (?1=0 OR c.kind=?1 OR (?1=1 AND c.kind=5)) AND (?2='' OR instr(fold(c.title||' '||c.creator),?2)>0) AND ((?3<>'' AND c.kind=1 AND EXISTS(SELECT 1 FROM folder_link f WHERE f.playlist=c.key AND f.folder=?3)) OR (?3='' AND (?2<>'' OR c.kind<>1 OR c.pin>0 OR NOT EXISTS(SELECT 1 FROM folder_link f WHERE f.playlist=c.key))))"
 int collections_browse(int filter, collection_sort_t sort, const char *query, const char *folder, int offset, collection_item_t *out, int capacity) {
 	if (!out || capacity < 1 || offset < 0)
 		return 0;
@@ -258,8 +288,8 @@ int collections_browse(int filter, collection_sort_t sort, const char *query, co
 	sqlite3_create_function(db, "fold", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, NULL, fold_sql, NULL, NULL);
 	char sql[1600], folded[512];
 	library_search_fold(query ? query : "", folded, sizeof(folded));
-	const char *order = sort == COLLECTION_CUSTOM ? "COALESCE((SELECT rank FROM custom_order o WHERE o.kind=c.kind AND o.key=c.key),0),c.title COLLATE NOCASE" : sort == COLLECTION_ADDED ? "COALESCE(a.added,c.added) DESC" : sort == COLLECTION_NAME ? "c.title COLLATE NOCASE" : sort == COLLECTION_CREATOR ? "c.creator COLLATE NOCASE,c.title COLLATE NOCASE" : "c.recent DESC,c.added DESC";
-	snprintf(sql, sizeof(sql), "SELECT c.kind,c.key,c.title,c.creator,c.saved,COALESCE(a.added,c.added),c.recent,c.pin,COALESCE(a.year,0) FROM collection c LEFT JOIN catalog a ON a.kind=c.kind AND a.key=c.key WHERE c.kind<>4 AND (c.saved=1 OR a.key IS NOT NULL) AND (?1=0 OR c.kind=?1 OR (?1=1 AND c.kind=5)) AND instr(fold(c.title||' '||c.creator),?2)>0 AND ((?3<>'' AND c.kind=1 AND EXISTS(SELECT 1 FROM folder_link f WHERE f.playlist=c.key AND f.folder=?3)) OR (?3='' AND (?2<>'' OR c.kind<>1 OR c.pin>0 OR NOT EXISTS(SELECT 1 FROM folder_link f WHERE f.playlist=c.key)))) ORDER BY CASE WHEN c.pin>0 THEN 0 ELSE 1 END,c.pin,%s,c.kind,c.key LIMIT ?4 OFFSET ?5", order);
+	const char *order = sort == COLLECTION_CUSTOM ? "COALESCE((SELECT rank FROM custom_order o WHERE o.kind=c.kind AND o.key=c.key),0),collection_sortkey(c.title)" : sort == COLLECTION_ADDED ? "COALESCE(a.added,c.added) DESC" : sort == COLLECTION_NAME ? "collection_sortkey(c.title)" : sort == COLLECTION_CREATOR ? "collection_sortkey(c.creator),collection_sortkey(c.title)" : "c.recent DESC,c.added DESC";
+	snprintf(sql, sizeof(sql), "SELECT c.kind,c.key,c.title,c.creator,c.saved,COALESCE(a.added,c.added),c.recent,c.pin,COALESCE(a.year,0)" BROWSE_WHERE " ORDER BY CASE WHEN c.pin>0 THEN 0 ELSE 1 END,c.pin,%s,c.kind,c.key LIMIT ?4 OFFSET ?5", order);
 	sqlite3_stmt *s = NULL;
 	int n = 0;
 	if (sqlite3_prepare_v2(db, sql, -1, &s, NULL) == SQLITE_OK) {
@@ -270,6 +300,26 @@ int collections_browse(int filter, collection_sort_t sort, const char *query, co
 		sqlite3_bind_int(s, 5, offset);
 		while (n < capacity && sqlite3_step(s) == SQLITE_ROW)
 			read_row(s, &out[n++]);
+	}
+	sqlite3_finalize(s);
+	sqlite3_close(db);
+	return n;
+}
+int collections_browse_count(int filter, const char *query, const char *folder) {
+	sqlite3 *db = open_db();
+	if (!db)
+		return 0;
+	sqlite3_create_function(db, "fold", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, NULL, fold_sql, NULL, NULL);
+	char folded[512];
+	library_search_fold(query ? query : "", folded, sizeof(folded));
+	sqlite3_stmt *s = NULL;
+	int n = 0;
+	if (sqlite3_prepare_v2(db, "SELECT COUNT(*)" BROWSE_WHERE, -1, &s, NULL) == SQLITE_OK) {
+		sqlite3_bind_int(s, 1, filter);
+		sqlite3_bind_text(s, 2, folded, -1, SQLITE_TRANSIENT);
+		sqlite3_bind_text(s, 3, folder ? folder : "", -1, SQLITE_TRANSIENT);
+		if (sqlite3_step(s) == SQLITE_ROW)
+			n = sqlite3_column_int(s, 0);
 	}
 	sqlite3_finalize(s);
 	sqlite3_close(db);
@@ -302,7 +352,7 @@ bool collections_move_playlist(const char *playlist, const char *folder) {
 	sqlite3_finalize(s);
 	sqlite3_close(db);
 	if (ok)
-		revision++;
+		__atomic_add_fetch(&revision,1,__ATOMIC_RELEASE);
 	return ok;
 }
 int collections_folder_count(const char *folder) {
@@ -336,6 +386,6 @@ bool collections_custom_first(collection_kind_t kind, const char *key) {
 	sqlite3_finalize(s);
 	sqlite3_close(db);
 	if (ok)
-		revision++;
+		__atomic_add_fetch(&revision,1,__ATOMIC_RELEASE);
 	return ok;
 }

@@ -15,9 +15,8 @@
 #include "src/gui/library/medialist.h"
 #include "src/gui/nowplaying/player.h"
 #include "src/gui/library/playlistpage.h"
-#include "src/gui/streaming/qobuzpage.h"
-#include "src/gui/streaming/tidalpage.h"
 #include "src/gui/shell/popover.h"
+#include "src/gui/shell/rowswipe.h"
 #include "src/gui/settings/musicsettings.h"
 #include "src/gui/shell/settingsrow.h"
 #include "src/gui/shell/switcher.h"
@@ -30,13 +29,10 @@
 #include "src/system/library/metadata.h"
 #include "src/system/playback/device_state.h"
 #include "src/system/core/lang.h"
-#include "src/gui/streaming/podcastcard.h"
-#include "src/gui/streaming/podcastpage.h"
-#include "src/system/streaming/podcastcache.h"
-#include "src/system/streaming/qobuzcache.h"
-#include "src/system/streaming/tidalcache.h"
 #include "src/system/library/library.h"
 #include "src/system/playback/playlist.h"
+#include "src/system/playback/sleeptimer.h"
+#include "src/gui/shell/reference_icons.h"
 #include "src/system/core/utils.h"
 #include "src/system/device/system.h"
 #include "lvgl/src/core/lv_obj_scroll_private.h"
@@ -87,6 +83,7 @@ typedef struct {
 	lv_obj_t *icon;
 	lv_obj_t *label;
 	lv_obj_t *check; // the tick on a chosen row while choosing
+	lv_obj_t *radio; // the reference layout's round selector, while editing
 	lv_obj_t *priority_mark;
 	lv_obj_t *grip;	 // the handle on a row that can be moved, while reordering
 	int vindex;		 // the row of the page it shows (see queue_vrow_y), or -1
@@ -145,6 +142,8 @@ static lv_obj_t *queue_reorder_btn;
 static lv_obj_t *queue_remove_btn;
 static lv_obj_t *queue_up_btn;
 static lv_obj_t *queue_close_btn;
+// The reference layout's bottom tiles; see queue_bar_build().
+static lv_obj_t *queue_tiles;
 
 // The row being carried, by its grip or, out of the history, by the row itself.
 // The row stays where it is, dimmed, and a copy of it follows the finger; the
@@ -256,6 +255,16 @@ static void queue_row_paint_check(queue_row_t *row) {
 	if (on) {
 		lv_obj_set_style_image_recolor(row->check, theme()->accent, 0);
 	}
+	if (theme_reference() && row->radio) {
+		/* Spotify's Edit Queue: an empty ring on every row that can be chosen,
+		 * filled green with a tick once chosen. */
+		bool choosable = queue_mode == QUEUE_SELECT && row->index > queue_current && row->index < queue_total;
+		lv_obj_set_hidden(row->radio, !choosable);
+		lv_obj_set_style_bg_opa(row->radio, on ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+		lv_obj_set_style_border_color(row->radio, on ? lv_color_hex(0x1ed760) : lv_color_hex(0xb3b3b3), 0);
+		lv_obj_set_hidden(lv_obj_get_child(row->radio, 0), !on);
+		on = false;
+	}
 	lv_obj_set_hidden(row->check, !on);
 }
 
@@ -283,10 +292,16 @@ static void queue_paint_rows(void) {
 // reordering, lit in the accent; otherwise the local colour is taken off again,
 // so the icon style, and with it the palette, reaches the glyph. An empty queue
 // has nothing to choose or move.
+static void queue_reference_show(bool idle, bool select);
 static void queue_mode_show(void) {
 	bool idle = queue_mode == QUEUE_IDLE && queue_total > 0;
 	bool select = queue_mode == QUEUE_SELECT;
 	bool reorder = queue_mode == QUEUE_REORDER;
+	if (theme_reference() && queue_tiles) {
+		queue_reference_show(queue_mode == QUEUE_IDLE, select);
+		queue_paint_rows();
+		return;
+	}
 	lv_obj_set_hidden(queue_select_btn, !idle);
 	lv_obj_set_hidden(queue_reorder_btn, !(idle || reorder));
 	lv_obj_set_hidden(queue_remove_btn, !select);
@@ -455,7 +470,12 @@ static void queue_row_bind(queue_row_t *row, int vindex) {
 		lv_obj_set_y(row->button, queue_vrow_y(vindex));
 		lv_label_set_text(row->label, title);
     if(queue_sheet) coverloader_request(COVERLOADER_QUEUE_BASE+(int)(row-queue_rows),path,QUEUE_THUMB_SIZE);
-	lv_obj_set_hidden(row->priority_mark, row->index < 0 || !playlist_is_priority(row->index));
+	{
+		/* A Smart Shuffle pick wears the star; a song queued by hand, the list. */
+		bool smart = row->index >= 0 && device_state_is_smart_pick(path);
+		lv_image_set_src(row->priority_mark, smart ? &icon_star : &icon_list_music);
+		lv_obj_set_hidden(row->priority_mark, row->index < 0 || !(smart || playlist_is_priority(row->index)));
+	}
 		queue_row_paint_mark(row);
 		queue_row_paint_tools(row);
 		return;
@@ -471,10 +491,6 @@ static void queue_row_bind(queue_row_t *row, int vindex) {
 	}
 
 	if (!library_track_title(path, title, sizeof(title))) {
-		// Not in the library: it may be a Qobuz track, which is kept out of the
-		// library on purpose. The title is still there, in the sidecar file next
-		// to the track. Without this the queue showed a column of numbers, which
-		// were the file names.
 		song_metadata_t meta;
 		metadata_read(path, &meta);
 		if (meta.title[0]) {
@@ -488,7 +504,12 @@ static void queue_row_bind(queue_row_t *row, int vindex) {
 	lv_obj_set_y(row->button, queue_row_y(index));
 	lv_label_set_text(row->label, title);
     if(queue_sheet) coverloader_request(COVERLOADER_QUEUE_BASE+(int)(row-queue_rows),path,QUEUE_THUMB_SIZE);
-	lv_obj_set_hidden(row->priority_mark, row->index < 0 || !playlist_is_priority(row->index));
+	{
+		/* A Smart Shuffle pick wears the star; a song queued by hand, the list. */
+		bool smart = row->index >= 0 && device_state_is_smart_pick(path);
+		lv_image_set_src(row->priority_mark, smart ? &icon_star : &icon_list_music);
+		lv_obj_set_hidden(row->priority_mark, row->index < 0 || !(smart || playlist_is_priority(row->index)));
+	}
 
 	queue_row_paint_mark(row);
 	queue_row_paint_tools(row);
@@ -652,6 +673,8 @@ static void queue_layout(void) {
     if (playlist_album()[0]) {
         char title[256]; library_album_title(playlist_album(),title,sizeof(title));
         snprintf(context,sizeof(context),"Next from %.230s",title);
+    } else if (playlist_context_name()[0]) {
+        snprintf(context,sizeof(context),"Next from %.230s",playlist_context_name());
     }
     lv_label_set_text(queue_context_header,context);
 	lv_obj_align(queue_empty, LV_ALIGN_TOP_MID, 0, queue_now_top() + 72);
@@ -1113,17 +1136,19 @@ static bool queue_history_path(long long id, char *path, size_t size) {
 
 static lv_point_t queue_swipe_start;
 static int queue_swipe_index = -1;
+/* Swipe left over a red strip removes an upcoming row (the shared row swipe);
+ * the playing track and the history are not offered it. */
+static const rowswipe_spec_t queue_swipe_spec = {NULL, 0, &icon_trash, ROWSWIPE_RED};
 static void queue_swipe_cb(lv_event_t *e) {
-    lv_indev_t *indev=lv_indev_active();
-    if(!indev || queue_drag.active || queue_mode!=QUEUE_IDLE || queue_swipe_index<=queue_current) return;
-    lv_point_t now; lv_indev_get_point(indev,&now);
-    if(now.x-queue_swipe_start.x < -75 && LV_ABS(now.y-queue_swipe_start.y)<35) {
-        queue_drop_guard=true;
-        lv_event_stop_bubbling(e);
-        if(lv_event_get_code(e)==LV_EVENT_RELEASED) {
-            int index=queue_swipe_index; queue_swipe_index=-1;
-            if(playlist_remove(&index,1)) { device_state_queue_changed(); queue_rebuild(); }
-        }
+    if(queue_drag.active || queue_mode!=QUEUE_IDLE || queue_swipe_index<=queue_current) return;
+    int committed=0;
+    if(!rowswipe_event(e,lv_event_get_current_target(e),&queue_swipe_spec,&committed)) return;
+    queue_drop_guard=true;
+    lv_event_stop_bubbling(e);
+    if(committed<0) {
+        int index=queue_swipe_index; queue_swipe_index=-1;
+        rowswipe_settle(); // the pooled row is rebound by the rebuild
+        if(playlist_remove(&index,1)) { device_state_queue_changed(); queue_rebuild(); toast_glyph(&icon_trash,"Removed from queue"); }
     }
 }
 static void queue_row_pressed_cb(lv_event_t *e) {
@@ -1131,11 +1156,14 @@ static void queue_row_pressed_cb(lv_event_t *e) {
     queue_swipe_index=row?row->index:-1;
     if(lv_indev_active()) lv_indev_get_point(lv_indev_active(),&queue_swipe_start);
 	queue_drop_guard = false;
+    if(queue_swipe_index>queue_current && !queue_drag.active && queue_mode==QUEUE_IDLE)
+        rowswipe_event(e,lv_event_get_current_target(e),&queue_swipe_spec,NULL);
 }
 
 static void queue_row_long_cb(lv_event_t *e) {
-	if (player_sheet_drag_active() || switcher_back_drag_active() || queue_drag.active) {
-		return;
+	if (player_sheet_drag_active() || switcher_back_drag_active() || queue_drag.active ||
+		rowswipe_was_swiped(lv_event_get_current_target(e))) {
+		return; // a slow sideways swipe outlasts the long-press delay
 	}
 	lv_obj_t *button = lv_event_get_current_target(e);
 	queue_row_t *row = queue_row_of(button);
@@ -1314,11 +1342,229 @@ static void queue_reshuffle_cb(lv_event_t *e) {
 static void queue_control(lv_obj_t *parent,const char *text,int x,int width,lv_event_cb_t cb) {
     lv_obj_t *b=lv_button_create(parent); lv_obj_set_pos(b,x,0);lv_obj_set_size(b,width,44);
     lv_obj_add_style(b,&theme_style_card,0); lv_obj_add_event_cb(b,cb,LV_EVENT_CLICKED,NULL);
+    /* Reference layout: the shell's raised pills, flat, no shadow. */
+    if(theme_reference()) {lv_obj_set_style_radius(b,LV_RADIUS_CIRCLE,0);lv_obj_set_style_shadow_width(b,0,0);}
     lv_obj_t *label=lv_label_create(b);lv_label_set_text(label,text);lv_obj_set_style_text_font(label,&font_ui_18,0);lv_obj_center(label);
 }
+/* ---- Spotify's queue sheet (iOS, captured 2026-11-04): "Queue" over
+ * "Playing <context>", Clear and Edit pills in the corner, the rows with
+ * their handles, and Shuffle, Repeat and Timer as tiles along the bottom.
+ * Edit opens "Edit Queue": a round selector on each row and Move up and
+ * Remove along the bottom instead of the tiles. ---- */
+#define QUEUE_BAR_H 64
+#define QUEUE_BAR_GAP 8
+static lv_obj_t *queue_subtitle, *queue_subtitle_name;
+static lv_obj_t *queue_edit_pill, *queue_clear_pill;
+static lv_obj_t *queue_tiles, *queue_tile[3], *queue_tile_icon[3], *queue_tile_label[3];
+static lv_obj_t *queue_edit_bar, *queue_up_pill, *queue_remove_pill;
+static int queue_bar_page_y; // the bar's y on the page, while it is in the sheet
+
+static lv_obj_t *queue_pill(lv_obj_t *parent, const char *text, lv_event_cb_t cb) {
+	lv_obj_t *b = lv_button_create(parent);
+	lv_obj_set_height(b, 44);
+	lv_obj_set_style_radius(b, LV_RADIUS_CIRCLE, 0);
+	lv_obj_set_style_bg_color(b, lv_color_hex(0x2a2a2a), 0);
+	lv_obj_set_style_bg_color(b, lv_color_hex(0x3a3a3a), LV_STATE_PRESSED);
+	lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+	lv_obj_set_style_border_width(b, 0, 0);
+	lv_obj_set_style_shadow_width(b, 0, 0);
+	lv_obj_set_style_pad_hor(b, 20, 0);
+	lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, NULL);
+	lv_obj_t *l = lv_label_create(b);
+	lv_label_set_text(l, text);
+	lv_obj_set_style_text_font(l, &font_ui_18, 0);
+	lv_obj_set_style_text_color(l, lv_color_white(), 0);
+	lv_obj_center(l);
+	lv_obj_set_width(b, LV_SIZE_CONTENT);
+	return b;
+}
+
+static void queue_tiles_paint(void) {
+	if (!queue_tiles) {
+		return;
+	}
+	int repeat = playlist_repeat_mode();
+	bool on[3] = {playlist_shuffle_enabled(), repeat != 0,
+				  sleeptimer_enabled(SLEEPTIMER_MUSIC) && sleeptimer_minutes(SLEEPTIMER_MUSIC) > 0};
+	lv_image_set_src(queue_tile_icon[1], repeat == 2 ? &icon_repeat_one : &icon_repeat_all);
+	lv_label_set_text(queue_tile_label[0], device_state_smart_shuffle() ? "Smart Shuffle" : "Shuffle");
+	for (int k = 0; k < 3; k++) {
+		lv_color_t c = on[k] ? lv_color_hex(0x1ed760) : lv_color_white();
+		lv_obj_set_style_image_recolor(queue_tile_icon[k], c, 0);
+		lv_obj_set_style_text_color(queue_tile_label[k], c, 0);
+	}
+}
+
+static void queue_shuffle_tile_cb(lv_event_t *e) {
+	(void)e;
+	/* Off, Shuffle, Smart Shuffle, as Spotify's button steps. */
+	if (!playlist_shuffle_enabled()) playlist_set_shuffle(true);
+	else if (!device_state_smart_shuffle()) device_state_set_smart_shuffle(true);
+	else { device_state_set_smart_shuffle(false); playlist_set_shuffle(false); }
+	device_state_queue_changed();
+	player_refresh_modes();
+	queue_rebuild();
+}
+
+static void queue_repeat_tile_cb(lv_event_t *e) {
+	(void)e;
+	playlist_set_repeat((playlist_repeat_mode() + 1) % 3);
+	device_state_queue_changed();
+	player_refresh_modes();
+	queue_tiles_paint();
+}
+
+static void queue_timer_pick(void *user) {
+	int minutes = (int)(intptr_t)user;
+	sleeptimer_set_minutes(SLEEPTIMER_MUSIC, minutes > 0 ? minutes : 0);
+	sleeptimer_set_enabled(SLEEPTIMER_MUSIC, minutes > 0);
+	if (minutes > 0) {
+		toast_plain("Sleep timer set");
+	} else {
+		toast_plain("Sleep timer off");
+	}
+	queue_tiles_paint();
+}
+
+/* Spotify's sleep timer: fixed stretches, and a way to turn it off. Shared
+ * by the queue's Timer tile and the Now Playing menu. */
+void trackmenu_music_sleep_timer(lv_obj_t *anchor) {
+	static const int MINUTES[] = {5, 10, 15, 30, 45, 60, 0};
+	static const char *const LABELS[] = {"5 minutes", "10 minutes", "15 minutes", "30 minutes",
+										 "45 minutes", "1 hour", "Turn off timer"};
+	enum { COUNT = sizeof(MINUTES) / sizeof(MINUTES[0]) };
+	int current = sleeptimer_enabled(SLEEPTIMER_MUSIC) ? sleeptimer_minutes(SLEEPTIMER_MUSIC) : 0;
+	popover_item_t items[COUNT] = {0};
+	int n = 0;
+	for (int i = 0; i < COUNT; i++) {
+		if (MINUTES[i] == 0 && current <= 0) {
+			continue; /* nothing to turn off */
+		}
+		items[n].label = LABELS[i];
+		items[n].action = queue_timer_pick;
+		items[n].user = (void *)(intptr_t)MINUTES[i];
+		items[n].checked = MINUTES[i] > 0 && MINUTES[i] == current;
+		n++;
+	}
+	popover_show_titled(anchor, "Sleep timer", items, n);
+}
+
+static void queue_timer_tile_cb(lv_event_t *e) { trackmenu_music_sleep_timer(lv_event_get_current_target(e)); }
+
+static void queue_edit_cb(lv_event_t *e) {
+	(void)e;
+	if (queue_mode == QUEUE_IDLE) {
+		queue_selection_start();
+	}
+}
+
+static void queue_bar_build(gui_config_t *cfg) {
+	int w = cfg->screen_width - 2 * cfg->padding;
+	int y = cfg->screen_height - QUEUE_BAR_H - QUEUE_BAR_GAP;
+	queue_tiles = lv_obj_create(queue_screen);
+	lv_obj_remove_style_all(queue_tiles);
+	lv_obj_set_size(queue_tiles, w, QUEUE_BAR_H);
+	lv_obj_set_pos(queue_tiles, cfg->padding, y);
+	lv_obj_set_flex_flow(queue_tiles, LV_FLEX_FLOW_ROW);
+	lv_obj_set_style_pad_column(queue_tiles, 8, 0);
+	lv_obj_set_scrollable(queue_tiles, false);
+	lv_obj_set_clickable(queue_tiles, false);
+	static const char *const NAMES[3] = {"Shuffle", "Repeat", "Timer"};
+	const lv_image_dsc_t *icons[3] = {&icon_shuffle, &icon_repeat_all, &sonix_icon_moon};
+	lv_event_cb_t cbs[3] = {queue_shuffle_tile_cb, queue_repeat_tile_cb, queue_timer_tile_cb};
+	for (int k = 0; k < 3; k++) {
+		lv_obj_t *t = lv_button_create(queue_tiles);
+		lv_obj_set_height(t, QUEUE_BAR_H);
+		lv_obj_set_flex_grow(t, 1);
+		lv_obj_set_style_radius(t, 8, 0);
+		lv_obj_set_style_bg_color(t, lv_color_hex(0x2a2a2a), 0);
+		lv_obj_set_style_bg_color(t, lv_color_hex(0x3a3a3a), LV_STATE_PRESSED);
+		lv_obj_set_style_bg_opa(t, LV_OPA_COVER, 0);
+		lv_obj_set_style_border_width(t, 0, 0);
+		lv_obj_set_style_shadow_width(t, 0, 0);
+		lv_obj_set_style_pad_all(t, 0, 0);
+		lv_obj_add_event_cb(t, cbs[k], LV_EVENT_CLICKED, NULL);
+		queue_tile[k] = t;
+		queue_tile_icon[k] = lv_image_create(t);
+		lv_image_set_src(queue_tile_icon[k], icons[k]);
+		lv_obj_set_size(queue_tile_icon[k], 26, 26);
+		lv_image_set_inner_align(queue_tile_icon[k], LV_IMAGE_ALIGN_CONTAIN);
+		lv_obj_set_style_image_recolor_opa(queue_tile_icon[k], LV_OPA_COVER, 0);
+		lv_obj_align(queue_tile_icon[k], LV_ALIGN_TOP_MID, 0, 8);
+		queue_tile_label[k] = lv_label_create(t);
+		lv_label_set_text(queue_tile_label[k], NAMES[k]);
+		lv_obj_set_style_text_font(queue_tile_label[k], &font_ui_16, 0);
+		lv_obj_align(queue_tile_label[k], LV_ALIGN_BOTTOM_MID, 0, -6);
+	}
+	queue_edit_bar = lv_obj_create(queue_screen);
+	lv_obj_remove_style_all(queue_edit_bar);
+	lv_obj_set_size(queue_edit_bar, w, QUEUE_BAR_H);
+	lv_obj_set_pos(queue_edit_bar, cfg->padding, y);
+	lv_obj_set_flex_flow(queue_edit_bar, LV_FLEX_FLOW_ROW);
+	lv_obj_set_flex_align(queue_edit_bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_set_style_pad_column(queue_edit_bar, 10, 0);
+	lv_obj_set_scrollable(queue_edit_bar, false);
+	lv_obj_set_clickable(queue_edit_bar, false);
+	queue_up_pill = queue_pill(queue_edit_bar, "Move up", queue_up_cb);
+	queue_remove_pill = queue_pill(queue_edit_bar, "Remove", queue_remove_cb);
+	lv_obj_set_hidden(queue_edit_bar, true);
+	queue_tiles_paint();
+}
+
+static void queue_header_build(gui_config_t *cfg, int top) {
+	lv_obj_t *row = lv_obj_create(queue_screen);
+	lv_obj_remove_style_all(row);
+	lv_obj_set_size(row, cfg->screen_width - 2 * cfg->padding, 30);
+	/* Under the title, at the text edge the title is moved to in the sheet. */
+	lv_obj_set_pos(row, cfg->padding + 4, top);
+	lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+	lv_obj_set_style_pad_column(row, 6, 0);
+	lv_obj_set_scrollable(row, false);
+	lv_obj_set_clickable(row, false);
+	queue_subtitle = row;
+	lv_obj_t *playing = lv_label_create(row);
+	lv_label_set_text(playing, "Playing");
+	lv_obj_set_style_text_font(playing, &font_ui_18, 0);
+	lv_obj_set_style_text_color(playing, lv_color_hex(0xb3b3b3), 0);
+	queue_subtitle_name = lv_label_create(row);
+	lv_obj_set_style_text_font(queue_subtitle_name, &font_ui_18, 0);
+	lv_obj_set_style_text_color(queue_subtitle_name, lv_color_white(), 0);
+	lv_label_set_long_mode(queue_subtitle_name, LV_LABEL_LONG_DOT);
+	lv_obj_set_width(queue_subtitle_name, cfg->screen_width - 2 * cfg->padding - 90);
+	queue_edit_pill = queue_pill(queue_screen, "Edit", queue_edit_cb);
+	lv_obj_align(queue_edit_pill, LV_ALIGN_TOP_RIGHT, -cfg->padding, cfg->padding + cfg->top_bar_height + 6);
+	queue_clear_pill = queue_pill(queue_screen, "Clear", queue_clear_priority_cb);
+	lv_obj_align_to(queue_clear_pill, queue_edit_pill, LV_ALIGN_OUT_LEFT_MID, -8, 0);
+	lv_obj_update_layout(queue_screen);
+	lv_obj_align(queue_clear_pill, LV_ALIGN_TOP_RIGHT,
+				 -cfg->padding - lv_obj_get_width(queue_edit_pill) - 8, cfg->padding + cfg->top_bar_height + 6);
+}
+
+/* What the reference header and bottom bar show for the mode the page is in. */
+static void queue_reference_show(bool idle, bool select) {
+	lv_obj_set_hidden(queue_select_btn, true);
+	lv_obj_set_hidden(queue_reorder_btn, true);
+	lv_obj_set_hidden(queue_remove_btn, true);
+	lv_obj_set_hidden(queue_up_btn, true);
+	lv_obj_set_hidden(queue_close_btn, !select);
+	lv_obj_set_hidden(queue_edit_pill, !idle);
+	lv_obj_set_hidden(queue_clear_pill, !(idle && playlist_priority_count() > 0));
+	lv_label_set_text(queue_title, select ? "Edit Queue" : tr("trackmenu_queue"));
+	const char *name = playlist_context_name();
+	lv_label_set_text(queue_subtitle_name, name ? name : "");
+	lv_obj_set_hidden(queue_subtitle, select || !name || !name[0]);
+	lv_obj_set_hidden(queue_tiles, select);
+	lv_obj_set_hidden(queue_edit_bar, !select);
+	lv_obj_set_style_opa(queue_up_pill, queue_chosen_count > 0 ? LV_OPA_COVER : LV_OPA_40, 0);
+	lv_obj_set_style_opa(queue_remove_pill, queue_chosen_count > 0 ? LV_OPA_COVER : LV_OPA_40, 0);
+	queue_tiles_paint();
+	settingsrow_title_corner_slots(queue_title, g_cfg, idle ? 3 : 1);
+}
+
 static void build_queue_page(gui_config_t *cfg) {
 	lv_obj_add_style(queue_screen, &theme_style_screen, 0);
 	queue_title = settingsrow_title(queue_screen, cfg, "trackmenu_queue");
+	settingsrow_title_left(queue_title);
 	// Two pairs in the same two places: the ways in, and choosing.
 	queue_reorder_btn = queue_corner_button(cfg, 0, &icon_arrow_down_up, queue_reorder_cb);
 	queue_select_btn = queue_corner_button(cfg, 1, &icon_select_mode, queue_select_cb);
@@ -1327,14 +1573,23 @@ static void build_queue_page(gui_config_t *cfg) {
 	queue_up_btn = queue_corner_button(cfg, 2, &icon_arrow_down_up, queue_up_cb);
 
 	int content_top = settingsrow_content_top(cfg);
-    lv_obj_t *controls=lv_obj_create(queue_screen);lv_obj_remove_style_all(controls);
-    lv_obj_set_pos(controls,cfg->padding,content_top);lv_obj_set_size(controls,cfg->screen_width-2*cfg->padding,48);
-    int control_width=(cfg->screen_width-2*cfg->padding-12)/2;
-    queue_control(controls,"Clear queued",0,control_width,queue_clear_priority_cb);
-    queue_control(controls,"Reshuffle",control_width+12,control_width,queue_reshuffle_cb);
-    content_top += 52;
+	int bottom_bar = 0;
+	if (theme_reference()) {
+		/* Spotify: "Playing <context>" under the title, Clear and Edit in the
+		 * corner, the mode tiles along the bottom. */
+		queue_header_build(cfg, content_top - 14);
+		content_top += 22;
+		bottom_bar = QUEUE_BAR_H + 2 * QUEUE_BAR_GAP;
+	} else {
+		lv_obj_t *controls=lv_obj_create(queue_screen);lv_obj_remove_style_all(controls);
+		lv_obj_set_pos(controls,cfg->padding,content_top);lv_obj_set_size(controls,cfg->screen_width-2*cfg->padding,48);
+		int control_width=(cfg->screen_width-2*cfg->padding-12)/2;
+		queue_control(controls,"Clear queued",0,control_width,queue_clear_priority_cb);
+		queue_control(controls,"Reshuffle",control_width+12,control_width,queue_reshuffle_cb);
+		content_top += 52;
+	}
 	int width = cfg->screen_width - 2 * cfg->padding;
-	queue_view_h = cfg->screen_height - content_top;
+	queue_view_h = cfg->screen_height - content_top - bottom_bar;
 
 	queue_list = lv_obj_create(queue_screen);
 	lv_obj_set_size(queue_list, cfg->screen_width, queue_view_h);
@@ -1366,7 +1621,10 @@ static void build_queue_page(gui_config_t *cfg) {
     queue_priority_header=queue_header("Next in queue",0);
     lv_obj_set_style_text_color(queue_priority_header,lv_color_hex(0x1ed760),0);
     queue_context_header=queue_header("Next from playback context",0);
+    /* One line, cut with "...": a long album name wrapped onto a second line
+     * ran into the first cover below (device round 4). */
     lv_obj_set_width(queue_context_header,width-8);lv_label_set_long_mode(queue_context_header,LV_LABEL_LONG_DOT);
+    lv_obj_set_height(queue_context_header,lv_font_get_line_height(&font_ui_22_bold));
 	for (int i = 0; i < QUEUE_SEP_POOL; i++) {
 		queue_sep_labels[i] = lv_label_create(queue_body);
 		lv_obj_add_style(queue_sep_labels[i], &theme_style_text_dim, 0);
@@ -1402,6 +1660,7 @@ static void build_queue_page(gui_config_t *cfg) {
 		lv_obj_add_event_cb(row->button, queue_row_pressed_cb, LV_EVENT_PRESSED, NULL);
 	lv_obj_add_event_cb(row->button,queue_swipe_cb,LV_EVENT_PRESSING,NULL);
 	lv_obj_add_event_cb(row->button,queue_swipe_cb,LV_EVENT_RELEASED,NULL);
+	lv_obj_add_event_cb(row->button,queue_swipe_cb,LV_EVENT_PRESS_LOST,NULL);
 		lv_obj_add_event_cb(row->button, queue_row_clicked_cb, LV_EVENT_CLICKED, NULL);
 		lv_obj_add_event_cb(row->button, queue_row_long_cb, LV_EVENT_LONG_PRESSED, NULL);
 		lv_obj_add_event_cb(row->button, queue_drag_cb, LV_EVENT_PRESSING, NULL);
@@ -1435,6 +1694,24 @@ static void build_queue_page(gui_config_t *cfg) {
 		lv_obj_set_clickable(row->check, false);
 		lv_obj_set_hidden(row->check, true);
 
+		row->radio = NULL;
+		if (theme_reference()) {
+			row->radio = lv_obj_create(row->button);
+			lv_obj_remove_style_all(row->radio);
+			lv_obj_set_size(row->radio, 26, 26);
+			lv_obj_set_style_radius(row->radio, LV_RADIUS_CIRCLE, 0);
+			lv_obj_set_style_border_width(row->radio, 2, 0);
+			lv_obj_set_style_bg_color(row->radio, lv_color_hex(0x1ed760), 0);
+			lv_obj_set_clickable(row->radio, false);
+			lv_obj_move_to_index(row->radio, 0);
+			lv_obj_t *tick = lv_image_create(row->radio);
+			lv_image_set_src(tick, &icon_check_small);
+			lv_obj_set_style_image_recolor(tick, lv_color_black(), 0);
+			lv_obj_set_style_image_recolor_opa(tick, LV_OPA_COVER, 0);
+			lv_obj_center(tick);
+			lv_obj_set_hidden(row->radio, true);
+		}
+
 		// The handle, while reordering. Not a button: it is the part of the
 		// row that can be taken hold of, and a drag that starts on it carries
 		// the row, not the list.
@@ -1463,6 +1740,10 @@ static void build_queue_page(gui_config_t *cfg) {
 		row->index = -1;
 		row->hist = -1;
 		row->has_thumb = false;
+	}
+
+	if (theme_reference()) {
+		queue_bar_build(cfg);
 	}
 
 	// Over everything, and transparent to the finger: only the copy of a
@@ -1603,11 +1884,7 @@ static void details_fill(const char *file, const song_metadata_t *tags, int bits
 		details_add_row("trackmenu_format", buffer);
 	}
 
-	// A separate bitrate row, only for local lossless tracks: size over
-	// duration, which is how dense the file is. Lossy files already carry it in
-	// the row above, and for a streamed track the cache file may be half
-	// downloaded, making the number meaningless.
-	if (!lossy && !qobuzcache_owns(file) && !tidalcache_owns(file) && duration_secs > 0.5) {
+	if (!lossy && duration_secs > 0.5) {
 		struct stat st_kbps;
 		if (stat(file, &st_kbps) == 0 && st_kbps.st_size > 0) {
 			int avg = (int)((double)st_kbps.st_size * 8.0 / duration_secs / 1000.0 + 0.5);
@@ -1633,11 +1910,8 @@ static void details_fill(const char *file, const song_metadata_t *tags, int bits
 		}
 	}
 
-	// No size row for a streamed track: it would be the size of the cache file,
-	// which may still be downloading -- a number that grows on screen by itself
-	// and describes the download, not the track.
 	struct stat st;
-	if (!qobuzcache_owns(file) && !tidalcache_owns(file) && stat(file, &st) == 0) {
+	if (stat(file, &st) == 0) {
 		snprintf(buffer, sizeof(buffer), "%.1f MB", st.st_size / (1024.0 * 1024.0));
 		details_add_row("trackmenu_size", buffer);
 	}
@@ -1645,11 +1919,7 @@ static void details_fill(const char *file, const song_metadata_t *tags, int bits
 	// The path, except for a streamed track: that lives in a cache directory
 	// nobody chose, under a numeric name, and showing it implies a file of the
 	// user's own that does not exist. The source service is shown instead.
-	if (qobuzcache_owns(file)) {
-		details_add_row("trackmenu_source", "qobuz");
-	} else if (tidalcache_owns(file)) {
-		details_add_row("trackmenu_source", "tidal");
-	} else {
+	  {
 		details_add_row("trackmenu_file", details_card_path(file));
 	}
 }
@@ -1714,11 +1984,7 @@ static void details_rebuild(void) {
 	bool lossy = audio_stream_is_lossy();
 	int kbps = audio_get_stream_bitrate_kbps();
 
-	// As in the player: when the file declares no bitrate, fall back to the real
-	// average, but only for a local file -- a streamed one may still be half
-	// downloaded and the number would climb by itself.
-	if (lossy && kbps <= 0 && !qobuzcache_owns(state.current_file) && !tidalcache_owns(state.current_file) &&
-		state.progress_total_secs > 0.5) {
+	if (lossy && kbps <= 0 && state.progress_total_secs > 0.5) {
 		struct stat st_lossy;
 		if (stat(state.current_file, &st_lossy) == 0 && st_lossy.st_size > 0) {
 			kbps = (int)((double)st_lossy.st_size * 8.0 / state.progress_total_secs / 1000.0 + 0.5);
@@ -1761,6 +2027,7 @@ static void build_details_page(gui_config_t *cfg) {
 	lv_obj_set_style_pad_ver(scroll, 0, 0);
 	lv_obj_set_scroll_dir(scroll, LV_DIR_VER);
 	details_scroll = scroll;
+	settingsrow_footer(details_screen, scroll);
 
 	details_card = lv_obj_create(scroll);
 	lv_obj_set_width(details_card, lv_pct(100));
@@ -1771,6 +2038,10 @@ static void build_details_page(gui_config_t *cfg) {
 	lv_obj_set_style_shadow_width(details_card, 0, 0);
 	lv_obj_set_style_pad_all(details_card, 18, 0);
 	lv_obj_set_style_pad_gap(details_card, 14, 0);
+	if (theme_reference()) {
+		lv_obj_set_style_bg_opa(details_card, LV_OPA_TRANSP, 0);
+		lv_obj_set_style_pad_hor(details_card, 4, 0);
+	}
 	lv_obj_set_scrollable(details_card, false);
 	lv_obj_set_event_bubble(details_card, true);
 	lv_obj_set_flex_flow(details_card, LV_FLEX_FLOW_COLUMN);
@@ -1804,6 +2075,17 @@ static void queue_art_tick(lv_timer_t *t) {
         }
     }
 }
+/* In the sheet there is no back button beside the title and the sheet's own
+ * close button takes the top-right corner: the title moves to the sheet's text
+ * edge and the corner buttons step left of the close button. */
+#define QUEUE_SHEET_TITLE_SHIFT (-65)
+#define QUEUE_SHEET_CORNER_SHIFT (-52)
+static void queue_sheet_header(bool in_sheet) {
+    lv_obj_t *corners[]={queue_reorder_btn,queue_select_btn,queue_close_btn,queue_remove_btn,queue_up_btn,queue_edit_pill,queue_clear_pill};
+    lv_obj_set_style_translate_x(queue_title,in_sheet?QUEUE_SHEET_TITLE_SHIFT:0,0);
+    for(size_t i=0;i<sizeof(corners)/sizeof(corners[0]);i++)
+        if(corners[i]) lv_obj_set_style_translate_x(corners[i],in_sheet?QUEUE_SHEET_CORNER_SHIFT:0,0);
+}
 static void queue_sheet_cleanup(void) {
     queue_unloaded_cb(NULL);
     if(queue_sheet) {
@@ -1817,6 +2099,8 @@ static void queue_sheet_cleanup(void) {
             lv_obj_set_style_text_font(queue_rows[i].label,&font_ui_24,0);
         }
         lv_obj_set_height(queue_list,queue_original_height);queue_view_h=queue_original_height;
+        if(queue_tiles) {lv_obj_set_y(queue_tiles,queue_bar_page_y);lv_obj_set_y(queue_edit_bar,queue_bar_page_y);}
+        queue_sheet_header(false);
         queue_sheet=NULL;
     }
 }
@@ -1832,6 +2116,18 @@ void trackmenu_open_queue(void) {
         static lv_timer_t *art_timer; if(!art_timer) art_timer=lv_timer_create(queue_art_tick,100,NULL);
         for(int i=0;i<QUEUE_ROW_POOL;i++) {lv_obj_set_style_bg_opa(queue_rows[i].button,0,0);lv_obj_set_style_text_font(queue_rows[i].label,&font_ui_22,0);}
         queue_view_h=queue_original_height-20;lv_obj_set_height(queue_list,queue_view_h);
+        if(queue_tiles) {
+            /* The tiles sit on the sheet's own bottom edge, the list stops
+             * above them: the sheet is shorter than the page they were laid
+             * out on. */
+            lv_obj_update_layout(queue_sheet);
+            int bar_y=lv_obj_get_content_height(queue_sheet)-QUEUE_BAR_H-QUEUE_BAR_GAP;
+            queue_bar_page_y=lv_obj_get_style_y(queue_tiles,0)+64; /* before the sheet moved it up */
+            lv_obj_set_y(queue_tiles,bar_y);lv_obj_set_y(queue_edit_bar,bar_y);
+            queue_view_h=bar_y-QUEUE_BAR_GAP-lv_obj_get_y(queue_list);
+            lv_obj_set_height(queue_list,queue_view_h);
+        }
+        queue_sheet_header(true);
         queue_rebuild();
         return;
     }
@@ -1873,61 +2169,11 @@ static void open_album_cb(void *user) {
 		return;
 	}
 
-	// Podcasts come first, because there is no album to show: the other episodes
-	// are what is wanted. The feed id was kept by the sidecar file when the
-	// episode was downloaded; the "album" title alone would not do, because two
-	// podcasts can share a name and the catalogue is queried by id.
-	long long feed_id = 0;
-	if (podcastcache_feed_id(state.current_file, &feed_id)) {
-		device_state_t now;
-		device_state_get(&now);
-		player_sheet_close(false);
-		if (!podcastpage_open_feed(feed_id, now.metadata.album)) {
-			gui_notify_popup("trackmenu_podcast_failed");
-			return;
-		}
-		switcher_set_player_return(podcastcard_feed_screen);
-		return;
-	}
+	
 
-	// A Qobuz track is not in the local library, so its album is not looked up
-	// in the database: it is reopened on Qobuz, using the id the sidecar file
-	// kept when the track was downloaded.
-	char qobuz_album[40];
-	if (qobuzcache_album_id(state.current_file, qobuz_album, sizeof(qobuz_album))) {
-		char title[256];
-		if (!library_track_album(state.current_file, title, sizeof(title)) || !title[0]) {
-			device_state_t now;
-			device_state_get(&now);
-			snprintf(title, sizeof(title), "%s", now.metadata.album);
-		}
-		player_sheet_close(false);
-		if (!qobuzpage_open_album(qobuz_album, title)) {
-			gui_notify_popup("trackmenu_qobuz_album_failed");
-			return;
-		}
-		switcher_set_player_return(qobuz_list_screen);
-		return;
-	}
+	
 
-	// Same for Tidal, for the same reason: a streamed track's album is reopened
-	// on the service it came from, not in the local database, where it is not.
-	char tidal_album[40];
-	if (tidalcache_album_id(state.current_file, tidal_album, sizeof(tidal_album))) {
-		char title[256];
-		if (!library_track_album(state.current_file, title, sizeof(title)) || !title[0]) {
-			device_state_t now;
-			device_state_get(&now);
-			snprintf(title, sizeof(title), "%s", now.metadata.album);
-		}
-		player_sheet_close(false);
-		if (!tidalpage_open_album(tidal_album, title)) {
-			gui_notify_popup("trackmenu_tidal_album_failed");
-			return;
-		}
-		switcher_set_player_return(tidal_list_screen);
-		return;
-	}
+	
 
 	char album[256];
 	if (!library_track_album_value(state.current_file, album, sizeof(album)) || !album[0]) {
@@ -1958,21 +2204,17 @@ void trackmenu_details_open(const char *path) {
 		return;
 	}
 	snprintf(details_path, sizeof(details_path), "%s", path);
+	// Opened from Now Playing, the player sheet sits on the top layer and
+	// would hide the page: close it first and let Back reopen it.
+	bool from_player = player_sheet_is_open();
+	if (from_player) {
+		player_sheet_close(false);
+	}
 	switch_screen(details_screen);
-	switcher_set_player_return(NULL);
+	switcher_set_player_return(from_player ? details_screen : NULL);
 }
 
 void trackmenu_open(lv_obj_t *anchor) {
-	// Two tables rather than one with the label patched at runtime, because of
-	// the string-extraction tool: it reads popover_item_t initialisers (see
-	// LABEL_STRUCTS in tools/extract_strings.py), not assignments. A
-	// "trackmenu_show_podcast" written with an equals sign would never reach the
-	// language files and would stay untranslated everywhere.
-	//
-	// The action behind both is the same: open_album_cb inspects where the
-	// playing file came from and decides for itself. Only the wording differs,
-	// because a podcast episode has no album and calling it one would be a
-	// borrowed term to make a menu line up.
 	static const popover_item_t ITEMS[] = {
 		{"trackmenu_queue", open_queue_cb, NULL},
 		{"add_to_playlist", add_to_playlist_cb, NULL},
@@ -1980,19 +2222,7 @@ void trackmenu_open(lv_obj_t *anchor) {
 		{"details", open_details_cb, NULL},
 		{"settings", open_settings_cb, NULL},
 	};
-	static const popover_item_t ITEMS_PODCAST[] = {
-		{"trackmenu_queue", open_queue_cb, NULL},
-		{"add_to_playlist", add_to_playlist_cb, NULL},
-		{"trackmenu_show_podcast", open_album_cb, NULL},
-		{"details", open_details_cb, NULL},
-		{"settings", open_settings_cb, NULL},
-	};
-
-	device_state_t state;
-	device_state_get(&state);
-	bool podcast = state.current_file[0] && podcastcache_is_episode(state.current_file);
-
-	popover_show(anchor, podcast ? ITEMS_PODCAST : ITEMS, 5);
+	popover_show(anchor, ITEMS, 5);
 }
 
 void trackmenu_init(gui_config_t *cfg) {

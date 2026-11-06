@@ -18,8 +18,6 @@
 #include "src/system/net/wifi.h"
 #include "src/system/playback/audiobook.h"
 #include "src/system/playback/device_state.h"
-#include "src/system/streaming/podcastcache.h"
-#include "src/system/streaming/radio.h"
 
 #define TICK_MS 1000
 
@@ -172,7 +170,7 @@ static void build_page(gui_config_t *cfg) {
 	lv_label_set_long_mode(note_label, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(note_label, lv_pct(100));
 	lv_obj_add_style(note_label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(note_label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(note_label, settingsrow_note_font(), 0);
 	lv_label_set_text(note_label, tr("lastfm_note"));
 
 	lv_obj_add_event_cb(page_screen, loaded_cb, LV_EVENT_SCREEN_LOADED, NULL);
@@ -315,7 +313,8 @@ static void tick_cb(lv_timer_t *t) {
 	bool playing = audio_get_status() == AUDIO_STATUS_PLAYING;
 	double position = 0.0, duration = 0.0;
 	audio_get_progress(&position, &duration);
-	bool skip = radio_is_active() || audiobook_is_playing() || podcastcache_is_episode(file);
+	// A private session counts nothing, as an audiobook counts nothing.
+	bool skip = audiobook_is_playing() || device_state_private_session();
 
 	// The player's own count of plays, by the same rule, whether Last.fm is in
 	// use or not.

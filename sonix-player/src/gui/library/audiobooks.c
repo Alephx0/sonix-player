@@ -160,6 +160,14 @@ static lv_obj_t *corner_button(lv_obj_t *screen, gui_config_t *cfg, int slot, co
 
 // The viewport of a windowed list: a scrollable page with a fixed-height canvas
 // inside it, so twelve row widgets can stand in for however many entries.
+// A reference list row: on the page background, the shell's pressed grey.
+static void flatten_row(lv_obj_t *row) {
+	lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(row, lv_color_make(42, 42, 42), LV_STATE_PRESSED);
+	lv_obj_set_style_radius(row, 8, 0);
+}
+
 static lv_obj_t *make_viewport(lv_obj_t *screen, gui_config_t *cfg, lv_obj_t **body_out, lv_obj_t **empty_out, int row_width, lv_event_cb_t scroll_cb) {
 	int content_top = settingsrow_content_top(cfg);
 
@@ -177,6 +185,7 @@ static lv_obj_t *make_viewport(lv_obj_t *screen, gui_config_t *cfg, lv_obj_t **b
 	// Presses on the rows and on the empty area bubble into the gesture
 	// handlers; set here because an empty list binds no row to set it later.
 	lv_obj_set_event_bubble(list, true);
+	settingsrow_footer(screen, list);
 
 	lv_obj_t *body = lv_obj_create(list);
 	lv_obj_set_width(body, row_width);
@@ -216,12 +225,13 @@ static lv_obj_t *make_viewport(lv_obj_t *screen, gui_config_t *cfg, lv_obj_t **b
 // a book -- and a band of forty-eight rows read back as the viewport moves.
 // ---------------------------------------------------------------------------
 
-#define ROW_HEIGHT 100
-#define ROW_GAP 8
+// The reference layout lists books as flat Spotify rows: shorter, smaller art.
+#define ROW_HEIGHT (theme_reference() ? 76 : 100)
+#define ROW_GAP (theme_reference() ? 2 : 8)
 #define ROW_PITCH (ROW_HEIGHT + ROW_GAP)
 #define ROW_RADIUS 12
 #define ROW_PAD 14
-#define THUMB_SIZE 72
+#define THUMB_SIZE (theme_reference() ? 56 : 72)
 #define ROW_POOL 12
 
 // How many rows are read from the database at a time. Four times the pool, so
@@ -759,6 +769,11 @@ static void build_books_page(gui_config_t *cfg) {
 		lv_obj_set_style_pad_all(row->button, ROW_PAD, 0);
 		lv_obj_set_style_pad_column(row->button, ROW_PAD, 0);
 		lv_obj_set_hidden(row->button, true);
+		if (theme_reference()) {
+			flatten_row(row->button);
+			lv_obj_set_style_pad_hor(row->button, 4, 0);
+			lv_obj_set_style_pad_ver(row->button, 10, 0);
+		}
 		lv_obj_set_event_bubble(row->button, true); // so the player sheet can be dragged in
 		lv_obj_add_event_cb(row->button, book_clicked_cb, LV_EVENT_CLICKED, NULL);
 		lv_obj_set_flex_flow(row->button, LV_FLEX_FLOW_ROW);
@@ -772,11 +787,11 @@ static void build_books_page(gui_config_t *cfg) {
 		lv_label_set_long_mode(row->label, LV_LABEL_LONG_DOT);
 		lv_obj_set_flex_grow(row->label, 1);
 		lv_obj_add_style(row->label, &theme_style_text, 0);
-		lv_obj_set_style_text_font(row->label, &font_ui_24, 0);
+		lv_obj_set_style_text_font(row->label, theme_reference() ? &font_ui_20 : &font_ui_24, 0);
 		// Two lines at most: the cap on the height is what makes LV_LABEL_LONG_DOT
 		// cut the name there, with the ellipsis. A cap and not a height, so a
 		// one-line name stays centred.
-		lv_obj_set_style_max_height(row->label, 2 * lv_font_get_line_height(&font_ui_24) + lv_obj_get_style_text_line_space(row->label, LV_PART_MAIN), 0);
+		lv_obj_set_style_max_height(row->label, 2 * lv_font_get_line_height(theme_reference() ? &font_ui_20 : &font_ui_24) + lv_obj_get_style_text_line_space(row->label, LV_PART_MAIN), 0);
 
 		// Out of the flex layout: it sits in the row's own left padding.
 		row->playmark = lv_obj_create(row->button);
@@ -813,7 +828,7 @@ static void build_books_page(gui_config_t *cfg) {
 // names are few enough to hold -- one per author or series, not per book.
 // ---------------------------------------------------------------------------
 
-#define NAME_ROW_HEIGHT 88
+#define NAME_ROW_HEIGHT (theme_reference() ? 64 : 88)
 #define NAME_ROW_PITCH (NAME_ROW_HEIGHT + ROW_GAP)
 
 typedef struct {
@@ -983,6 +998,10 @@ static void build_names_page(gui_config_t *cfg) {
 		lv_obj_set_style_pad_hor(row->button, 20, 0);
 		lv_obj_set_style_pad_column(row->button, 12, 0);
 		lv_obj_set_hidden(row->button, true);
+		if (theme_reference()) {
+			flatten_row(row->button);
+			lv_obj_set_style_pad_hor(row->button, 4, 0);
+		}
 		lv_obj_set_event_bubble(row->button, true);
 		lv_obj_add_event_cb(row->button, name_clicked_cb, LV_EVENT_CLICKED, NULL);
 		lv_obj_set_flex_flow(row->button, LV_FLEX_FLOW_ROW);
@@ -991,13 +1010,14 @@ static void build_names_page(gui_config_t *cfg) {
 		row->label = lv_label_create(row->button);
 		lv_label_set_long_mode(row->label, LV_LABEL_LONG_DOT);
 		lv_obj_set_flex_grow(row->label, 1);
-		lv_obj_set_height(row->label, lv_font_get_line_height(&font_ui_24));
+		const lv_font_t *name_font = theme_reference() ? &font_ui_20 : &font_ui_24;
+		lv_obj_set_height(row->label, lv_font_get_line_height(name_font));
 		lv_obj_add_style(row->label, &theme_style_text, 0);
-		lv_obj_set_style_text_font(row->label, &font_ui_24, 0);
+		lv_obj_set_style_text_font(row->label, name_font, 0);
 
 		row->count = lv_label_create(row->button);
 		lv_obj_add_style(row->count, &theme_style_text_dim, 0);
-		lv_obj_set_style_text_font(row->count, &font_ui_22, 0);
+		lv_obj_set_style_text_font(row->count, theme_reference() ? &font_ui_16 : &font_ui_22, 0);
 
 		row->index = -1;
 	}
@@ -1099,7 +1119,7 @@ static void option_note(lv_obj_t *parent, const char *text) {
 	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(note, lv_pct(100));
 	lv_obj_add_style(note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
 	lv_label_set_text(note, tr(text));
 }
 
@@ -1350,7 +1370,7 @@ static void paint_choice(lv_obj_t *btn, bool on) {
 		return;
 	}
 	lv_obj_set_style_bg_color(btn, on ? theme()->accent : theme()->surface_pressed, 0);
-	lv_obj_set_style_text_color(lv_obj_get_child(btn, 0), on ? lv_color_white() : theme()->text_primary, 0);
+	lv_obj_set_style_text_color(lv_obj_get_child(btn, 0), on ? theme()->accent_ink : theme()->text_primary, 0);
 }
 
 static void refresh_control_buttons(void) {

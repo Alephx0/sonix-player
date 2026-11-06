@@ -290,7 +290,7 @@ void powersettings_init(gui_config_t *cfg) {
 	lv_label_set_long_mode(standby_note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(standby_note, lv_pct(100));
 	lv_obj_add_style(standby_note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(standby_note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(standby_note, settingsrow_note_font(), 0);
 	lv_label_set_text(standby_note, tr("power_standby_mem_note"));
 
 	// The R1 charges through its PMIC, which takes a lower target voltage and a
@@ -303,7 +303,7 @@ void powersettings_init(gui_config_t *cfg) {
 		lv_label_set_long_mode(limit_note, LV_LABEL_LONG_WRAP);
 		lv_obj_set_width(limit_note, lv_pct(100));
 		lv_obj_add_style(limit_note, &theme_style_text_dim, 0);
-		lv_obj_set_style_text_font(limit_note, &font_ui_22, 0);
+		lv_obj_set_style_text_font(limit_note, settingsrow_note_font(), 0);
 		lv_label_set_text(limit_note, tr("power_charge_limit_80_note"));
 		settingsrow_toggle(container, "power_charge_500ma", &axp_current_switch, axp_current_toggled_cb);
 	} else {
@@ -315,9 +315,6 @@ void powersettings_init(gui_config_t *cfg) {
 	// The LED master switch, and the standby option that depends on it.
 	settingsrow_toggle(container, "power_led_on", &led_on_switch, led_on_toggled_cb);
 	led_off_card = settingsrow_toggle(container, "power_led_off_in_standby", &led_off_switch, led_off_toggled_cb);
-	// No "turn Wi-Fi off in standby" entry: parking the radio is automatic, and
-	// wifi_in_use() in power.c knows on its own when not to turn it off --
-	// Qobuz, Tidal, podcasts, radio, AirPlay, DLNA, transfers.
 
 	// The lock gesture for the buttons on the case (system.c).
 	settingsrow_toggle(container, "power_lock_keys_screen_off", &key_lock_switch, key_lock_toggled_cb);
@@ -325,7 +322,7 @@ void powersettings_init(gui_config_t *cfg) {
 	lv_label_set_long_mode(key_lock_note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(key_lock_note, lv_pct(100));
 	lv_obj_add_style(key_lock_note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(key_lock_note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(key_lock_note, settingsrow_note_font(), 0);
 	lv_label_set_text(key_lock_note, tr("power_lock_keys_screen_off_note"));
 
 	// Toggle and "after how long" on one card: the slider is only there while
@@ -342,7 +339,7 @@ void powersettings_init(gui_config_t *cfg) {
 	lv_label_set_long_mode(charge_note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(charge_note, lv_pct(100));
 	lv_obj_add_style(charge_note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(charge_note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(charge_note, settingsrow_note_font(), 0);
 	lv_label_set_text(charge_note, pmic || power_charge_limit_supported() ? tr("power_auto_off_note")
 																	   : tr("power_charge_limit_unavailable"));
 

@@ -177,7 +177,7 @@ static lv_obj_t *add_label(const char *text, bool dim) {
 	lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(label, lv_pct(100));
 	lv_obj_add_style(label, dim ? &theme_style_text_dim : &theme_style_text, 0);
-	lv_obj_set_style_text_font(label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(label, settingsrow_note_font(), 0);
 	lv_label_set_text(label, text);
 	return label;
 }

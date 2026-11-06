@@ -15,7 +15,7 @@ int main(int argc,char **argv) {
     assert(argc==2);char dbpath[768],cfg[768],path[512],album[256];
     snprintf(dbpath,sizeof(dbpath),"%s/.local/library.db",argv[1]);snprintf(cfg,sizeof(cfg),"%s/config.ini",argv[1]);config_init(cfg);
     assert(library_open(dbpath));playlists_init(argv[1]);
-    for(int i=0;i<5;i++) {snprintf(path,sizeof(path),"%s/Music/track%d.wav",argv[1],i);assert(library_import_download(path));for(int j=0;library_scan_running()&&j<2000;j++)usleep(10000);assert(!library_scan_running());}
+    for(int i=0;i<5;i++) {snprintf(path,sizeof(path),"%s/Music/track%d.wav",argv[1],i);assert(library_import_file(path));for(int j=0;library_scan_running()&&j<2000;j++)usleep(10000);assert(!library_scan_running());}
     assert(count(LIBRARY_FILTER_HOME_REPEAT)==0);assert(count(LIBRARY_FILTER_HOME_REDISCOVER)==5);
     library_index_t *mix=library_index_open(LIBRARY_LIST_TRACKS,LIBRARY_FILTER_GENRE,"Ambient",LIBRARY_ORDER_DEFAULT,false);
     assert(mix && library_index_count(mix)==5);library_index_close(mix);

@@ -1,3 +1,5 @@
+#include "src/gui/audio/outputprofile.h"
+#include "src/gui/library/activity.h"
 #include "gui.h"
 
 #include <pthread.h>
@@ -12,7 +14,6 @@
 #include "src/gui/nowplaying/coverflow.h"
 #include "src/gui/settings/ccsettings.h"
 #include "src/gui/nowplaying/chapters.h"
-#include "src/gui/nowplaying/lyricsearch.h"
 #include "src/gui/wireless/airplay.h"
 #include "src/gui/bluetooth/airpodspage.h"
 #include "src/gui/settings/appearance.h"
@@ -33,7 +34,6 @@
 #include "src/gui/settings/processespage.h"
 #include "src/gui/settings/language.h"
 #include "src/gui/library/libraryscan.h"
-#include "src/gui/wireless/dlna.h"
 #include "src/gui/wireless/sonixlink.h"
 #include "src/gui/gearboy/gearboypage.h"
 #include "src/gui/gearboy/gearboysettings.h"
@@ -51,7 +51,6 @@
 #include "src/gui/library/music.h"
 #include "src/gui/audio/eqsettings.h"
 #include "src/gui/audio/peqsettings.h"
-#include "src/gui/audio/peqautoeq.h"
 #include "src/gui/settings/remap.h"
 #include "src/gui/audio/msebsettings.h"
 #include "src/gui/settings/musicsettings.h"
@@ -66,14 +65,11 @@
 #include "src/system/bluetooth/btreceiver.h"
 #include "src/system/audio/usbdac.h"
 #include "src/system/net/wifitransfer.h"
-#include "src/system/streaming/radio.h"
-#include "src/gui/streaming/radiopage.h"
 #include "src/gui/library/search.h"
 #include "src/gui/settings/settings.h"
 #include "src/gui/settings/systempage.h"
 #include "src/gui/shell/setupwifi.h"
 #include "src/gui/shell/welcome.h"
-#include "src/gui/streaming/streaming.h"
 #include "src/gui/shell/switcher.h"
 #include "src/gui/settings/timeset.h"
 #include "src/gui/fonts/fonts.h"
@@ -93,6 +89,7 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/src/display/lv_display_private.h"
 #include "src/system/core/lang.h"
+#include "src/gui/shell/deviceprofile.h"
 
 // Long enough for a whole sentence: a notice truncated mid-word is a puzzle
 // rather than a warning.
@@ -326,9 +323,6 @@ static void popup_notify(const char *text, const lv_image_dsc_t *icon, lv_color_
 	ev->text[sizeof(ev->text) - 1] = '\0';
 	ev->icon = icon;
 	ev->icon_color = color;
-	// gui_post rather than lv_async_call: popups arrive from any thread
-	// (bluetooth, usb, Qobuz downloads), and lv_async_call from off the GUI
-	// thread corrupts the timer list. See gui_post.
 	gui_post(popup_async_cb, ev);
 }
 
@@ -610,15 +604,10 @@ void gui_init(gui_config_t *cfg) {
 	audiobookcontrols_screen = lv_obj_create(NULL);
 	audiobookscan_screen = lv_obj_create(NULL);
 	chapters_screen = lv_obj_create(NULL);
-	lyricsearch_screen = lv_obj_create(NULL);
 	queue_screen = lv_obj_create(NULL);
 	details_screen = lv_obj_create(NULL);
 	wireless_screen = lv_obj_create(NULL);
-	streaming_screen = lv_obj_create(NULL);
-	radiopage_screen = lv_obj_create(NULL);
 	dacpage_screen = lv_obj_create(NULL);
-	radiolist_screen = lv_obj_create(NULL);
-	radiosearch_screen = lv_obj_create(NULL);
 	wifisettings_screen = lv_obj_create(NULL);
 	btsettings_screen = lv_obj_create(NULL);
 	btaudio_screen = lv_obj_create(NULL);
@@ -626,7 +615,6 @@ void gui_init(gui_config_t *cfg) {
 	airpodspage_screen = lv_obj_create(NULL);
 	wifitransfer_screen = lv_obj_create(NULL);
 	airplay_screen = lv_obj_create(NULL);
-	dlna_screen = lv_obj_create(NULL);
 	sonixlink_screen = lv_obj_create(NULL);
 	morepage_screen = lv_obj_create(NULL);
 	filespage_screen = lv_obj_create(NULL);
@@ -653,6 +641,8 @@ void gui_init(gui_config_t *cfg) {
 	// the screensaver, which is why they live on the system layer.
 	corners_init(cfg);
 
+	activity_init(cfg);
+	deviceprofile_init(cfg->sd_root_path);
 	main_menu_init(cfg);
 
 	music_init(cfg);
@@ -664,7 +654,7 @@ void gui_init(gui_config_t *cfg) {
 	wifisettings_init(cfg);
 	wifitransfer_page_init(cfg); // after wifisettings: its "no Wi-Fi" row points there
 	airplay_page_init(cfg);		 // likewise
-	dlna_page_init(cfg);		 // likewise: its "no Wi-Fi" row points there too
+
 	sonixlink_page_init(cfg);	 // likewise
 	airpodspage_init(cfg);		 // before btaudio: its AirPods row points at this page
 	btaudio_init(cfg);			 // before btsettings: its gear points at this page
@@ -675,7 +665,6 @@ void gui_init(gui_config_t *cfg) {
 	// streaming section: three services that are not implemented yet, so the
 	// page exists and is walkable but its tiles say so when tapped.
 	// radio before the section, so its tile has somewhere to point.
-	radiopage_init(cfg);
 	dacpage_init(cfg);
 	// After dacpage: the More section points at its pages.
 	gearboyplay_init(cfg);  // before the list: one of its rows leads here
@@ -694,7 +683,7 @@ void gui_init(gui_config_t *cfg) {
 	textview_init(cfg);	 // before filespage: a text file tapped there opens here
 	imageview_init(cfg); // likewise, for a picture
 	filespage_init(cfg);
-	streaming_init(cfg);
+
 
 	player_init(cfg);
 
@@ -718,15 +707,17 @@ void gui_init(gui_config_t *cfg) {
 	msebsettings_init(cfg); // before musicsettings: the MSEB page hangs its gear off it
 	eqsettings_init(cfg);	// and the equalizer page hangs its own off this
 	peqsettings_init(cfg); // the parametric page hangs its preset screen off the gear
-	peqautoeq_init(cfg);  // the waveform entry on that page searches AutoEq profiles
+
 	musicsettings_init(cfg);
+	settings_build_categories(cfg);
+	outputprofile_init();
 	search_init(cfg);
 	medialist_init(cfg);
 	playlistpage_init(cfg);
 	audiobookextras_init(cfg); // the bookmarks and summary pages
 	audiobooks_init(cfg);
 	chapters_init(cfg);
-	lyricsearch_init(cfg);
+
 	trackmenu_init(cfg);
 
 	// The leftward swipe that pulls the player in works on the browsing pages
@@ -740,7 +731,7 @@ void gui_init(gui_config_t *cfg) {
 		// one gesture doing two contradictory things. The back swipe is the
 		// only way out of it.
 		medialist_tracks_screen, medialist_albums_screen, audiobooks_screen, wireless_screen,
-		streaming_screen,		 radiopage_screen,	radiolist_screen,	radiosearch_screen,
+				 		
 		morepage_screen,
 	};
 	for (size_t i = 0; i < sizeof(player_swipe_screens) / sizeof(player_swipe_screens[0]); i++) {
@@ -757,12 +748,12 @@ void gui_init(gui_config_t *cfg) {
 		language_screen,
 		medialist_screen,  medialist_tracks_screen, medialist_albums_screen, audiobooks_screen, audiobooksettings_screen,
 		queue_screen,	  chapters_screen,		 details_screen,   audiobookcontrols_screen,
-		lyricsearch_screen,
+		
 		wireless_screen,
 		wifisettings_screen,
-		btsettings_screen, btaudio_screen,	 airpodspage_screen, airplay_screen,   streaming_screen,
-		radiopage_screen,  radiolist_screen, radiosearch_screen,
-		dlna_screen,	   sonixlink_screen,	 morepage_screen,	  gearboypage_screen, metronomepage_screen,
+		btsettings_screen, btaudio_screen,	 airpodspage_screen, airplay_screen,   
+		   
+			   sonixlink_screen,	 morepage_screen,	  gearboypage_screen, metronomepage_screen,
 	};
 	for (size_t i = 0; i < sizeof(back_swipe_screens) / sizeof(back_swipe_screens[0]); i++) {
 		switcher_attach_back_gesture(back_swipe_screens[i]);

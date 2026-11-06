@@ -31,7 +31,6 @@
     GET  list?path=<dir>      -> [{"path","name","ctime"[,"size"]}, ...]
                                  no "size" means it is a directory, and its
                                  "path" ends in "/"; "ctime" is a string
-    GET  download?path=<file> -> the file, as an attachment
     POST upload               -> multipart: "path" + "files[]"
     POST create               -> urlencoded: "path"
     POST move                 -> urlencoded: "oldPath", "newPath"
@@ -1061,10 +1060,6 @@ function showMenu(anchor, entry) {
 
   if (entry.dir) {
     item("open", "{{js|Apri}}", null, function () { load(entry.path); });
-  } else {
-    item("download", "{{js|Scarica}}", null, function () {
-      window.location = "download?path=" + encodeURIComponent(entry.path);
-    });
   }
 
   item("rename", "{{js|Rinomina}}", null, function () { rename(entry); });

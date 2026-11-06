@@ -179,7 +179,7 @@ static void codec_list_message(const char *tag) {
 	lv_obj_t *none = lv_label_create(codec_list);
 	lv_label_set_text(none, tr(tag));
 	lv_obj_add_style(none, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(none, &font_ui_22, 0);
+	lv_obj_set_style_text_font(none, settingsrow_note_font(), 0);
 	lv_obj_set_width(none, lv_pct(100));
 	lv_label_set_long_mode(none, LV_LABEL_LONG_WRAP);
 }

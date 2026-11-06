@@ -698,29 +698,6 @@ static bool db_stat(long *size_out, long *mtime_out) {
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Content fingerprints
-//
-// The phone keeps its copy of the index and of the thumbnails between one
-// connection and the next, and has to tell whether they are still current. The
-// files' mtimes cannot say: the index is also where the player keeps where
-// playback was left, the saved queue and the playlist counts, so it is written
-// on every change of track, and the thumbnails file every time a list draws a
-// cover it had not drawn before. Asking by mtime meant a full download at
-// nearly every connection.
-//
-// So what is compared is a hash of what the phone actually reads: the library
-// tables and the playlists for the index (the favourites travel live, through
-// /api/favourites), the thumbnail keys for the thumbnails (a key names the
-// track, its mtime, its size and the box, so the pixels behind a key never
-// change without the key changing). Each row is hashed on its own and the row
-// hashes are summed, so the order the rows sit in -- which a rescan reshuffles
-// -- does not count.
-//
-// Computing it reads the whole table, about half a second for a large library
-// on this processor, so the result is kept against the file's size and mtime
-// and computed again only when those move.
-// ---------------------------------------------------------------------------
 
 #define FNV_OFFSET 0xcbf29ce484222325ULL
 #define FNV_PRIME 0x100000001b3ULL
@@ -1390,10 +1367,6 @@ static void route_queue(client_t *c, const char *query) {
 	reply_json(c, &j);
 }
 
-// The starred tracks, read straight from the index with a connection of this
-// thread's own. It is a small table, and reading it here rather than through
-// the interface means the phone sees a star it has just set without waiting for
-// the next index download.
 static void route_favourites(client_t *c) {
 	char path[sizeof(db_path)];
 	pthread_mutex_lock(&lock);
@@ -1501,10 +1474,6 @@ static void route_history(client_t *c, const char *query) {
 	reply_json(c, &j);
 }
 
-// The playlists, read live like the favourites: the copy of the index on the
-// phone is only as fresh as its last download, and a playlist made a moment ago
-// on the player or from the phone belongs in the list now. Names with their
-// track counts; the order is the app's to apply.
 static void route_playlists(client_t *c) {
 	char path[sizeof(db_path)];
 	sonixlink_state_t s;

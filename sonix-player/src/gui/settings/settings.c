@@ -2,11 +2,19 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <ctype.h>
+#include <stdint.h>
+#include <string.h>
 
 #include "lvgl/lvgl.h"
 
 #include "src/gui/settings/appearance.h"
 #include "src/gui/settings/ccsettings.h"
+#include "src/gui/settings/lastfmsettings.h"
+#include "src/gui/settings/musicsettings.h"
+#include "src/gui/wireless/wireless.h"
 #include "src/gui/shell/confirm.h"
 #include "src/gui/settings/devoptions.h"
 #include "src/gui/settings/language.h"
@@ -18,11 +26,21 @@
 #include "src/gui/settings/remap.h"
 #include "src/gui/settings/screensaver.h"
 #include "src/gui/shell/settingsrow.h"
+#include "src/gui/shell/bottomsheet.h"
+#include "src/system/library/library.h"
 #include "src/gui/shell/switcher.h"
 #include "src/gui/settings/systempage.h"
+#include "src/gui/settings/storagepage.h"
+#include "src/gui/shell/deviceprofile.h"
 #include "src/gui/shell/theme.h"
+#include "src/gui/shell/icons.h"
+#include "src/gui/shell/reference_icons.h"
+#include "src/system/bluetooth/bluetooth.h"
+#include "src/system/net/wifi.h"
 #include "src/gui/settings/timeset.h"
 #include "src/system/core/config.h"
+#include "src/system/playback/device_state.h"
+#include "src/system/playback/playlist.h"
 #include "src/system/audio/headset.h"
 #include "src/system/core/lang.h"
 #include "src/system/device/power.h"
@@ -247,6 +265,12 @@ static void build_screen_page(gui_config_t *cfg) {
 	lv_obj_set_style_shadow_width(card, 0, 0);
 	lv_obj_set_style_pad_hor(card, 20, 0);
 	lv_obj_set_style_pad_ver(card, 14, 0);
+	if (theme_reference()) {
+		// A flat row like the others in the reference layout.
+		lv_obj_set_style_bg_opa(card, LV_OPA_TRANSP, 0);
+		lv_obj_set_style_pad_hor(card, 4, 0);
+		lv_obj_set_height(card, 112);
+	}
 	lv_obj_set_scrollable(card, false);
 
 	lv_obj_t *label = lv_label_create(card);
@@ -371,7 +395,7 @@ static void refresh_kbtype_buttons(void) {
 		bool on = i == active;
 		lv_obj_set_style_bg_color(kbtype_buttons[i], on ? theme()->accent : theme()->surface_pressed, 0);
 		lv_obj_set_style_text_color(lv_obj_get_child(kbtype_buttons[i], 0),
-									on ? lv_color_white() : theme()->text_primary, 0);
+									on ? theme()->accent_ink : theme()->text_primary, 0);
 	}
 }
 
@@ -536,12 +560,557 @@ static void build_screenshot_card(lv_obj_t *container) {
 	}
 }
 
+/* ---- Spotify's Settings: categories, each opening a page of its rows ---- */
+
+static lv_obj_t *root_container;
+static lv_obj_t *autoplay_switch;
+
+static lv_obj_t *album_shuffle_switch;
+static void album_shuffle_cb(lv_event_t *e) {
+	(void)e;
+	config_set_bool("player", "shuffle_albums", lv_obj_has_state(album_shuffle_switch, LV_STATE_CHECKED));
+	config_save();
+	if (playlist_shuffle_enabled()) {
+		playlist_reshuffle(); /* what is still to come, dealt the new way */
+		device_state_queue_changed();
+	}
+}
+
+static void autoplay_toggled_cb(lv_event_t *e) {
+	(void)e;
+	device_state_set_autoplay(lv_obj_has_state(autoplay_switch, LV_STATE_CHECKED));
+}
+
+typedef struct {
+	const char *name;
+	lv_obj_t *screen;
+	lv_event_cb_t cb; /* instead of opening a screen */
+} hub_row_t;
+
+/* A category page: the rows of what used to be the root's groups. */
+static lv_obj_t *hub_container;
+static lv_obj_t *hub_page(gui_config_t *cfg, const char *title, const hub_row_t *rows, int n, lv_obj_t **dev_row) {
+	lv_obj_t *screen = lv_obj_create(NULL);
+	lv_obj_t *container = settingsrow_page(screen, cfg, title);
+	hub_container = container;
+	settingsrow_title_corner_slots(settingsrow_page_title(screen), cfg, 0);
+	switcher_attach_back_gesture(screen);
+	for (int i = 0; i < n; i++) {
+		lv_obj_t *row = rows[i].cb ? settingsrow_add(container, rows[i].name, NULL, rows[i].cb, NULL)
+								   : settingsrow_add(container, rows[i].name, NULL, switch_screen_cb, rows[i].screen);
+		if (dev_row && rows[i].screen == devoptions_screen) {
+			*dev_row = row;
+		}
+	}
+	return screen;
+}
+
+/* ---- Quick tiles: Spotify's Data saver / Offline mode / Private session.
+ * The R1 has no data plan and is always offline, so its two radios take
+ * those places; Private session is Spotify's. ---- */
+enum { QUICK_WIFI, QUICK_BLUETOOTH, QUICK_PRIVATE, QUICK_COUNT };
+static struct {
+	lv_obj_t *tile, *icon, *name, *state;
+} quick[QUICK_COUNT];
+
+static bool quick_available(int kind) {
+	return kind == QUICK_WIFI ? wifi_available() : kind == QUICK_BLUETOOTH ? bluetooth_available() : true;
+}
+
+static bool quick_on(int kind) {
+	return kind == QUICK_WIFI		 ? wifi_get_enabled()
+		   : kind == QUICK_BLUETOOTH ? bluetooth_get_enabled()
+									 : device_state_private_session();
+}
+
+static void quick_paint(void) {
+	for (int k = 0; k < QUICK_COUNT; k++) {
+		if (!quick[k].tile) {
+			continue;
+		}
+		bool avail = quick_available(k);
+		bool on = avail && quick_on(k);
+		lv_color_t c = on ? lv_color_hex(0x1ed760) : lv_color_white();
+		lv_obj_set_style_image_recolor(quick[k].icon, c, 0);
+		lv_obj_set_style_text_color(quick[k].name, c, 0);
+		lv_obj_set_style_text_color(quick[k].state, on ? c : lv_color_hex(0xb3b3b3), 0);
+		lv_label_set_text(quick[k].state, !avail ? "Not available" : on ? "On" : "Off");
+		lv_obj_set_style_opa(quick[k].tile, avail ? LV_OPA_COVER : LV_OPA_50, 0);
+	}
+}
+
+static void quick_clicked_cb(lv_event_t *e) {
+	int kind = (int)(intptr_t)lv_event_get_user_data(e);
+	if (!quick_available(kind)) {
+		return;
+	}
+	bool on = !quick_on(kind);
+	if (kind == QUICK_WIFI) {
+		wifi_set_enabled(on);
+	} else if (kind == QUICK_BLUETOOTH) {
+		bluetooth_set_enabled(on);
+	} else {
+		device_state_set_private_session(on);
+	}
+	quick_paint();
+}
+
+static void quick_loaded_cb(lv_event_t *e) {
+	(void)e;
+	quick_paint();
+}
+
+static void quick_tiles(lv_obj_t *parent) {
+	static const char *names[QUICK_COUNT] = {"Wi-Fi", "Bluetooth", "Private session"};
+	const void *icons[QUICK_COUNT] = {&icon_wifi, &icon_bluetooth, &icon_eye_off};
+	lv_obj_t *row = lv_obj_create(parent);
+	lv_obj_remove_style_all(row);
+	lv_obj_set_size(row, lv_pct(100), 94);
+	lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+	lv_obj_set_style_pad_column(row, 8, 0);
+	lv_obj_set_style_margin_bottom(row, 6, 0);
+	lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_remove_flag(row, LV_OBJ_FLAG_CLICKABLE);
+	for (int k = 0; k < QUICK_COUNT; k++) {
+		lv_obj_t *t = lv_btn_create(row);
+		lv_obj_set_height(t, 94);
+		lv_obj_set_flex_grow(t, 1);
+		lv_obj_set_style_bg_color(t, lv_color_hex(0x242424), 0);
+		lv_obj_set_style_bg_opa(t, LV_OPA_COVER, 0);
+		lv_obj_set_style_radius(t, 8, 0);
+		lv_obj_set_style_border_width(t, 0, 0);
+		lv_obj_set_style_shadow_width(t, 0, 0);
+		lv_obj_set_style_pad_all(t, 0, 0);
+		lv_obj_add_event_cb(t, quick_clicked_cb, LV_EVENT_CLICKED, (void *)(intptr_t)k);
+		quick[k].tile = t;
+		quick[k].icon = lv_image_create(t);
+		lv_image_set_src(quick[k].icon, icons[k]);
+		lv_obj_set_size(quick[k].icon, 28, 28);
+		lv_image_set_inner_align(quick[k].icon, LV_IMAGE_ALIGN_CONTAIN);
+		lv_obj_set_style_image_recolor_opa(quick[k].icon, LV_OPA_COVER, 0);
+		lv_obj_align(quick[k].icon, LV_ALIGN_TOP_MID, 0, 10);
+		quick[k].name = lv_label_create(t);
+		lv_label_set_text(quick[k].name, names[k]);
+		lv_obj_set_style_text_font(quick[k].name, &font_ui_16, 0);
+		lv_obj_align(quick[k].name, LV_ALIGN_TOP_MID, 0, 44);
+		quick[k].state = lv_label_create(t);
+		lv_obj_set_style_text_font(quick[k].state, &font_ui_16, 0);
+		lv_obj_align(quick[k].state, LV_ALIGN_TOP_MID, 0, 66);
+	}
+	quick_paint();
+	lv_obj_add_event_cb(settings_screen, quick_loaded_cb, LV_EVENT_SCREEN_LOADED, NULL);
+}
+
+/* ---- Search settings: Spotify's magnifier in the Settings header opens a
+ * page that finds a setting by its name or by what it is about. ---- */
+typedef struct {
+	const char *name;  /* shown (a translation key or plain text) */
+	const char *where; /* the category it lives in */
+	const char *about; /* other words it answers to */
+	lv_obj_t *screen;
+	lv_event_cb_t cb;
+} find_entry_t;
+#define FIND_MAX 32
+static find_entry_t finds[FIND_MAX];
+static int find_count;
+static lv_obj_t *find_screen, *find_field, *find_list, *find_empty;
+static keyboard_t *find_keyboard;
+static gui_config_t *find_cfg;
+
+static void find_add(const char *name, const char *where, const char *about, lv_obj_t *screen, lv_event_cb_t cb) {
+	if (find_count < FIND_MAX) {
+		finds[find_count++] = (find_entry_t){name, where, about, screen, cb};
+	}
+}
+
+/* Case-insensitive, ASCII only: the setting names are. */
+static bool find_contains(const char *hay, const char *needle) {
+	size_t n = strlen(needle);
+	for (const char *h = hay; *h; h++) {
+		size_t i = 0;
+		while (i < n && h[i] && tolower((unsigned char)h[i]) == tolower((unsigned char)needle[i])) {
+			i++;
+		}
+		if (i == n) {
+			return true;
+		}
+	}
+	return n == 0;
+}
+
+static void find_open_cb(lv_event_t *e) {
+	find_entry_t *f = lv_event_get_user_data(e);
+	keyboard_set_visible(find_keyboard, false);
+	if (f->cb) {
+		f->cb(e);
+	} else if (f->screen) {
+		switch_screen(f->screen);
+	}
+}
+
+static void find_refresh(void) {
+	const char *q = lv_textarea_get_text(find_field);
+	while (*q == ' ') {
+		q++;
+	}
+	lv_obj_clean(find_list);
+	int shown = 0;
+	if (q[0]) {
+		for (int i = 0; i < find_count; i++) {
+			find_entry_t *f = &finds[i];
+			if (f->screen == devoptions_screen && !systempage_devoptions_unlocked()) {
+				continue;
+			}
+			if (find_contains(tr(f->name), q) || find_contains(f->where, q) || find_contains(f->about, q)) {
+				settingsrow_category(find_list, NULL, f->name, f->where, find_open_cb, f);
+				shown++;
+			}
+		}
+	}
+	lv_obj_set_hidden(find_empty, shown > 0);
+	lv_label_set_text(lv_obj_get_child(find_empty, 0), q[0] ? "No settings found" : "Search settings");
+	lv_label_set_text(lv_obj_get_child(find_empty, 1),
+					  q[0] ? "Try another word" : "Find settings by name or description");
+}
+
+static void find_changed_cb(lv_event_t *e) {
+	(void)e;
+	find_refresh();
+}
+
+static void find_accept_cb(lv_event_t *e) {
+	(void)e;
+	keyboard_set_visible(find_keyboard, false);
+}
+
+static void find_field_clicked_cb(lv_event_t *e) {
+	(void)e;
+	keyboard_set_visible(find_keyboard, true);
+}
+
+static void find_loaded_cb(lv_event_t *e) {
+	(void)e;
+	keyboard_set_visible(find_keyboard, true);
+}
+
+static void find_build(void) {
+	gui_config_t *cfg = find_cfg;
+	find_screen = lv_obj_create(NULL);
+	lv_obj_add_style(find_screen, &theme_style_screen, 0);
+	settingsrow_title(find_screen, cfg, "Search");
+	int top = settingsrow_content_top(cfg);
+	find_field = lv_textarea_create(find_screen);
+	lv_textarea_set_one_line(find_field, true);
+	lv_textarea_set_placeholder_text(find_field, "Search settings");
+	lv_obj_set_size(find_field, cfg->screen_width - 2 * cfg->padding, 56);
+	lv_obj_align(find_field, LV_ALIGN_TOP_LEFT, cfg->padding, top);
+	lv_obj_set_scrollbar_mode(find_field, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_set_style_bg_color(find_field, lv_color_hex(0x2a2a2a), 0);
+	lv_obj_set_style_bg_opa(find_field, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius(find_field, LV_RADIUS_CIRCLE, 0);
+	lv_obj_set_style_border_width(find_field, 1, 0);
+	lv_obj_set_style_border_color(find_field, lv_color_hex(0x3e3e3e), 0);
+	lv_obj_set_style_shadow_width(find_field, 0, 0);
+	lv_obj_set_style_pad_ver(find_field, 14, 0);
+	lv_obj_set_style_pad_left(find_field, 52, 0);
+	lv_obj_set_style_pad_right(find_field, 16, 0);
+	lv_obj_set_style_text_font(find_field, &font_ui_20, 0);
+	lv_obj_set_style_text_color(find_field, lv_color_white(), 0);
+	keyboard_style_caret(find_field);
+	lv_obj_add_event_cb(find_field, find_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+	lv_obj_add_event_cb(find_field, find_field_clicked_cb, LV_EVENT_CLICKED, NULL);
+	lv_obj_t *glass = lv_image_create(find_screen);
+	lv_image_set_src(glass, &icon_search);
+	lv_obj_add_style(glass, &theme_style_icon, 0);
+	lv_obj_set_style_image_opa(glass, LV_OPA_70, 0);
+	lv_obj_set_size(glass, 26, 26);
+	lv_image_set_inner_align(glass, LV_IMAGE_ALIGN_CONTAIN);
+	lv_obj_align(glass, LV_ALIGN_TOP_LEFT, cfg->padding + 16, top + (56 - 26) / 2);
+
+	int list_top = top + 56 + 8;
+	find_list = lv_obj_create(find_screen);
+	lv_obj_remove_style_all(find_list);
+	lv_obj_set_size(find_list, cfg->screen_width, cfg->screen_height - list_top - 316);
+	lv_obj_align(find_list, LV_ALIGN_TOP_LEFT, 0, list_top);
+	lv_obj_set_style_pad_hor(find_list, cfg->padding, 0);
+	lv_obj_set_flex_flow(find_list, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_style_pad_row(find_list, 2, 0);
+
+	find_empty = lv_obj_create(find_screen);
+	lv_obj_remove_style_all(find_empty);
+	lv_obj_set_size(find_empty, cfg->screen_width, 70);
+	lv_obj_align(find_empty, LV_ALIGN_TOP_MID, 0, list_top + 40);
+	lv_obj_remove_flag(find_empty, LV_OBJ_FLAG_CLICKABLE);
+	for (int i = 0; i < 2; i++) {
+		lv_obj_t *l = lv_label_create(find_empty);
+		lv_obj_set_width(l, lv_pct(100));
+		lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+		lv_obj_add_style(l, i ? &theme_style_text_dim : &theme_style_text, 0);
+		lv_obj_set_style_text_font(l, i ? &font_ui_16 : &font_ui_20_bold, 0);
+		lv_obj_align(l, LV_ALIGN_TOP_MID, 0, i * 30);
+	}
+
+	find_keyboard = keyboard_create(find_screen, cfg->screen_width, 316, find_field, &icon_search, NULL,
+									find_accept_cb, NULL);
+	lv_obj_add_event_cb(find_screen, find_loaded_cb, LV_EVENT_SCREEN_LOADED, NULL);
+	switcher_attach_back_gesture(find_screen);
+	find_refresh();
+}
+
+static void find_clicked_cb(lv_event_t *e) {
+	(void)e;
+	if (!find_screen) {
+		find_build();
+	}
+	lv_textarea_set_text(find_field, "");
+	find_refresh();
+	switch_screen(find_screen);
+}
+
+lv_obj_t *settings_search_screen(void) { return find_screen; }
+
+static void search_button(gui_config_t *cfg) {
+	lv_obj_t *btn = lv_btn_create(settings_screen);
+	lv_obj_set_size(btn, 56, 56);
+	lv_obj_align(btn, LV_ALIGN_TOP_RIGHT, -cfg->padding, cfg->top_bar_height + cfg->padding);
+	lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
+	lv_obj_set_style_bg_color(btn, lv_color_hex(0x1f1f1f), 0);
+	lv_obj_set_style_bg_opa(btn, LV_OPA_90, 0);
+	lv_obj_set_style_border_width(btn, 0, 0);
+	lv_obj_set_style_shadow_width(btn, 0, 0);
+	lv_obj_add_event_cb(btn, find_clicked_cb, LV_EVENT_CLICKED, NULL);
+	lv_obj_t *icon = lv_image_create(btn);
+	lv_image_set_src(icon, &icon_search);
+	lv_obj_add_style(icon, &theme_style_icon, 0);
+	lv_obj_center(icon);
+}
+
+/* ---- Library health: an R1 page (Spotify has no files to look after).
+ * Read-only counts of what makes a card library hard to browse, each opening
+ * a few examples; nothing is changed or deleted from here. ---- */
+static lv_obj_t *health_screen, *health_list;
+static const char *const HEALTH_NAMES[LIBRARY_HEALTH_KINDS] = {"Missing artist or album", "No genre",
+																"Possible duplicates", "Lossy files"};
+static void health_examples_cb(lv_event_t *e) {
+	int kind = (int)(intptr_t)lv_event_get_user_data(e);
+	static char paths[20][512];
+	int n = library_health_examples(kind, paths, 20);
+	lv_obj_t *body = bottomsheet_open(560, NULL);
+	lv_obj_set_style_pad_hor(body, 20, 0);
+	lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_style_pad_row(body, 6, 0);
+	lv_obj_t *t = lv_label_create(body);
+	lv_label_set_text(t, HEALTH_NAMES[kind]);
+	lv_obj_set_style_text_font(t, &font_ui_22_bold, 0);
+	lv_obj_set_style_text_color(t, lv_color_white(), 0);
+	for (int i = 0; i < n; i++) {
+		/* The file name over its folder: enough to find it on the card. */
+		char *slash = strrchr(paths[i], '/');
+		lv_obj_t *name = lv_label_create(body);
+		lv_label_set_text(name, slash ? slash + 1 : paths[i]);
+		lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+		lv_obj_set_width(name, lv_pct(100));
+		lv_obj_set_style_text_font(name, &font_ui_18, 0);
+		lv_obj_set_style_text_color(name, lv_color_white(), 0);
+		if (slash) {
+			*slash = '\0';
+			char *up = strrchr(paths[i], '/');
+			lv_obj_t *dir = lv_label_create(body);
+			lv_label_set_text(dir, up ? up + 1 : paths[i]);
+			lv_label_set_long_mode(dir, LV_LABEL_LONG_DOT);
+			lv_obj_set_width(dir, lv_pct(100));
+			lv_obj_set_style_text_font(dir, &font_ui_14, 0);
+			lv_obj_set_style_text_color(dir, lv_color_hex(0xb3b3b3), 0);
+		}
+	}
+}
+static void health_loaded_cb(lv_event_t *e) {
+	(void)e;
+	lv_obj_clean(health_list);
+	lv_obj_t *note = lv_label_create(health_list);
+	lv_label_set_text(note, "What could make your library harder to browse. Nothing here changes your files.");
+	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
+	lv_obj_set_width(note, lv_pct(100));
+	lv_obj_add_style(note, &theme_style_text_dim, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
+	lv_obj_set_style_pad_bottom(note, 8, 0);
+	for (int k = 0; k < LIBRARY_HEALTH_KINDS; k++) {
+		int n = library_health_count(k);
+		char sub[64];
+		snprintf(sub, sizeof(sub), n == 0 ? "None" : n == 1 ? "1 song" : "%d songs", n);
+		settingsrow_category(health_list, NULL, HEALTH_NAMES[k], sub, health_examples_cb, (void *)(intptr_t)k);
+	}
+}
+static void health_build(gui_config_t *cfg) {
+	health_screen = lv_obj_create(NULL);
+	health_list = settingsrow_page(health_screen, cfg, "Library health");
+	settingsrow_title_corner_slots(settingsrow_page_title(health_screen), cfg, 0);
+	switcher_attach_back_gesture(health_screen);
+	lv_obj_add_event_cb(health_screen, health_loaded_cb, LV_EVENT_SCREEN_LOADED, NULL);
+}
+
+/* The device's card at the top of Settings, as the account's heads iOS and
+ * Spotify settings: its picture and name, and the way to change them. */
+static void profile_card_cb(lv_event_t *e) {
+	(void)e;
+	switch_screen(sysinfo_screen);
+}
+static void profile_card(lv_obj_t *parent) {
+	lv_obj_t *card = lv_obj_create(parent);
+	lv_obj_remove_style_all(card);
+	lv_obj_set_size(card, lv_pct(100), 84);
+	lv_obj_set_style_radius(card, 12, 0);
+	lv_obj_set_style_bg_color(card, lv_color_hex(0x242424), 0);
+	lv_obj_set_style_bg_color(card, lv_color_hex(0x333333), LV_STATE_PRESSED);
+	lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+	lv_obj_set_scrollable(card, false);
+	lv_obj_set_clickable(card, true);
+	lv_obj_add_event_cb(card, profile_card_cb, LV_EVENT_CLICKED, NULL);
+	lv_obj_t *av = lv_obj_create(card);
+	lv_obj_remove_style_all(av);
+	lv_obj_set_size(av, 60, 60);
+	lv_obj_set_pos(av, 12, 12);
+	lv_obj_set_clickable(av, false);
+	deviceprofile_avatar(av, 60, &font_ui_24_bold);
+	lv_obj_update_layout(parent);
+	int text_w = lv_obj_get_content_width(parent) - 110;
+	lv_obj_t *name = lv_label_create(card);
+	lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+	lv_obj_set_size(name, text_w, lv_font_get_line_height(&font_ui_24_bold));
+	lv_obj_set_style_text_font(name, &font_ui_24_bold, 0);
+	lv_obj_set_style_text_color(name, lv_color_white(), 0);
+	lv_obj_set_pos(name, 86, 14);
+	deviceprofile_name_label(name);
+	lv_obj_t *sub = lv_label_create(card);
+	lv_label_set_text(sub, "Name, picture and device info");
+	lv_label_set_long_mode(sub, LV_LABEL_LONG_DOT);
+	lv_obj_set_size(sub, text_w, lv_font_get_line_height(&font_ui_16));
+	lv_obj_set_style_text_font(sub, &font_ui_16, 0);
+	lv_obj_set_style_text_color(sub, lv_color_hex(0xb3b3b3), 0);
+	lv_obj_set_pos(sub, 86, 48);
+	lv_obj_t *chev = lv_image_create(card);
+	lv_image_set_src(chev, &icon_chevron_right);
+	lv_obj_set_style_image_recolor(chev, lv_color_hex(0xb3b3b3), 0);
+	lv_obj_set_style_image_recolor_opa(chev, LV_OPA_COVER, 0);
+	lv_obj_align(chev, LV_ALIGN_RIGHT_MID, -12, 0);
+}
+
+void settings_build_categories(gui_config_t *cfg) {
+	if (!root_container) {
+		return;
+	}
+	lv_obj_t *c = root_container;
+	find_cfg = cfg;
+	const hub_row_t display[] = {{"appearance", appearance_screen, NULL},
+								 {"settings_screen", screensettings_screen, NULL},
+								 {"language", language_screen, NULL},
+								 {"settings_keyboard", keyboard_screen, NULL}};
+	const hub_row_t playback[] = {{"musicsettings_crossfade_gapless", musicsettings_fade_screen(), NULL},
+								  {"musicsettings_playback_queue", musicsettings_playback_screen(), NULL},
+								  {"musicsettings_now_playing", musicsettings_nowplaying_screen(), NULL}};
+	health_build(cfg);
+	const hub_row_t library[] = {{"musicsettings_scan_options", musicsettings_scan_screen(), NULL},
+								 {"musicsettings_library", musicsettings_library_screen(), NULL},
+								 {"Library health", health_screen, NULL},
+								 {"lastfm", lastfmsettings_screen(), NULL}};
+	const hub_row_t controls[] = {{"settings_keys", othersettings_screen, NULL},
+								  {"control_centre", ccsettings_screen, NULL}};
+	storagepage_init(cfg);
+	const hub_row_t device[] = {{"date_and_time", NULL, clock_clicked_cb},
+								{"Storage", storagepage_screen, NULL},
+								{"power", powersettings_screen, NULL},
+								{"system", systempage_screen, NULL},
+								{"developer_options", devoptions_screen, NULL}};
+#define N(a) ((int)(sizeof(a) / sizeof((a)[0])))
+	lv_obj_t *display_page = hub_page(cfg, "Content and display", display, N(display), NULL);
+	lv_obj_t *playback_page = hub_page(cfg, "Playback", playback, N(playback), NULL);
+	/* Spotify's Autoplay switch, with its explanation under it. */
+	settingsrow_toggle(hub_container, "Autoplay", &autoplay_switch, autoplay_toggled_cb);
+	lv_obj_t *note = lv_label_create(hub_container);
+	lv_label_set_text(note, "Keep listening to similar songs from your library when your music ends.");
+	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
+	lv_obj_set_width(note, lv_pct(100));
+	lv_obj_add_style(note, &theme_style_text_dim, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
+	lv_obj_set_style_pad_hor(note, 4, 0);
+	if (device_state_autoplay()) {
+		lv_obj_add_state(autoplay_switch, LV_STATE_CHECKED);
+	}
+	/* Album shuffle (an R1 addition): shuffle whole albums, each in order. */
+	settingsrow_toggle(hub_container, "Shuffle by album", &album_shuffle_switch, album_shuffle_cb);
+	lv_obj_t *anote = lv_label_create(hub_container);
+	lv_label_set_text(anote, "Shuffle plays whole albums in track order, the albums in random order.");
+	lv_label_set_long_mode(anote, LV_LABEL_LONG_WRAP);
+	lv_obj_set_width(anote, lv_pct(100));
+	lv_obj_add_style(anote, &theme_style_text_dim, 0);
+	lv_obj_set_style_text_font(anote, settingsrow_note_font(), 0);
+	lv_obj_set_style_pad_hor(anote, 4, 0);
+	if (config_get_bool("player", "shuffle_albums", false)) {
+		lv_obj_add_state(album_shuffle_switch, LV_STATE_CHECKED);
+	}
+	lv_obj_t *library_page = hub_page(cfg, "Your Library", library, N(library), NULL);
+	lv_obj_t *controls_page = hub_page(cfg, "Controls", controls, N(controls), NULL);
+	lv_obj_t *device_page = hub_page(cfg, "Device", device, N(device), &devoptions_row);
+
+	/* What Search settings can find, category by category. */
+	const struct {
+		const hub_row_t *rows;
+		int n;
+		const char *where;
+	} groups[] = {{display, N(display), "Content and display"}, {playback, N(playback), "Playback"},
+				  {library, N(library), "Your Library"},		{controls, N(controls), "Controls"},
+				  {device, N(device), "Device"}};
+#undef N
+	for (unsigned g = 0; g < sizeof(groups) / sizeof(groups[0]); g++) {
+		for (int i = 0; i < groups[g].n; i++) {
+			find_add(groups[g].rows[i].name, groups[g].where, "", groups[g].rows[i].screen, groups[g].rows[i].cb);
+		}
+	}
+	find_add("Autoplay", "Playback", "similar songs end continue", playback_page, NULL);
+	find_add("Audio quality", "Settings",
+			 "equalizer eq replaygain volume normalization dac bit-perfect gain filter mseb crossfeed balance",
+			 musicsettings_screen, NULL);
+	find_add("Apps and devices", "Settings", "wi-fi wifi bluetooth airplay transfer dlna headphones",
+			 wireless_screen, NULL);
+	find_add("Private session", "Settings", "history recents stats scrobble", settings_screen, NULL);
+	find_add("Update from SD card", "Device", "firmware update upgrade upt system", systempage_screen, NULL);
+
+	profile_card(c);
+	quick_tiles(c);
+	search_button(cfg);
+	/* Spotify's order: what you see, how it plays, the sound, then the rest. */
+	settingsrow_category(c, &sonix_icon_music, "Content and display",
+						 "Appearance \xc2\xb7 Screen \xc2\xb7 Language \xc2\xb7 Keyboard", switch_screen_cb, display_page);
+	settingsrow_category(c, &sonix_icon_volume, "Playback", "Crossfade \xc2\xb7 Gapless \xc2\xb7 Queue \xc2\xb7 Autoplay",
+						 switch_screen_cb, playback_page);
+	settingsrow_category(c, &sonix_icon_stats, "Audio quality",
+						 "Equalizer \xc2\xb7 Normalization \xc2\xb7 Bit-perfect \xc2\xb7 DAC", switch_screen_cb,
+						 musicsettings_screen);
+	settingsrow_category(c, &sonix_icon_library, "Your Library", "Scan \xc2\xb7 Artists and genres \xc2\xb7 Last.fm",
+						 switch_screen_cb, library_page);
+	settingsrow_category(c, &sonix_icon_speaker, "Apps and devices",
+						 "Wi-Fi \xc2\xb7 Bluetooth \xc2\xb7 AirPlay \xc2\xb7 Transfer", switch_screen_cb, wireless_screen);
+	settingsrow_category(c, &sonix_icon_controls, "Controls",
+						 "Buttons \xc2\xb7 Volume steps \xc2\xb7 Control centre", switch_screen_cb, controls_page);
+	settingsrow_category(c, &sonix_icon_gear, "Device", "Date and time \xc2\xb7 Storage \xc2\xb7 Power \xc2\xb7 System",
+						 switch_screen_cb, device_page);
+	settings_refresh_devoptions();
+}
+
 void settings_init(gui_config_t *cfg) {
 	lv_obj_t *container = settingsrow_page(settings_screen, cfg, "settings");
 
 	build_screen_page(cfg);
 	build_other_page(cfg);
 	build_keyboard_page(cfg);
+
+	// The reference layout lists Spotify's categories instead, once every page
+	// they open exists: settings_build_categories(), called after the music
+	// settings are built.
+	if (theme_reference()) {
+		root_container = container;
+		return;
+	}
 
 	// In groups, like Music: how it looks, how it is driven, the device.
 	settingsrow_heading(container, "settings_section_personal");

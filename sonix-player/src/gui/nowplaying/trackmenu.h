@@ -29,4 +29,7 @@ void trackmenu_details_open(const char *path);
 // list -- so nothing here rebinds or re-reads anything.
 void trackmenu_notify_now_playing(void);
 
+// The music sleep timer's choices, as a popover beside `anchor`.
+void trackmenu_music_sleep_timer(lv_obj_t *anchor);
+
 #endif /* TRACKMENU_H */

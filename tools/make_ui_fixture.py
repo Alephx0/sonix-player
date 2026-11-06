@@ -16,18 +16,27 @@ def create(repo, card):
               ('First Light','First Light','2025-02-01','single','Nova','Nova'),
               ('Guest Appearance','A Shared Horizon','2026-03-04','ep','Other','Other; Nova'),
               ('Without a Picture','Unillustrated','1995','album','Quiet Quartet','Quiet Quartet')]
+    # Several genres, so Search's genre carousel has tiles to scroll through.
+    GENRES=['Ambient','Electronic','Jazz','Lo-fi','Classical','Indie Pop']
     for i,(title,album,date,kind,owner,artists) in enumerate(fixtures):
         args=['ffmpeg','-v','error','-y','-f','lavfi','-i','anullsrc=r=44100:cl=mono']
         if i<3: args+=['-i',str(art/'cover.png'),'-map','0:a','-map','1:v','-c:v','png','-disposition:v','attached_pic']
         args+=['-t','180','-c:a','flac']
-        for k,v in dict(title=title,album=album,date=date,releasetype=kind,albumartist=owner,artist=artists,artists=artists,genre='Ambient').items(): args+=['-metadata',k+'='+v]
+        for k,v in dict(title=title,album=album,date=date,releasetype=kind,albumartist=owner,artist=artists,artists=artists,genre=GENRES[i],**({'composer':'Clara Weiss'} if i in (0,3) else {})).items(): args+=['-metadata',k+'='+v]
         subprocess.run(args+[str(music/f'track{i:03d}.flac')],check=True)
     (music/'track000.lrc').write_text('[00:00.00]An original line at the start\n[00:04.00]We walk into the night\n[00:10.00]A quiet light along the way\n[02:00.00]The morning is almost here\n')
     for i in range(6,257): shutil.copyfile(music/'track005.flac',music/f'track{i:03d}.flac')
+    books=card/'Audiobooks';books.mkdir()
+    # The first book is marked up with Vorbis chapter tags (CHAPTERnnn/NAME).
+    chapters=[('00:00:00.000','Opening'),('00:00:30.000','The Harbour'),('00:01:00.000','Low Tide'),('00:02:00.000','Morning')]
+    for i,(title,author) in enumerate([('The Quiet Coast','Mara Ellis'),('A Map of Tomorrow','Jonah Reed'),('Small Hours','Ada Vale')]):
+        marks=[]
+        for n,(at,name) in enumerate(chapters if i==0 else []): marks+=['-metadata',f'CHAPTER{n:03d}={at}','-metadata',f'CHAPTER{n:03d}NAME={name}']
+        subprocess.run(['ffmpeg','-v','error','-i',str(music/('track000.flac' if i<2 else 'track005.flac')),'-map','0','-c','copy','-metadata','title='+title,'-metadata','album='+title,'-metadata','artist='+author,'-metadata','albumartist='+author,'-metadata','description=An original audiobook fixture for testing local listening.',*marks,str(books/f'book{i}.flac')],check=True)
     player=repo/'sonix-player'; work=card.parent
     objects=[p for p in (player/'build_host').rglob('*') if p.suffix in ('.o','.opp') and p!=player/'build_host/main.o']
     subprocess.run(['objcopy','--redefine-sym','main=sonix_application_main',str(player/'build_host/main.o'),str(work/'app_main.o')],check=True)
-    libs=subprocess.check_output(['pkg-config','--libs','sdl2','freetype2','opusfile','wavpack'],text=True).split()
+    libs=[str(player/'.deps/webp/host/libwebpdecoder.a'),*subprocess.check_output(['pkg-config','--libs','sdl2','freetype2','opusfile','wavpack'],text=True).split()]
     subprocess.run(['gcc','-DHOST_BUILD=1','-I'+str(player),'-c',str(player/'tests/ui_fixture.c'),'-o',str(work/'fixture.o')],check=True)
     subprocess.run(['g++','-o',str(work/'fixture'),str(work/'fixture.o'),*[str(p) for p in objects],str(work/'app_main.o'),*libs,'-lpthread','-lm','-ldl','-lasound'],check=True)
     subprocess.run([str(work/'fixture'),str(card)],cwd=player,check=True,timeout=150,stdout=(work/'fixture.log').open('w'),stderr=subprocess.STDOUT)

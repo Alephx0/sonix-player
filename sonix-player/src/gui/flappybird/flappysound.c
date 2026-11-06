@@ -9,7 +9,6 @@
 #include "src/system/audio/audio.h"
 #include "src/system/core/respath.h"
 #include "src/system/decode/stb_vorbis_decl.h"
-#include "src/system/streaming/radio.h"
 
 #define SOUND_DIR SONIX_RESOURCE_DIR "/gui/flappybird/sounds"
 
@@ -132,9 +131,7 @@ static void *mixer_main(void *unused) {
 	}
 
 	audio_stop();
-	if (radio_is_playing()) {
-		radio_stop();
-	}
+	
 
 	if (stop_flag || !audio_external_begin_latency(RATE, 2, 16, BUFFER_MS)) {
 		if (!stop_flag) {

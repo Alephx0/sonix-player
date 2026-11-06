@@ -8,6 +8,10 @@
 extern lv_obj_t *settings_screen;
 
 void settings_init(gui_config_t *cfg);
+// The reference layout's Spotify categories, once every page they open is built.
+void settings_build_categories(gui_config_t *cfg);
+// The Search settings page once it has been opened (NULL before).
+lv_obj_t *settings_search_screen(void);
 
 // Hands power.c the screen timeout as it was last left ([power]
 // screen_off_seconds). Call once at startup, after power_init(); the Screen

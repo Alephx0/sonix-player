@@ -1189,9 +1189,6 @@ bool albumart_load_candidate(const char *filepath, int index, albumart_t *out) {
 		return ok;
 	}
 
-	// The path IS a picture. There is no track here to read tags from and no
-	// folder to search: a radio station's downloaded icon is simply the
-	// artwork, and the player asks for it by path like any other cover.
 	if (has_extension(filepath, ".jpg") || has_extension(filepath, ".jpeg") || has_extension(filepath, ".png")) {
 		return index == 0 && read_whole_file(filepath, out);
 	}

@@ -38,6 +38,15 @@
 #define TOAST_RED lv_color_make(0xe0, 0x1b, 0x24)
 
 static lv_obj_t *veil;
+
+// In the reference layout a result message is a Spotify-style snackbar: a short
+// bar above the mini-player and navigation that does not block the page and is
+// replaced by the next one. Its colour is provisional (no dated evidence of
+// Spotify's own; see docs/records). Busy cards keep the centred, blocking card:
+// the user is waiting on that work.
+#define SNACKBAR_BOTTOM (68 + 64 + 12 + 8) // nav, mini-player, their gap, margin
+#define SNACKBAR_SIDE 16
+#define SNACKBAR_GLYPH 26
 static lv_obj_t *card;
 static lv_obj_t *icon;
 static lv_obj_t *label;
@@ -128,9 +137,52 @@ void toast_init(gui_config_t *cfg) {
 	lv_timer_pause(hide_timer);
 }
 
+// Puts the card in snackbar form, or back in the centred form, before it shows.
+static void snackbar_layout(bool on) {
+	int32_t w = lv_display_get_horizontal_resolution(lv_display_get_default());
+	lv_obj_set_style_bg_opa(veil, on ? LV_OPA_TRANSP : LV_OPA_60, 0);
+	// Not clickable: taps reach the page under a snackbar.
+	lv_obj_set_clickable(veil, !on);
+	lv_obj_set_clickable(card, !on);
+	lv_obj_set_flex_flow(card, on ? LV_FLEX_FLOW_ROW : LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_align(card, on ? LV_FLEX_ALIGN_START : LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+						  LV_FLEX_ALIGN_CENTER);
+	lv_obj_set_style_radius(card, on ? 8 : 20, 0);
+	lv_obj_set_style_pad_all(card, on ? 14 : 20, 0);
+	lv_obj_set_style_pad_gap(card, on ? 12 : 16, 0);
+	if (on) {
+		lv_obj_set_style_bg_color(card, lv_color_make(62, 62, 62), 0);
+	} else {
+		lv_obj_remove_local_style_prop(card, LV_STYLE_BG_COLOR, 0);
+	}
+	lv_obj_set_size(icon, on ? SNACKBAR_GLYPH : LV_SIZE_CONTENT, on ? SNACKBAR_GLYPH : LV_SIZE_CONTENT);
+	lv_image_set_inner_align(icon, on ? LV_IMAGE_ALIGN_STRETCH : LV_IMAGE_ALIGN_DEFAULT);
+	lv_obj_set_style_text_font(label, on ? &font_ui_18 : &font_ui_24, 0);
+	lv_obj_set_style_text_align(label, on ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER, 0);
+	lv_obj_set_flex_grow(label, on ? 1 : 0);
+	lv_obj_set_width(label, on ? LV_SIZE_CONTENT : lv_pct(100));
+	if (on) {
+		lv_obj_set_size(card, w - 2 * SNACKBAR_SIDE, LV_SIZE_CONTENT);
+		lv_obj_set_style_min_height(card, 0, 0);
+		lv_obj_align(card, LV_ALIGN_BOTTOM_MID, 0, -SNACKBAR_BOTTOM);
+	} else {
+		lv_obj_center(card);
+	}
+}
+
 // The card's width and least height for `text`, with or without something
 // above it.
+static void fit_card_centred(const char *text, bool above);
 static void fit_card(const char *text, bool above) {
+	if (theme_reference()) {
+		snackbar_layout(true);
+		return;
+	}
+	snackbar_layout(false);
+	fit_card_centred(text, above);
+}
+
+static void fit_card_centred(const char *text, bool above) {
 	int32_t width = TOAST_WIDTH;
 	if (text && strlen(text) > TOAST_WIDE_CHARS) {
 		int32_t room = lv_display_get_horizontal_resolution(lv_display_get_default()) - 2 * TOAST_SIDE_MARGIN;
@@ -205,7 +257,11 @@ void toast_busy(const char *text) {
 		lv_obj_move_to_index(busy_spinner, 0);
 	}
 	const char *shown = text ? tr(text) : "";
-	fit_card(shown, true);
+	snackbar_layout(false);
+	if (theme_reference()) {
+		lv_obj_set_width(card, TOAST_WIDTH);
+	}
+	fit_card_centred(shown, true);
 	lv_label_set_text(label, shown);
 	lv_obj_set_hidden(veil, false);
 	lv_obj_move_foreground(veil);

@@ -460,17 +460,10 @@ build_one() {
 	MODEL_N="$(cd "$ASSETS_DIR/$MODEL_DIR" && find . -type f | wc -l | tr -d ' ')"
 	say "    $MODEL_DIR/: $MODEL_N files"
 
-	# The streaming keys go in sealed, as streaming-keys.bin. One left in the
-	# clear in the assets is not shipped: an image is unpacked by anyone who
-	# downloads it. See tools/seal_streamkeys.py in sonix-player.
-	PLAIN_KEYS="usr/resource/sonix/components/streaming-keys.ini"
-	if [ -f "$SQUASH_DIR/$PLAIN_KEYS" ]; then
-		rm -f "$SQUASH_DIR/$PLAIN_KEYS"
-		warn "$MODEL_DIR/$PLAIN_KEYS is in the clear and was left out; seal it with tools/seal_streamkeys.py"
-	fi
-	if [ ! -f "$SQUASH_DIR/usr/resource/sonix/components/streaming-keys.bin" ]; then
-		warn "no streaming-keys.bin in $MODEL_DIR: Tidal, Qobuz and podcasts will be off"
-	fi
+	# This branch has no provider runtime. Never ship keys/helpers left in an old overlay.
+	rm -f "$SQUASH_DIR/usr/resource/sonix/components/streaming-keys.ini" \
+	      "$SQUASH_DIR/usr/resource/sonix/components/streaming-keys.bin" \
+	      "$SQUASH_DIR/usr/bin/spotiflac-core"
 
 	# The stock Wi-Fi/Bluetooth driver goes once bcm_wlbt_power and brcmfmac
 	# have taken its place: only when the module list no longer loads it.
@@ -549,6 +542,21 @@ build_one() {
 		[ -f "$SQUASH_DIR/$rel" ] || continue
 		chmod 755 "$SQUASH_DIR/$rel"
 	done
+
+	# Scripts with a CR in them: a checkout with core.autocrlf turns the
+	# overlay's LF into CRLF, "#!/bin/sh\r" names an interpreter that does not
+	# exist, and the init script's `-f` test passes anyway -- the same silent
+	# boot logo as above. The stock tree has none, so any is the overlay's.
+	CR_SCRIPTS="$(cd "$SQUASH_DIR" && for d in etc/init.d usr/bin usr/sbin module_driver; do
+		[ -d "$d" ] && find "$d" -type f
+	done | while IFS= read -r f; do
+		if [ "$(head -c 2 "$f")" = "#!" ] && grep -q "$(printf '\r')" "$f"; then
+			echo "$f"
+		fi
+	done)"
+	[ -z "$CR_SCRIPTS" ] || die "scripts with CRLF line endings in the image:
+$CR_SCRIPTS
+	  The assets were checked out with core.autocrlf; see assets/.gitattributes."
 
 	# The two that decide whether the player is ever started at all.
 	for rel in "$NEW_LAUNCHER" "$INIT_SCRIPT"; do

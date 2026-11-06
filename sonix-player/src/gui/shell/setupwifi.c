@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "lvgl/lvgl.h"
+#include "src/gui/shell/settingsrow.h"
 
 #include "src/gui/fonts/fonts.h"
 #include "src/gui/settings/timeset.h"
@@ -317,7 +318,7 @@ static void build_password_panel(gui_config_t *cfg) {
 	lv_obj_t *hint = lv_label_create(pw_panel);
 	lv_label_set_text(hint, tr("wifi_network_password"));
 	lv_obj_add_style(hint, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(hint, &font_ui_22, 0);
+	lv_obj_set_style_text_font(hint, settingsrow_note_font(), 0);
 	lv_obj_align(hint, LV_ALIGN_TOP_LEFT, cfg->padding, top);
 
 	pw_field = lv_textarea_create(pw_panel);

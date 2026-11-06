@@ -1,5 +1,10 @@
 # SpotBye 2.0.0 inspection and native parity
 
+> Historical inspection record (2026-10-28). The table below describes that
+> milestone, not today's implementation. Use [current parity status](spotbye-status.md)
+> for implemented features, evidence and remaining work.
+
+
 Inspected 2026-10-28. This is a partial native adaptation, not full SpotBye
 provider compatibility and not a flashed/tested R1 firmware.
 

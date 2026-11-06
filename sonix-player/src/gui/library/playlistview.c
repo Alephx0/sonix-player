@@ -3,6 +3,7 @@
 #include "medialist.h"
 #include "src/gui/fonts/fonts.h"
 #include "src/gui/shell/bottomsheet.h"
+#include "src/gui/shell/icons.h"
 #include "src/gui/shell/keyboard.h"
 #include "src/gui/shell/theme.h"
 #include "src/system/library/library.h"
@@ -74,12 +75,45 @@ static void find_draw(lv_event_t *e) {
 	lv_obj_clean(results);
 	lv_obj_update_layout(results);
 	int w = lv_obj_get_width(results);
+	/* Spotify's "Add to this playlist" rows: a sleeve, the title over the
+	 * artist, and a circled plus that becomes a green check once added. */
 	for (int i = 0; i < found; i++) {
-		lv_obj_t *r = button(results, NULL, w, 64, choose, (void *)(intptr_t)i);
-		lv_obj_t *l = label(r, hits[i].title, w - 48, 48, &font_ui_18, false);
-		lv_obj_set_pos(l, 0, 8);
-		l = label(r, playlists_has_track(name, hits[i].path) ? "Added" : "+", 44, 24, &font_ui_14, true);
-		lv_obj_align(l, LV_ALIGN_RIGHT_MID, 0, 0);
+		bool added = playlists_has_track(name, hits[i].path);
+		lv_obj_t *r = button(results, NULL, w, 68, choose, (void *)(intptr_t)i);
+		lv_obj_set_style_bg_color(r, lv_color_hex(0x2a2a2a), LV_STATE_PRESSED);
+		lv_obj_set_style_bg_opa(r, LV_OPA_COVER, LV_STATE_PRESSED);
+		lv_obj_set_style_radius(r, 6, 0);
+		lv_obj_t *art = box(r, 52, 52);
+		lv_obj_set_pos(art, 0, 8);
+		lv_obj_set_style_bg_color(art, lv_color_hex(0x333333), 0);
+		lv_obj_set_style_bg_opa(art, LV_OPA_COVER, 0);
+		lv_obj_set_style_radius(art, 4, 0);
+		lv_obj_t *note = lv_image_create(art);
+		lv_image_set_src(note, &icon_music_note);
+		lv_obj_set_size(note, 26, 26);
+		lv_image_set_inner_align(note, LV_IMAGE_ALIGN_CONTAIN);
+		lv_obj_set_style_image_recolor(note, lv_color_hex(0xb3b3b3), 0);
+		lv_obj_set_style_image_recolor_opa(note, LV_OPA_COVER, 0);
+		lv_obj_center(note);
+		lv_obj_t *l = label(r, hits[i].title, w - 116, 28, &font_ui_20, false);
+		lv_obj_set_pos(l, 66, hits[i].artist[0] ? 8 : 20);
+		if (hits[i].artist[0]) {
+			l = label(r, hits[i].artist, w - 116, 24, &font_ui_16, true);
+			lv_obj_set_pos(l, 66, 38);
+		}
+		lv_obj_t *mark = lv_image_create(r);
+		lv_image_set_src(mark, added ? &icon_circle_check : &icon_plus);
+		lv_obj_set_size(mark, 30, 30);
+		lv_image_set_inner_align(mark, LV_IMAGE_ALIGN_CONTAIN);
+		lv_obj_set_style_image_recolor(mark, lv_color_hex(added ? 0x1ed760 : 0xffffff), 0);
+		lv_obj_set_style_image_recolor_opa(mark, LV_OPA_COVER, 0);
+		if (!added) {
+			lv_obj_set_style_border_width(mark, 2, 0);
+			lv_obj_set_style_border_color(mark, lv_color_hex(0xb3b3b3), 0);
+			lv_obj_set_style_radius(mark, LV_RADIUS_CIRCLE, 0);
+			lv_obj_set_style_pad_all(mark, 5, 0);
+		}
+		lv_obj_align(mark, LV_ALIGN_RIGHT_MID, -6, 0);
 	}
 	if (search_page)
 		button(results, "Previous songs", w, 48, find_page, (void *)-1);
@@ -91,12 +125,12 @@ static void find_draw(lv_event_t *e) {
 static void find_done(lv_event_t *e) {
 	(void)e;
 	keyboard_set_visible(keyboard, false);
-	lv_obj_set_height(results, lv_obj_get_height(sheet) - 132);
+	lv_obj_set_height(results, lv_obj_get_height(sheet) - 116);
 }
 static void find_focus(lv_event_t *e) {
 	(void)e;
 	keyboard_set_visible(keyboard, true);
-	lv_obj_set_height(results, lv_obj_get_height(sheet) - 402);
+	lv_obj_set_height(results, lv_obj_get_height(sheet) - 386);
 }
 static void find_cleanup(void) {
 	sheet = field = results = NULL;
@@ -107,23 +141,31 @@ void playlistview_add_songs(void) {
 	search_page = 0;
 	int w = lv_display_get_horizontal_resolution(NULL), h = lv_display_get_vertical_resolution(NULL);
 	sheet = bottomsheet_open(h - 60, find_cleanup);
-	lv_obj_t *l = label(sheet, "Add songs", w - 40, 38, &font_ui_24_bold, false);
-	lv_obj_set_pos(l, 20, 10);
+	lv_obj_t *l = label(sheet, "Add to this playlist", w - 100, 34, &font_ui_24_bold, false);
+	lv_obj_set_pos(l, 20, 4);
 	field = lv_textarea_create(sheet);
-	lv_obj_add_style(field, &theme_style_card, 0);
-	lv_obj_add_style(field, &theme_style_text, 0);
-	lv_obj_set_size(field, w - 40, 56);
-	lv_obj_set_pos(field, 20, 58);
+	lv_obj_remove_style_all(field);
+	lv_obj_set_size(field, w - 40, 48);
+	lv_obj_set_pos(field, 20, 50);
 	lv_textarea_set_one_line(field, true);
 	lv_textarea_set_max_length(field, 200);
-	lv_textarea_set_placeholder_text(field, "Search local songs");
+	lv_textarea_set_placeholder_text(field, "Search");
 	lv_obj_set_style_text_font(field, &font_ui_20, 0);
-	results = box(sheet, w - 40, lv_obj_get_height(sheet) - 402);
-	lv_obj_set_pos(results, 20, 124);
+	lv_obj_set_style_text_color(field, lv_color_white(), 0);
+	lv_obj_set_style_text_color(field, lv_color_hex(0x8a8a8a), LV_PART_TEXTAREA_PLACEHOLDER);
+	lv_obj_set_style_bg_color(field, lv_color_hex(0x333333), 0);
+	lv_obj_set_style_bg_opa(field, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius(field, 6, 0);
+	lv_obj_set_style_pad_hor(field, 14, 0);
+	lv_obj_set_style_pad_ver(field, 11, 0);
+	keyboard_style_caret(field);
+	results = box(sheet, w - 40, lv_obj_get_height(sheet) - 116);
+	lv_obj_set_pos(results, 20, 108);
 	lv_obj_set_scrollable(results, true);
 	lv_obj_set_scroll_dir(results, LV_DIR_VER);
 	lv_obj_set_flex_flow(results, LV_FLEX_FLOW_COLUMN);
 	keyboard = keyboard_create(sheet, w, 270, field, NULL, "Done", find_done, NULL);
+	keyboard_set_visible(keyboard, false); // the list first; the keyboard on a tap
 	lv_obj_add_event_cb(field, find_draw, LV_EVENT_VALUE_CHANGED, NULL);
 	lv_obj_add_event_cb(field, find_focus, LV_EVENT_CLICKED, NULL);
 	find_draw(NULL);

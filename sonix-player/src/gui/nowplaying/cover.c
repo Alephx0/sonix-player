@@ -14,11 +14,11 @@
 #include "src/system/db/sqlite3.h"
 
 #include "src/system/library/albumart.h"
-#include "src/system/streaming/podcastcache.h"
 #include "src/system/image/art_shrink.h"
 #include "src/system/image/jpeg_planes.h"
 #include "src/system/image/jpeg_scaled.h"
 #include "src/system/image/png_scaled.h"
+#include "src/system/image/webp_scaled.h"
 #include "src/system/image/stb_image_decl.h"
 #include "src/system/core/utils.h"
 
@@ -167,6 +167,10 @@ static bool decode_raw(const uint8_t *data, size_t size, int max_box, raw_image_
 
 	if (!data || size == 0)
 		return false;
+	if(size>=12 && !memcmp(data,"RIFF",4) && !memcmp(data+8,"WEBP",4)) {
+		out->pixels=webp_scaled_decode(data,size,max_box>0?max_box:1024,&out->w,&out->h);
+		return out->pixels!=NULL;
+	}
 
 	if (size >= 2 && data[0] == 0xFF && data[1] == 0xD8 && max_box > 0) {
 		int w = 0, h = 0, src_w = 0, src_h = 0;
@@ -1675,16 +1679,7 @@ bool cover_load_player_images(const char *filepath, int cover_w, int cover_h, co
 
 	int used = -1;
 	cover_build_t built = build_from_sources_at(filepath, false, reqs, n, results, &used, NULL);
-	if (built == COVER_BUILD_NONE) {
-		// A podcast episode with no cover file beside it: fetch it now, on the
-		// loader thread, which can afford to wait on a network request, then
-		// try again. This covers episodes started from the queue, whose tags
-		// carry the cover URL but whose jpg was never downloaded.
-		if (!podcastcache_ensure_cover(filepath)) {
-			return false;
-		}
-		built = build_from_sources_at(filepath, false, reqs, n, results, &used, NULL);
-	}
+	if (built == COVER_BUILD_NONE) return false;
 	bool ok = (built == COVER_BUILD_OK);
 
 	// Kept only when the picture came from the source the id was taken from:
@@ -2300,6 +2295,40 @@ bool cover_thumb_cached(const char *path, int size, cover_image_t *out) {
 	return false;
 }
 
+// Every list asks for its own size (48, 56, 58, 64, 66, 72, 78 px ...), and
+// each size was a decode of its own: the tags read off the card and the JPEG
+// decoded again for the same track. A track's thumbnail below this size is
+// made from one master thumbnail of the track at this size instead -- decoded
+// once, kept on disk with the others -- by a shrink of a few thousand pixels
+// (device round 4: images were slow to fill in).
+#define THUMB_MASTER_SIZE 128
+
+// `master` (RGB565) shrunk to fit `size`, as the decode would have fitted it.
+static bool thumb_from_master(const cover_image_t *master, int size, cover_image_t *out) {
+	int w = (int)master->dsc.header.w, h = (int)master->dsc.header.h;
+	if (w < 1 || h < 1 || !master->pixels) {
+		return false;
+	}
+	raw_image_t raw = {malloc((size_t)w * h * 3), w, h};
+	if (!raw.pixels) {
+		return false;
+	}
+	const uint16_t *src = (const uint16_t *)master->pixels;
+	size_t stride = master->dsc.header.stride ? master->dsc.header.stride / 2 : (size_t)w;
+	for (int y = 0; y < h; y++) {
+		for (int x = 0; x < w; x++) {
+			uint16_t c = src[(size_t)y * stride + x];
+			uint8_t *px = raw.pixels + ((size_t)y * w + x) * 3;
+			px[0] = (uint8_t)(((c >> 11) & 0x1f) * 255 / 31);
+			px[1] = (uint8_t)(((c >> 5) & 0x3f) * 255 / 63);
+			px[2] = (uint8_t)((c & 0x1f) * 255 / 31);
+		}
+	}
+	bool ok = make_scaled(&raw, size, size, COVER_FIT_CONTAIN, out);
+	free(raw.pixels);
+	return ok;
+}
+
 bool cover_thumb_load(const char *path, bool is_dir, int size, cover_image_t *out) {
 	memset(out, 0, sizeof(*out));
 
@@ -2320,6 +2349,35 @@ bool cover_thumb_load(const char *path, bool is_dir, int size, cover_image_t *ou
 		if (thumb_db_load(key, out, &has_image)) {
 			return has_image;
 		}
+	}
+
+	char master_key[32];
+	if (cacheable && !is_dir && size < THUMB_MASTER_SIZE &&
+		thumb_key(master_key, sizeof(master_key), path, THUMB_MASTER_SIZE, false)) {
+		cover_image_t master;
+		memset(&master, 0, sizeof(master));
+		bool master_has = false, master_known = thumb_db_load(master_key, &master, &master_has);
+		if (!master_known) {
+			cover_build_t m = thumb_load_uncached(path, false, THUMB_MASTER_SIZE, &master);
+			if (m != COVER_BUILD_FAILED) {
+				master_known = true;
+				master_has = m == COVER_BUILD_OK;
+				thumb_db_store(master_key, &master, master_has);
+			}
+		}
+		if (master_known && !master_has) {
+			thumb_db_store(key, out, false); // no artwork at any size
+			return false;
+		}
+		if (master_known) {
+			bool ok = thumb_from_master(&master, size, out);
+			cover_free(&master);
+			if (ok) {
+				thumb_db_store(key, out, true);
+				return true;
+			}
+		}
+		// A master that could not be had or shrunk: the size of its own.
 	}
 
 	cover_build_t built = thumb_load_uncached(path, is_dir, size, out);

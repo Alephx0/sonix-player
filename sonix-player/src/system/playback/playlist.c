@@ -200,6 +200,15 @@ bool playlist_priority_add(const char *path) {
     revision++;
     return true;
 }
+/* "Play next": in front of everything queued by hand, so it is the very next
+ * track -- the Rockbox "insert next" Spotify does not offer. */
+bool playlist_priority_add_next(const char *path) {
+    if (!playlist_priority_add(path)) return false;
+    char *last = priority[priority_count - 1];
+    memmove(priority + 1, priority, (priority_count - 1) * sizeof(*priority));
+    priority[0] = last;
+    return true;
+}
 void playlist_priority_clear(void) {
     paths_clear(priority, &priority_count);
     revision++;
@@ -249,6 +258,55 @@ void playlist_note_album_restored(void) {
 }
 
 const char *playlist_album(void) { return queue_album; }
+
+// The name the queue's context is shown under ("Next from Night Drive"): a
+// playlist, Liked Songs, a genre. Separate from the album label, which also
+// drives album chaining. Cleared with every new queue, written to the config so
+// a restored queue keeps its name; the saved name is read once, before the
+// first clear, so the boot restore can put it back.
+// The kind beside it ("PLAYLIST", "ARTIST") is what Now Playing's header says
+// the context is, and follows the same lifecycle.
+static char queue_context_name[160];
+static char saved_context_name[160];
+static char queue_context_kind[24];
+static char saved_context_kind[24];
+static bool saved_context_loaded;
+
+static void load_saved_context_name(void) {
+	if (!saved_context_loaded) {
+		snprintf(saved_context_name, sizeof(saved_context_name), "%s", config_get("player", "context_name", ""));
+		snprintf(saved_context_kind, sizeof(saved_context_kind), "%s", config_get("player", "context_kind", ""));
+		saved_context_loaded = true;
+	}
+}
+
+static void clear_context_name(void) {
+	load_saved_context_name();
+	if (!queue_context_name[0] && !queue_context_kind[0] && !config_get("player", "context_name", "")[0] &&
+		!config_get("player", "context_kind", "")[0]) {
+		return;
+	}
+	queue_context_name[0] = '\0';
+	queue_context_kind[0] = '\0';
+	config_set("player", "context_name", "");
+	config_set("player", "context_kind", "");
+}
+
+void playlist_set_context(const char *kind, const char *name) {
+	snprintf(queue_context_name, sizeof(queue_context_name), "%s", name ? name : "");
+	snprintf(queue_context_kind, sizeof(queue_context_kind), "%s", name && name[0] && kind ? kind : "");
+	config_set("player", "context_name", queue_context_name);
+	config_set("player", "context_kind", queue_context_kind);
+	config_save();
+}
+
+void playlist_set_context_name(const char *name) { playlist_set_context("", name); }
+
+void playlist_restore_context_name(void) { playlist_set_context(saved_context_kind, saved_context_name); }
+
+const char *playlist_context_name(void) { return queue_context_name; }
+
+const char *playlist_context_kind(void) { return queue_context_kind; }
 
 bool playlist_is_junk_name(const char *name) {
 	if (!name || !name[0]) {
@@ -380,6 +438,7 @@ static void context_clear(void) {
 	chain_valid = false;
 	queue_album[0] = '\0'; // a new queue is not an album until somebody says so
 	persist_album();
+	clear_context_name();
 	revision++;
 }
 
@@ -458,6 +517,61 @@ static void order_identity(size_t start_entry) {
 // Switching to shuffle with something already playing is a different question
 // and has its own answer -- see order_shuffle_upcoming(), which deals only what
 // is ahead and leaves the history alone.
+// Album shuffle (an R1 addition, [player] shuffle_albums): the deal keeps
+// each album -- by its album tag, else its folder -- together and in track
+// order, and shuffles the albums. order[from..] is regrouped: groups come in
+// the order the plain deal first reached them; `lead` (an entry, or SIZE_MAX)
+// leads, its album continuing from it first.
+typedef struct {
+	uint32_t album;
+	size_t rank, key, entry;
+} album_slot_t;
+static uint32_t folder_hash(const char *path) {
+	const char *slash = path ? strrchr(path, '/') : NULL;
+	uint32_t h = 2166136261u;
+	for (const char *c = path; c && *c && c != slash; c++) h = (h ^ (uint8_t)*c) * 16777619u;
+	return h;
+}
+/* The album a track is on: its album tag as the library has it, the folder
+ * when the library does not know the file. */
+static uint32_t album_hash(const char *path) {
+	char album[512];
+	if (path && library_track_album_value(path, album, sizeof(album)) && album[0]) {
+		uint32_t h = 2166136261u;
+		for (const char *c = album; *c; c++) h = (h ^ (uint8_t)*c) * 16777619u;
+		return h;
+	}
+	return folder_hash(path);
+}
+static int album_slot_cmp(const void *a, const void *b) {
+	const album_slot_t *x = a, *y = b;
+	if (x->rank != y->rank) return x->rank < y->rank ? -1 : 1;
+	return x->key < y->key ? -1 : x->key > y->key;
+}
+static void order_group_albums(size_t from, size_t lead) {
+	if (!order || from >= entry_count || !config_get_bool("player", "shuffle_albums", false)) return;
+	size_t n = entry_count - from;
+	album_slot_t *slot = malloc(n * sizeof(*slot));
+	if (!slot) return;
+	uint32_t lead_album = lead != SIZE_MAX ? album_hash(entry_path(lead)) : 0;
+	for (size_t i = 0; i < n; i++) {
+		size_t e = order[from + i];
+		slot[i].entry = e;
+		slot[i].album = album_hash(entry_path(e));
+		/* Within the leading album: from the lead onwards, then the start. */
+		slot[i].key = lead != SIZE_MAX && slot[i].album == lead_album && e < lead ? e + entry_count : e;
+	}
+	for (size_t i = 0; i < n; i++) {
+		size_t first = i;
+		for (size_t j = 0; j < i; j++)
+			if (slot[j].album == slot[i].album) { first = slot[j].rank; break; }
+		slot[i].rank = lead != SIZE_MAX && slot[i].album == lead_album ? 0 : (first == i ? i + 1 : first);
+	}
+	qsort(slot, n, sizeof(*slot), album_slot_cmp);
+	for (size_t i = 0; i < n; i++) order[from + i] = slot[i].entry;
+	free(slot);
+}
+
 static void order_shuffle_from(size_t current_entry) {
 	if (!order || entry_count == 0) {
 		return;
@@ -485,6 +599,7 @@ static void order_shuffle_from(size_t current_entry) {
 			break;
 		}
 	}
+	order_group_albums(0, current_entry);
 	pos = 0;
 	revision++;
 }
@@ -509,6 +624,7 @@ static void order_shuffle_round(void) {
 		order[i] = order[j];
 		order[j] = tmp;
 	}
+	order_group_albums(0, SIZE_MAX);
 
 	pos = 0;
 	revision++;
@@ -536,6 +652,8 @@ static void order_shuffle_upcoming(void) {
 		order[i] = order[j];
 		order[j] = tmp;
 	}
+	/* The playing album goes on first, then the others. */
+	order_group_albums(pos + 1, order[pos]);
 	revision++;
 }
 
@@ -815,7 +933,9 @@ void playlist_set_enqueue_at_end(bool at_end) {
 }
 
 bool playlist_enqueue(const char *path) {
-	if (!playlist_enqueue_at_end()) {
+	// The reference (Spotify-style) layout has one meaning for "Add to queue":
+	// the end of the manual queue, played before the context continues.
+	if (!playlist_enqueue_at_end() || config_get_int("screen", "player_layout_alt", 3) == 3) {
 		return playlist_priority_add(path);
 	}
 	// A slot past the last appends: the end of the queue in playing order,
@@ -1529,6 +1649,17 @@ void playlist_set_repeat(int repeat) {
     playlist_set_mode(shuffle ? (repeat == 2 ? PLAYBACK_MODE_SHUFFLE_REPEAT_ONE : repeat == 1 ? PLAYBACK_MODE_SHUFFLE_REPEAT : PLAYBACK_MODE_SHUFFLE) :
         (repeat == 2 ? PLAYBACK_MODE_REPEAT_ONE : repeat == 1 ? PLAYBACK_MODE_REPEAT_ALL : PLAYBACK_MODE_NORMAL));
 }
+// A fresh deal with the playing track first, for an explicit shuffled Play of
+// the whole context. Selecting a row in the same context keeps its deal (see
+// playlist_load_index); pressing Play starts the shuffle over, so every other
+// track is still to come. History and the manual queue are untouched.
+void playlist_shuffle_restart(void) {
+	if (!shuffling() || !order || entry_count == 0 || pos >= entry_count) {
+		return;
+	}
+	order_shuffle_from(order[pos]);
+}
+
 void playlist_reshuffle(void) {
     if (!shuffling()) playlist_set_shuffle(true);
     else order_shuffle_upcoming();

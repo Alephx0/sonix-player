@@ -5,49 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// SonixLink: the player, answered over the network by a phone.
-//
-// This protocol belongs to the project, not to the vendor. No bespoke framing,
-// no length-prefixed records, no binary type signatures: it is HTTP with JSON
-// bodies, and the library is not paged over the wire at all -- the phone
-// downloads the index file once and queries it with its own SQLite. Everything
-// that goes wrong is then visible in a browser.
-//
-//     GET  /api/info               what this player is, and how old its index
-//     GET  /api/db                 the index file itself
-//     GET  /api/covers             the player's own thumbnail cache, as a file
-//     GET  /api/state              what is playing, volume, mode, battery
-//     GET  /api/queue              the playback queue around the current track
-//     GET  /api/history?limit=N    the latest N entries of what the queue has
-//                                  played (playhistory.h), oldest first
-//     GET  /api/favourites         the starred tracks, as they stand now
-//     GET  /api/playlists          the playlists' names and sizes, as they stand
-//     GET  /api/playlist?name=...  one playlist's tracks, in its order
-//     GET  /api/cover?path=...     the artwork beside a track, when there is one
-//     GET  /api/art?path=...       the same track's artwork whole, tag or file,
-//                                  undecoded: the phone decodes it
-//     GET  /api/browse?path=...    one folder of the card, as the file browser
-//                                  lists it
-//     GET  /api/ping               the app's heartbeat: nothing but "still here"
-//     GET  /api/bye                the app has let go: the status bar forgets it
-//                                  at once rather than after PEER_ALIVE_MS
-//     POST /api/command?do=...     play, pause, next, prev, seek, volume, mode,
-//                                  favourite, scan, and the queue page's own:
-//                                  queue_remove (indices in the body),
-//                                  queue_move&from=&to=, history_play&id=,
-//                                  history_insert&id=&at=. The three that
-//                                  change the order carry &rev=, the queue
-//                                  revision they were worked out against, and
-//                                  are dropped when the queue has moved on.
-//
-// Found two ways, so neither has to be perfect: a DNS-SD record for
-// `_sonixlink._tcp`, which Android resolves by itself, and a plain UDP
-// announcement for anything that would rather listen for one.
-//
-// Threading. One worker thread owns every socket and never blocks on the
-// database for long. The player's state reaches it through sonixlink_publish()
-// and the phone's commands leave through sonixlink_take_command(), pumped by
-// the interface -- the same shape dlna.c uses.
 
 #define SONIXLINK_TEXT_MAX 256
 #define SONIXLINK_PATH_MAX 512

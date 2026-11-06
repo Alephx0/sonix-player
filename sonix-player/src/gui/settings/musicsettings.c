@@ -87,7 +87,7 @@ static void build_filter_page(gui_config_t *cfg) {
 	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(note, lv_pct(100));
 	lv_obj_add_style(note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
 	lv_label_set_text(note, tr(alsa_board_is_cs43131() ? "musicsettings_filter_note_cs43131" : "musicsettings_filter_note"));
 
 	refresh_filter_checks();
@@ -102,10 +102,6 @@ static void build_filter_page(gui_config_t *cfg) {
 
 static lv_obj_t *dre_switch;
 
-// Gapless: local music only. A stream (radio, Qobuz while downloading) has no
-// "next track" ready to hand, and the emulator has a PCM of its own. The
-// switch tells the audio engine how to behave at track boundaries; anything
-// that does not go through them is unaffected.
 static lv_obj_t *gapless_switch;
 
 bool musicsettings_gapless_enabled(void) { return audio_get_gapless(); }
@@ -314,7 +310,7 @@ static void build_fade_page(gui_config_t *cfg) {
 	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(note, lv_pct(100));
 	lv_obj_add_style(note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
 	lv_label_set_text(note, tr("musicsettings_fade_note"));
 
 	fade_refresh_labels();
@@ -380,7 +376,7 @@ static void build_soundfield_page(gui_config_t *cfg) {
 	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(note, lv_pct(100));
 	lv_obj_add_style(note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
 	lv_label_set_text(note, tr("musicsettings_soundstage_note"));
 
 	soundfield_refresh();
@@ -570,7 +566,7 @@ static void build_balance_page(gui_config_t *cfg) {
 	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(note, lv_pct(100));
 	lv_obj_add_style(note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
 	lv_label_set_text(note, tr("musicsettings_balance_note"));
 
 	// Both channels as one, for a single earbud or one ear.
@@ -676,7 +672,7 @@ static void build_volume_limit_page(gui_config_t *cfg) {
 	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(note, lv_pct(100));
 	lv_obj_add_style(note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
 	lv_label_set_text(note, tr("musicsettings_volume_limit_note"));
 
 	vlimit_refresh();
@@ -887,7 +883,7 @@ static void build_mseb_page(gui_config_t *cfg) {
 		mseb_values[i] = lv_label_create(card);
 		lv_label_set_text_fmt(mseb_values[i], "%+d", mseb_get_value(i));
 		lv_obj_add_style(mseb_values[i], &theme_style_text_dim, 0);
-		lv_obj_set_style_text_font(mseb_values[i], &font_ui_22, 0);
+		lv_obj_set_style_text_font(mseb_values[i], settingsrow_note_font(), 0);
 		lv_obj_align(mseb_values[i], LV_ALIGN_TOP_RIGHT, 0, 0);
 
 		lv_obj_t *slider = lv_slider_create(card);
@@ -988,6 +984,9 @@ lv_obj_t *musicsettings_fade_screen(void) { return fade_screen; }
 
 static lv_obj_t *playback_screen;
 lv_obj_t *musicsettings_playback_screen(void) { return playback_screen; }
+lv_obj_t *musicsettings_scan_screen(void);
+lv_obj_t *musicsettings_library_screen(void);
+lv_obj_t *musicsettings_nowplaying_screen(void);
 
 bool musicsettings_fade_enabled(void) { return config_get_bool("audio", "fade", false); }
 
@@ -1107,7 +1106,7 @@ static lv_obj_t *option_note(lv_obj_t *parent, const char *text) {
 	lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 	lv_obj_set_width(note, lv_pct(100));
 	lv_obj_add_style(note, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(note, &font_ui_22, 0);
+	lv_obj_set_style_text_font(note, settingsrow_note_font(), 0);
 	lv_label_set_text(note, tr(text));
 	return note;
 }
@@ -1541,10 +1540,14 @@ static void build_library_page(gui_config_t *cfg) {
 	// The bin among the selection's buttons, which deletes the chosen tracks
 	// from the card and from the library. Off by default: it is the one
 	// button on these lists that cannot be undone.
-	settingsrow_toggle(container, "musicsettings_allow_delete", &allow_delete_switch, allow_delete_cb);
-	option_note(container, "musicsettings_allow_delete_note");
-	if (medialist_allow_delete()) {
-		lv_obj_add_state(allow_delete_switch, LV_STATE_CHECKED);
+	// The reference layout never deletes audio from a collection, so the
+	// option is not offered there.
+	if (config_get_int("screen", "player_layout_alt", 3) != 3) {
+		settingsrow_toggle(container, "musicsettings_allow_delete", &allow_delete_switch, allow_delete_cb);
+		option_note(container, "musicsettings_allow_delete_note");
+		if (medialist_allow_delete()) {
+			lv_obj_add_state(allow_delete_switch, LV_STATE_CHECKED);
+		}
 	}
 
 	switcher_attach_back_gesture(library_screen);
@@ -1557,10 +1560,29 @@ static void build_library_page(gui_config_t *cfg) {
 // wears, whose name it shows, and whether the player starts on it.
 // ---------------------------------------------------------------------------
 
+static lv_obj_t *progress_line_pill, *progress_wave_pill;
+static void progress_style_paint(void) {
+	if (!progress_line_pill) {
+		return;
+	}
+	settingsrow_pill_active(progress_line_pill, !player_progress_wave());
+	settingsrow_pill_active(progress_wave_pill, player_progress_wave());
+}
+static void progress_style_cb(lv_event_t *e) {
+	player_progress_wave_set((int)(intptr_t)lv_event_get_user_data(e) == 1);
+	progress_style_paint();
+}
+
 static void build_nowplaying_page(gui_config_t *cfg) {
 	nowplaying_screen = lv_obj_create(NULL);
 	lv_obj_t *container = settingsrow_page(nowplaying_screen, cfg, "musicsettings_now_playing");
 	settingsrow_title_corner_slots(settingsrow_page_title(nowplaying_screen), cfg, 0);
+
+	// The reference layout is the product: its Now Playing is not one of several
+	// arrangements, so the chooser and the options that only colour the others
+	// are not offered there (a legacy layout must not be reachable from it).
+	if (config_get_int("screen", "player_layout_alt", 3) == 3)
+		goto shared_options;
 
 	// How the now-playing page is arranged.
 	lv_obj_t *layout_pills = NULL;
@@ -1588,6 +1610,19 @@ static void build_nowplaying_page(gui_config_t *cfg) {
 	option_note(container, "musicsettings_cover_accent_note");
 	if (player_cover_accent()) {
 		lv_obj_add_state(cover_accent_switch, LV_STATE_CHECKED);
+	}
+
+shared_options:
+	// The line under the title, or the track's shape drawn in its place (an R1
+	// option; Spotify draws only the line). The line stays the default.
+	{
+		lv_obj_t *pills = NULL;
+		settingsrow_pills(container, "Progress bar", &pills);
+		progress_line_pill = settingsrow_pill_text(pills, "Line", 0, progress_style_cb);
+		progress_wave_pill = settingsrow_pill_text(pills, "Waveform", 1, progress_style_cb);
+		progress_style_paint();
+		theme_register_refresh(progress_style_paint);
+		option_note(container, "Waveform draws the shape of the song under the title. Songs on the card only.");
 	}
 
 	// Whose name goes under the title on the now-playing page, in the control
@@ -1619,9 +1654,6 @@ static void endless_shuffle_cb(lv_event_t *e) {
 	config_save();
 }
 
-// The sleep timer for music, which is the card, Tidal and Qobuz: one transport,
-// one timer. Books and podcasts have their own, on their own pages, because the
-// stretch that suits one is not the one that suits another.
 static settingsrow_duration_t sleep_row;
 
 static void sleep_refresh(void) {
@@ -1670,6 +1702,13 @@ static void queue_add_pick_cb(lv_event_t *e) {
 	queue_add_refresh();
 }
 
+static lv_obj_t *queue_choice_card;
+static void queue_choice_refresh(void) {
+	if (queue_choice_card) {
+		lv_obj_set_hidden(queue_choice_card, theme_reference());
+	}
+}
+
 static void build_playback_page(gui_config_t *cfg) {
 	playback_screen = lv_obj_create(NULL);
 	lv_obj_t *container = settingsrow_page(playback_screen, cfg, "musicsettings_playback_queue");
@@ -1685,6 +1724,11 @@ static void build_playback_page(gui_config_t *cfg) {
 	queue_end_pill = settingsrow_pill(queue_pills, "queue_add_end", 1, queue_add_pick_cb);
 	queue_add_refresh();
 	theme_register_refresh(queue_add_refresh);
+	// The reference layout always queues at the end of the manual queue, so
+	// the choice is shown only for the legacy layouts.
+	queue_choice_card = lv_obj_get_parent(queue_pills);
+	queue_choice_refresh();
+	theme_register_refresh(queue_choice_refresh);
 
 	// Which of the two shuffles "Play in random order" starts. The mode button
 	// on the player still reaches both by hand; this only decides what that one
@@ -1890,28 +1934,43 @@ void musicsettings_init(gui_config_t *cfg) {
 	// In groups: the library, what playback does around a track, the sound from
 	// the engine's gains to the effects, the volume, and the DAC's own switches
 	// at the end.
-	settingsrow_heading(container, "musicsettings_section_library");
+	// In the reference layout these rows move to Settings' own categories
+	// (Your Library, Playback) and this page is Audio quality: the sound only.
+	bool split = theme_reference();
+	lv_obj_t *moved[10];
+	int moved_count = 0;
+	moved[moved_count++] = settingsrow_heading(container, "musicsettings_section_library");
 	artistexceptions_init(cfg, organize_touched);
 	build_scan_page(cfg);
-	settingsrow_add(container, "musicsettings_scan_options", NULL, switch_screen_cb, scan_screen);
+	moved[moved_count++] = settingsrow_add(container, "musicsettings_scan_options", NULL, switch_screen_cb, scan_screen);
 
 	build_library_page(cfg);
-	settingsrow_add(container, "musicsettings_library", NULL, switch_screen_cb, library_screen);
+	moved[moved_count++] = settingsrow_add(container, "musicsettings_library", NULL, switch_screen_cb, library_screen);
 
 	build_nowplaying_page(cfg);
-	settingsrow_add(container, "musicsettings_now_playing", NULL, switch_screen_cb, nowplaying_screen);
+	moved[moved_count++] =
+		settingsrow_add(container, "musicsettings_now_playing", NULL, switch_screen_cb, nowplaying_screen);
 
 	lastfmsettings_init(cfg);
-	settingsrow_add(container, "lastfm", NULL, switch_screen_cb, lastfmsettings_screen());
+	moved[moved_count++] = settingsrow_add(container, "lastfm", NULL, switch_screen_cb, lastfmsettings_screen());
 
-	settingsrow_heading(container, "musicsettings_section_playback");
+	moved[moved_count++] = settingsrow_heading(container, "musicsettings_section_playback");
 	build_playback_page(cfg);
-	settingsrow_add(container, "musicsettings_playback_queue", NULL, switch_screen_cb, playback_screen);
+	moved[moved_count++] =
+		settingsrow_add(container, "musicsettings_playback_queue", NULL, switch_screen_cb, playback_screen);
 
 	build_fade_page(cfg);
 	fade_row = settingsrow_add(container, "musicsettings_crossfade_gapless", NULL, switch_screen_cb, fade_screen);
+	moved[moved_count++] = fade_row;
+	for (int i = 0; i < moved_count; i++) {
+		lv_obj_set_hidden(moved[i], split);
+	}
+	if (split) {
+		lv_label_set_text(settingsrow_page_title(musicsettings_screen), "Audio quality");
+	}
 
-	settingsrow_heading(container, "musicsettings_section_sound");
+	lv_obj_t *sound_heading = settingsrow_heading(container, "musicsettings_section_sound");
+	lv_obj_set_hidden(sound_heading, split);
 	// First: while it is on, nothing under it acts on the sound.
 	settingsrow_toggle(container, "musicsettings_bit_perfect", &bit_perfect_switch, bit_perfect_toggle_cb);
 	bool bit_perfect_on = config_get_int("audio", "bit_perfect", 0) != 0;
@@ -2008,3 +2067,7 @@ void musicsettings_init(gui_config_t *cfg) {
 	bit_perfect_hold(bit_perfect_on);
 	bit_perfect_paint();
 }
+
+lv_obj_t *musicsettings_scan_screen(void) { return scan_screen; }
+lv_obj_t *musicsettings_library_screen(void) { return library_screen; }
+lv_obj_t *musicsettings_nowplaying_screen(void) { return nowplaying_screen; }

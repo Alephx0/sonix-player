@@ -2,6 +2,7 @@
 #include "src/system/library/playlists.h"
 #include "src/system/library/collections.h"
 #include "src/system/core/config.h"
+#include "src/system/db/sqlite3.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -10,6 +11,7 @@ static int hits[5];
 static char excerpt[192];
 static void collect(const library_instant_hit_t *hit,void *user) {
     (void)user;assert(hit->type>=0 && hit->type<5);hits[hit->type]++;
+    if(hit->type==LIBRARY_SEARCH_ARTIST)assert(!strchr(hit->name,';'));
     if(hit->type==LIBRARY_SEARCH_LYRICS)snprintf(excerpt,sizeof(excerpt),"%s",hit->excerpt);
 }
 static void search(const char *query) { memset(hits,0,sizeof(hits));excerpt[0]=0;library_search_instant(query,6,collect,NULL); }
@@ -20,13 +22,14 @@ int main(int argc,char **argv) {
     config_init(settings);assert(library_open(db));playlists_init(argv[1]);collections_init(argv[1]);
     for(int i=0;i<5;i++) {
         snprintf(path,sizeof(path),"%s/Music/track%d.wav",argv[1],i);
-        assert(library_import_download(path));
+        assert(library_import_file(path));
         for(int wait=0;library_scan_running() && wait<2000;wait++)usleep(10000);
         assert(!library_scan_running());
     }
     assert(library_track_count()==5);
     search("night");assert(hits[LIBRARY_SEARCH_TRACK] && hits[LIBRARY_SEARCH_ARTIST] && hits[LIBRARY_SEARCH_ALBUM] && hits[LIBRARY_SEARCH_LYRICS]);
     assert(strstr(excerpt,"night"));
+    search("nova");assert(hits[LIBRARY_SEARCH_ARTIST]==1);
     search("cafe");assert(hits[LIBRARY_SEARCH_TRACK]);
     search("CAFÉ");assert(hits[LIBRARY_SEARCH_TRACK]);
     search("nig");assert(hits[LIBRARY_SEARCH_TRACK]);
@@ -72,6 +75,9 @@ int main(int argc,char **argv) {
     assert(collections_get(COLLECTION_ALBUM,album,&row)&&row.saved);
     assert(playlists_has_track("Night Drive",path));
     library_close();
+    sqlite3 *old=NULL;assert(sqlite3_open(db,&old)==SQLITE_OK);
+    assert(sqlite3_exec(old,"DELETE FROM SEARCH_DOC WHERE kind=2; DELETE FROM SEARCH_DIRTY; DELETE FROM UI_MIGRATION WHERE name='search-individual-credits-v1'",NULL,NULL,NULL)==SQLITE_OK);
+    sqlite3_close(old);assert(library_open(db));search("nova");assert(hits[LIBRARY_SEARCH_ARTIST]==1);library_close();
     puts("PASS offline library: real audio scan, persistent lyric/metadata prefix index, accent folding, changed LRC reindex, playlist membership, independent saved albums/artists, four-pin limit, no audio deletion, reopen persistence");
     return 0;
 }

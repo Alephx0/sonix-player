@@ -287,7 +287,7 @@ static lv_obj_t *make_heading(lv_obj_t *parent, const char *tag, int y) {
 	lv_obj_t *label = lv_label_create(parent);
 	lv_label_set_text(label, tr(tag));
 	lv_obj_add_style(label, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(label, &font_ui_22, 0);
+	lv_obj_set_style_text_font(label, settingsrow_note_font(), 0);
 	lv_obj_set_pos(label, 4, y + 10);
 	return label;
 }
@@ -303,6 +303,13 @@ static void make_row(entry_t *entry, int width) {
 	lv_obj_set_style_pad_hor(row, ROW_PAD, 0);
 	lv_obj_set_style_pad_ver(row, 0, 0);
 	lv_obj_set_scrollable(row, false);
+	// Presses on a row reach the page, so swipe-back can start on one; only
+	// the grip owns its drag.
+	lv_obj_set_event_bubble(row, true);
+	if (theme_reference()) {
+		lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+		lv_obj_set_style_pad_hor(row, 4, 0);
+	}
 	entry->row = row;
 
 	lv_obj_t *box = lv_obj_create(row);
@@ -318,7 +325,7 @@ static void make_row(entry_t *entry, int width) {
 
 	entry->name = lv_label_create(row);
 	lv_obj_add_style(entry->name, &theme_style_text, 0);
-	lv_obj_set_style_text_font(entry->name, &font_ui_24, 0);
+	lv_obj_set_style_text_font(entry->name, theme_reference() ? &font_ui_20 : &font_ui_24, 0);
 	lv_label_set_long_mode(entry->name, LV_LABEL_LONG_DOT);
 	lv_obj_set_width(entry->name, width - ROW_PAD - ICON_BOX - 16 - GRIP_SPACE);
 	lv_obj_align(entry->name, LV_ALIGN_LEFT_MID, ICON_BOX + 16, 0);
@@ -365,6 +372,7 @@ void ccsettings_init(gui_config_t *cfg) {
 	lv_obj_set_style_border_width(body, 0, 0);
 	lv_obj_set_style_pad_all(body, 0, 0);
 	lv_obj_set_scrollable(body, false);
+	lv_obj_set_event_bubble(body, true);
 
 	make_heading(body, "in_use", 0);
 	others_heading = make_heading(body, "controlcentre_not_in_use", 0);
@@ -372,7 +380,7 @@ void ccsettings_init(gui_config_t *cfg) {
 	// How many of the sixteen places are taken, level with the first heading.
 	in_use_count = lv_label_create(body);
 	lv_obj_add_style(in_use_count, &theme_style_text_dim, 0);
-	lv_obj_set_style_text_font(in_use_count, &font_ui_22, 0);
+	lv_obj_set_style_text_font(in_use_count, settingsrow_note_font(), 0);
 	lv_obj_align(in_use_count, LV_ALIGN_TOP_RIGHT, -4, 10);
 
 	for (int i = 0; i < QP_BTN_COUNT; i++) {

@@ -6,29 +6,6 @@
 
 #include "lvgl/lvgl.h"
 
-// Power / display management: mirrors the stock firmware's idle behaviour.
-//
-//   - Short-pressing the power button toggles the screen off/on. Music keeps
-//     playing while the screen is off.
-//   - After screen_off_timeout_ms with no user input the screen turns off on
-//     its own (even while music is playing).
-//   - Suspend-to-RAM. The stock standby executes `mem` 60 s after the screen
-//     goes dark, but only after a real, awaited STOP of the audio pipeline
-//     (command 0x203, wait for state 2, then `echo mem`). That sequence is
-//     replicated here: suspend only when stopped, with no ALSA object alive,
-//     Wi-Fi parked and sync() done. Disabled with [power] standby_mem = 0.
-//
-// The state machine runs on the LVGL/main thread via an lv_timer. Input
-// threads (physical buttons) feed it through the thread-safe power_notify_*
-// functions; touch input is tracked automatically via LVGL's inactivity clock.
-//
-// Wi-Fi parking in standby has no switch: a minute after the screen goes dark
-// with nothing wanting the radio it powers itself down, and wifi_in_use() in
-// power.c keeps it up while something is using it -- Qobuz, Tidal, podcasts,
-// radio, AirPlay, DLNA, file transfer. The wait is [power] radio_park_seconds.
-//
-// Every knob here is driven at runtime from the settings pages, so the config is
-// copied into the module and exposed through setters and getters.
 
 typedef struct {
 	// sysfs / device paths. A NULL path disables the corresponding action,
@@ -74,24 +51,17 @@ bool display_rotation_supported(void);
 bool display_get_rotated(void);
 void display_set_rotated(bool rotated);
 
-// A copy of what is on screen right now, in RGB565, for screenshots. Lives in
-// main.c for the same reason as the three above: only the framebuffer owner
-// knows which of the two pages is the visible one.
-//
-// Must be called from the GUI thread: the pages are swapped inside the flush,
-// and a copy taken from another thread at that moment would read half of one
-// frame and half of the other.
-//
-// NULL on the plain fbdev fallback with no second page, or when the display
-// cannot be read back.
-//
-// The buffer belongs to the module, not the caller, and must not be freed:
-// there is one, kept aside and reused for every shot, valid until the next
-// call. That is deliberate -- it is 700 kB contiguous, and reallocating it per
-// shot is how it returns NULL exactly when memory is tight (Qobuz downloading,
-// a decoder open, a cover just decoded). Shots are taken one at a time, so
-// reuse is safe.
 uint16_t *display_capture_frame(int *out_w, int *out_h);
+
+// Display size (Settings > Appearance), as [ui] zoom: the interface is laid out
+// at the panel divided by the zoom and drawn up to the panel, so everything on
+// it -- text, icons, rows, artwork -- is that much larger. Read once at
+// startup; a change takes a restart. Also main.c's.
+#define DISPLAY_ZOOM_STANDARD 100
+#define DISPLAY_ZOOM_LARGE 125
+int display_zoom(void);	 // in effect now
+void display_zoom_save(int zoom); // from the next start
+void display_restart(void);	 // restarts the player (the device, on the R1)
 
 // --- Screen control (must be called on the LVGL/main thread) ---
 void power_screen_on(void);

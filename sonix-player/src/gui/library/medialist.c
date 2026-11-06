@@ -1,7 +1,9 @@
 #include "collection_header.h"
+#include "src/gui/shell/keyboard.h"
 #include "src/system/library/collections.h"
 #include "discography.h"
 #include "collectionview.h"
+#include "src/gui/shell/reference_icons.h"
 #include "src/gui/shell/ui_metrics.h"
 #include "medialist.h"
 #include "src/gui/shell/main_menu.h"
@@ -25,6 +27,8 @@
 #include "src/gui/nowplaying/player.h"
 #include "src/gui/library/playlistpage.h"
 #include "src/gui/shell/popover.h"
+#include "src/gui/shell/rowswipe.h"
+#include "src/gui/library/playlistview.h"
 #include "src/gui/shell/settingsrow.h"
 #include "src/gui/nowplaying/trackmenu.h"
 #include "src/system/core/config.h"
@@ -231,6 +235,7 @@ typedef struct {
 	lv_obj_t *list;	 // the scrollable viewport
 	lv_obj_t *body;	 // fixed-height canvas the rows are placed on
 	lv_obj_t *empty; // "nothing here" message
+	lv_obj_t *empty_add; // an empty playlist's "Add to this playlist" pill, under it
 	lv_obj_t *corner;	   // the right-hand button strip on the title row
 	lv_obj_t *reverse_btn; // Favourites: the list reversed (newest first)
 	lv_obj_t *play_btn;	   // the circle-play corner button
@@ -305,7 +310,17 @@ typedef struct {
 	lv_obj_t *head_title;
 	lv_obj_t *head_artist;
 	lv_obj_t *head_meta;
-	lv_obj_t *head_buttons[3]; // shuffle, play, a track into the queue
+	bool shuffle_pending;
+    library_index_t *find_base;
+    char find_query[128];
+    int find_sort;
+    lv_obj_t *find_row, *find_field, *find_sort_label;
+    keyboard_t *find_keyboard;
+    lv_timer_t *find_timer;
+    lv_obj_t *fast_bar, *fast_thumb;
+    bool fast_drag, find_pull;
+    int find_pull_y;
+    lv_obj_t *head_buttons[3]; // shuffle, play, a track into the queue
 	// Behind the heading row while the head is scrolled under it. With the head
 	// up, the list runs to the top of the page so the cover can stand level
 	// with the chevron, and the rows would otherwise pass under the heading.
@@ -367,7 +382,12 @@ typedef struct {
 	lv_obj_t *sel_delete_btn;
 	unsigned corner_shown;
 	int corner_slots;
+	// A playlist's "Recommended songs" under its last row (reco_sync()).
+	lv_obj_t *reco;
+	int reco_h;
+	char reco_paths[5][512];
 } panel_t;
+static void reco_sync(panel_t *p);
 
 // A chosen row: where it was in the list, and what it stands for -- a track's
 // path, or the name of an album or an artist.
@@ -448,7 +468,7 @@ static void load_view_settings(void) {
 	quality_badges = config_get_int("library", "quality_badges", 0) != 0;
 	show_artist = config_get_int("library", "show_artist", reference_layout()?1:0) != 0;
 	go_to_current = config_get_int("library", "go_to_current", 0) != 0;
-	album_head = config_get_int("library", "album_head", reference_layout()?1:0) != 0;
+	album_head = reference_layout() || config_get_int("library", "album_head", 0) != 0;
 	allow_delete = config_get_int("library", "allow_delete", 0) != 0;
 	artist_lists = (int)config_get_int("library", "artist_lists", artist_lists);
 }
@@ -476,6 +496,10 @@ void medialist_set_go_to_current(bool on) {
 	config_set_int("library", "go_to_current", on ? 1 : 0);
 	config_save();
 }
+
+// Collection edits never delete audio in the reference layout; there files are
+// deleted only from the file manager, which shows them as files.
+static bool delete_offered(void) { return allow_delete && !reference_layout(); }
 
 bool medialist_allow_delete(void) {
 	load_view_settings();
@@ -570,7 +594,17 @@ static void sort_order_for(library_list_t kind, library_filter_t filter, library
 // model
 // ---------------------------------------------------------------------------
 
+static void find_apply(panel_t *p);
+static void find_reflow(panel_t *p);
+static void find_hide_keyboard(panel_t *p);
+static void find_reveal(panel_t *p);
+static void fast_update(panel_t *p);
+static void head_paint(panel_t *p);
 static void model_clear(panel_t *p) {
+    if(p->find_timer)lv_timer_pause(p->find_timer);
+    find_hide_keyboard(p);
+    library_index_close(p->find_base);p->find_base=NULL;
+    p->find_query[0]=0;p->find_sort=0;
 	// Its own count, not p->count. They agree on a path-backed list and have
 	// nothing to do with each other on a query-backed one, where entries is
 	// NULL while p->count is a whole library -- which is a walk off the front
@@ -642,6 +676,11 @@ static void panel_refresh_stale(panel_t *p) {
 		library_index_open(p->kind, p->filter, p->filter_value, p->list_order, p->list_desc);
 	library_index_close(p->ix);
 	p->ix = fresh;
+    if(p->find_base) {
+        library_index_close(p->find_base);p->find_base=fresh;
+        p->ix=library_index_find_view(fresh,p->find_query,p->find_sort);
+        fresh=p->ix;
+    }
 	p->count = library_index_count(fresh);
 	p->window_first = -1;
 	p->window_count = 0;
@@ -661,7 +700,7 @@ static void panel_refresh_stale(panel_t *p) {
 	if (panel_is_album(p)) {
 		album_places_load(p);
 	}
-	lv_obj_set_height(p->body, body_height(p));
+	lv_obj_set_height(p->body, body_height(p)); reco_sync(p);
 	if (p->count == 0) {
 		lv_obj_set_hidden(p->empty, false);
 	} else {
@@ -801,7 +840,12 @@ static int row_slot(panel_t *p, const row_t *row) { return p->slot_base + (int)(
 // ---------------------------------------------------------------------------
 // Where a row sits
 //
-static int row_height(const panel_t *p) {return reference_layout() && p->head ? UI_COLLECTION_TRACK_HEIGHT : ROW_HEIGHT;}
+/* Every reference list (collections and the Browse music indexes) uses the
+ * same flat 76 px row. */
+static void stamp_context_name(const panel_t *p);
+static void empty_style(panel_t *p, bool invite, bool with_add);
+static void head_artist_cb(lv_event_t *e);
+static int row_height(const panel_t *p) {(void)p;return reference_layout() ? UI_COLLECTION_TRACK_HEIGHT : ROW_HEIGHT;}
 static int row_pitch(const panel_t *p) {return row_height(p)+ROW_GAP;}
 
 // A row is ROW_PITCH below the one before it, and that is the whole of it on
@@ -852,7 +896,7 @@ static int row_at_y(const panel_t *p, int y) {
 }
 
 // The height of everything the list scrolls over.
-static int body_height(const panel_t *p) { return p->count > 0 ? row_y(p, p->count) : p->head_height + row_pitch(p); }
+static int body_height(const panel_t *p) { return p->count > 0 ? row_y(p, p->count) + p->reco_h : p->head_height + row_pitch(p); }
 
 // One album's tracks, read from the index: the one list that can have a head
 // and disc headings.
@@ -887,6 +931,14 @@ static void row_show_glyph(panel_t *p, row_t *row) {
 	lv_image_set_src(row->icon, glyph_for(p));
 	lv_obj_add_style(row->icon, &theme_style_icon, 0);
 	lv_obj_set_style_image_recolor_opa(row->icon, LV_OPA_COVER, 0);
+	// A song without a sleeve sits on Spotify's grey placeholder square, so
+	// rows with and without artwork line up.
+	if (reference_layout() && p->is_tracks) {
+		lv_obj_set_style_bg_color(row->icon, lv_color_hex(0x282828), 0);
+		lv_obj_set_style_bg_opa(row->icon, LV_OPA_COVER, 0);
+		lv_obj_set_style_radius(row->icon, 4, 0);
+		lv_obj_set_style_image_recolor(row->icon, lv_color_hex(0xb3b3b3), 0);
+	}
 }
 
 // The plain name lists -- Artists, Album artists, Genres -- carry no icon: the
@@ -914,6 +966,7 @@ static bool panel_shows_icons(const panel_t *p) {
 static void row_show_cover(row_t *row, const lv_image_dsc_t *dsc) {
 	lv_image_set_src(row->icon, dsc);
 	lv_obj_set_style_image_recolor_opa(row->icon, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_bg_opa(row->icon, LV_OPA_TRANSP, 0);
 }
 
 static void row_drop_thumb(panel_t *p, row_t *row) {
@@ -1106,7 +1159,12 @@ static void row_update_quality(panel_t *p, row_t *row, const char *path) {
 // favourites, or a playlist. Not an artist's own lists, where the name is the page's title
 // already, and not the name lists, whose rows are artists or genres themselves.
 static bool panel_shows_artist(const panel_t *p) {
-    if(reference_layout() && p->kind==LIBRARY_LIST_TRACKS && p->filter==LIBRARY_FILTER_ALBUM) return true;
+	/* Spotify's song rows always name the artist under the title (search
+	 * results, playlists, Liked Songs, albums); only an artist's own lists,
+	 * titled with that name already, leave it out. */
+	if (reference_layout() && (p->kind == LIBRARY_LIST_TRACKS || p->kind == LIBRARY_LIST_FAVOURITES ||
+							   p->kind == LIBRARY_LIST_PLAYLIST || p->kind == LIBRARY_LIST_MOST_PLAYED))
+		return p->filter != LIBRARY_FILTER_ARTIST && p->filter != LIBRARY_FILTER_ALBUM_ARTIST;
 	if (!show_artist || p->from_paths) {
 		return false;
 	}
@@ -1275,7 +1333,7 @@ static void sel_buttons_show(panel_t *p, bool on) {
 	show_if(p->sel_unlist_btn, on && playlist);
 	show_if(p->sel_close_btn, on);
 	if (p->sel_delete_btn) {
-		bool bin = on && allow_delete && !p->from_paths;
+		bool bin = on && delete_offered() && !p->from_paths;
 		show_if(p->sel_delete_btn, bin);
 		lv_obj_move_foreground(p->sel_delete_btn);
 		// Room under the last row while the bin is up, so that row can be
@@ -1404,29 +1462,25 @@ static void track_swipe_cb(lv_event_t *e) {
     if(!indev || !p->is_tracks || p->selecting || p->reordering) return;
     lv_event_code_t code=lv_event_get_code(e);
     lv_point_t point;lv_indev_get_point(indev,&point);
+    /* Spotify's swipe to queue: the row slides over a strip that turns green
+     * once far enough (the shared row swipe). */
+    static const rowswipe_spec_t spec={&icon_list_plus,ROWSWIPE_GREEN,NULL,0};
+    int committed=0;
+    bool swiping=rowswipe_event(e,button,&spec,&committed);
     if(code==LV_EVENT_PRESSED) {
         track_swipe_button=button;track_swipe_origin=point;track_swipe_taken=false;
         row_t *row=row_of_button(p,button);track_swipe_index=row?row->index:-1;
         if(point.x>32) lv_event_stop_bubbling(e);
         return;
     }
-    if(button!=track_swipe_button || track_swipe_origin.x<=32) return;
-    int dx=point.x-track_swipe_origin.x,dy=point.y-track_swipe_origin.y;
-    if(code==LV_EVENT_PRESSING && dx>35 && LV_ABS(dy)<35) {
-        track_swipe_taken=true;lv_event_stop_bubbling(e);
-        lv_obj_set_style_border_color(button,lv_color_hex(0x1ed760),0);
-        lv_obj_set_style_border_width(button,3,0);
-    }
-    if(code==LV_EVENT_RELEASED || code==LV_EVENT_PRESS_LOST) {
-        lv_obj_set_style_border_width(button,0,0);
-        if(track_swipe_taken) lv_event_stop_bubbling(e);
-        if(code==LV_EVENT_RELEASED && dx>75 && LV_ABS(dy)<35) {
-            const char *name=NULL,*path=NULL;
-            row_t *row=row_of_button(p,button);
-            if(row && row->index==track_swipe_index && row_at(p,row->index,&name,&path) && path && *path) {
-                if(playlist_priority_add(path)) {device_state_queue_changed();toast_success("added_to_the_queue");}
-                else toast_error("Could not add to queue");
-            }
+    if(button!=track_swipe_button) return;
+    if(swiping){track_swipe_taken=true;lv_event_stop_bubbling(e);}
+    if(committed>0) {
+        const char *name=NULL,*path=NULL;
+        row_t *row=row_of_button(p,button);
+        if(row && row->index==track_swipe_index && row_at(p,row->index,&name,&path) && path && *path) {
+            if(playlist_priority_add(path)) {device_state_queue_changed();toast_glyph(&icon_list_music,"added_to_the_queue");}
+            else toast_error("Could not add to queue");
         }
     }
 }
@@ -1438,6 +1492,23 @@ static void row_long_pressed_cb(lv_event_t *e) {
 	panel_t *p = lv_event_get_user_data(e);
 	if (!panel_selectable(p) || p->reordering) {
 		return;
+	}
+	// A slow sideways swipe outlasts the long-press delay; it is still the
+	// add-to-queue swipe, not a request to select.
+	if (track_swipe_taken && lv_event_get_current_target(e) == track_swipe_button) {
+		return;
+	}
+	// LVGL times a long press regardless of movement: a finger already on its
+	// way somewhere is not holding still.
+	{
+		lv_indev_t *moving = lv_indev_active();
+		lv_point_t now;
+		if (moving && lv_event_get_current_target(e) == track_swipe_button) {
+			lv_indev_get_point(moving, &now);
+			if (LV_ABS(now.x - track_swipe_origin.x) > 8 || LV_ABS(now.y - track_swipe_origin.y) > 8) {
+				return;
+			}
+		}
 	}
 	row_t *row = row_of_button(p, lv_event_get_current_target(e));
 	if (!row || row->index < 0 || row->index >= p->count) {
@@ -1603,6 +1674,9 @@ static void sel_add_cb(lv_event_t *e) {
 	sel_gather(p, &list);
 	if (list.count == 0) {
 		gui_notify_popup("playlist_cannot_add_the_tracks");
+	} else if (reference_layout()) {
+		// The shared Add to playlist sheet, listing destinations for the set.
+		collectionview_add_tracks((const char *const *)list.paths, list.count);
 	} else {
 		playlistpage_add_tracks((const char *const *)list.paths, list.count);
 	}
@@ -1708,7 +1782,7 @@ static void sel_remove_ask(panel_t *p) {
 	if (p->kind == LIBRARY_LIST_PLAYLIST) {
 		remove_positions = malloc((size_t)n * sizeof(*remove_positions));
 		for (int i = 0; remove_positions && i < n; i++) {
-			remove_positions[remove_count++] = p->sel[i].index;
+			remove_positions[remove_count++] = p->find_base?library_index_source_position(p->ix,p->sel[i].index,p->find_base):p->sel[i].index;
 		}
 	} else {
 		remove_paths = calloc((size_t)n, sizeof(*remove_paths));
@@ -1793,7 +1867,7 @@ static void delete_confirmed(void *user) {
 
 static void sel_delete_cb(lv_event_t *e) {
 	panel_t *p = lv_event_get_user_data(e);
-	if (!p || !p->selecting || p->sel_count == 0 || !allow_delete) {
+	if (!p || !p->selecting || p->sel_count == 0 || !delete_offered()) {
 		return;
 	}
 	path_list_free(&delete_pending);
@@ -1873,6 +1947,8 @@ static void row_bind(panel_t *p, row_t *row, int index) {
 	row_update_playmark(p, row);
 	row_update_detail(p, row, index, path);
 	row_update_selection(p, row, name, path);
+	// A song hidden in this playlist is shown faded, as Spotify fades it.
+	lv_obj_set_style_opa(row->button, p->playlist[0] && path && library_playlist_hidden(p->playlist, path) ? LV_OPA_40 : LV_OPA_COVER, 0);
 }
 
 // Requests artwork for the visible rows and collects what the worker has
@@ -2130,7 +2206,7 @@ static void model_remove(panel_t *p, int index) {
 		p->rows[i].index = -2;
 	}
 
-	lv_obj_set_height(p->body, body_height(p));
+	lv_obj_set_height(p->body, body_height(p)); reco_sync(p);
 	if (p->count == 0) {
 		lv_obj_set_hidden(p->empty, false);
 	}
@@ -2196,7 +2272,7 @@ static void index_hint_show(panel_t *p, int slot) {
 // Rebuilds the letter -> row map from the model, and decides whether this list
 // gets a strip at all.
 static void index_rebuild(panel_t *p, bool enabled, bool descending) {
-	p->index_enabled = enabled && p->count >= INDEX_MIN_ROWS;
+	p->index_enabled = enabled && p->count >= INDEX_MIN_ROWS && !(reference_layout() && p->is_tracks);
 	p->index_desc = descending;
 
 	if (!p->index_bar) {
@@ -2604,6 +2680,8 @@ static void head_follow(panel_t *p);
 static void scroll_cb(lv_event_t *e) {
 	panel_t *p = lv_event_get_user_data(e);
 	p->saved_scroll = lv_obj_get_scroll_y(p->list);
+    if(p->saved_scroll < -30 && p->find_row && lv_obj_is_hidden(p->find_row))find_reveal(p);
+    fast_update(p);
 	index_flash(p);
 	head_follow(p);
 	window_update(p);
@@ -2703,7 +2781,9 @@ static void row_clicked_cb(lv_event_t *e) {
 			if (index >= p->count) {
 				return; // the list got shorter under the finger
 			}
-			queued = device_state_play_index(library_index_clone(p->ix), index);
+			library_index_t *context=p->find_base?p->find_base:p->ix;
+            int start=p->find_base?library_index_source_position(p->ix,index,context):index;
+            queued = start>=0 && device_state_play_index(library_index_clone(context), start);
 		} else {
 			const char **paths = malloc((size_t)p->entries_count * sizeof(char *));
 			if (paths) {
@@ -2722,6 +2802,7 @@ static void row_clicked_cb(lv_event_t *e) {
 			if (p->filter == LIBRARY_FILTER_ALBUM) {
 				playlist_set_album(p->filter_value);
 			}
+			stamp_context_name(p);
 			player_refresh_now_playing();
 		} else {
 			player_play_file(path); // out of memory: at least play it
@@ -2974,7 +3055,16 @@ static void grip_cb(lv_event_t *e) {
 // nothing to save at the second press -- every drop was written when it
 // happened -- so this only says what changed.
 static void reorder_clicked_cb(lv_event_t *e) {
-	panel_t *p = lv_event_get_user_data(e);
+    panel_t *p = lv_event_get_user_data(e);
+    if(p->find_base) {
+        library_index_close(p->ix);p->ix=p->find_base;p->find_base=NULL;
+        p->count=library_index_count(p->ix);p->find_sort=0;p->find_query[0]=0;
+        if(p->find_field)lv_textarea_set_text(p->find_field,"");
+        if(p->find_timer)lv_timer_pause(p->find_timer);
+        find_hide_keyboard(p);
+        if(p->find_row)lv_obj_set_hidden(p->find_row,true);
+        find_reflow(p);
+    }
 
 	drag_end();
 	p->reordering = !p->reordering;
@@ -2995,6 +3085,13 @@ static void reorder_clicked_cb(lv_event_t *e) {
 void medialist_edit_playlist(void) {
     panel_t *p = &panel_tracks;
     if (p->kind != LIBRARY_LIST_PLAYLIST || p->reordering) return;
+    if(p->find_base) {
+        library_index_close(p->ix);p->ix=p->find_base;p->find_base=NULL;
+        p->count=library_index_count(p->ix);p->find_query[0]=0;p->find_sort=0;
+        if(p->find_field)lv_textarea_set_text(p->find_field,"");
+        if(p->find_timer)lv_timer_pause(p->find_timer);
+        find_hide_keyboard(p);if(p->find_row)lv_obj_set_hidden(p->find_row,true);find_reflow(p);
+    }
     p->reordering = true;
     p->reorder_moved = false;
     reorder_icon_paint(p);
@@ -3036,7 +3133,7 @@ static void panel_abandon_thumbs(panel_t *p) {
 
 static void screen_unloaded_cb(lv_event_t *e) {
     panel_t *panel=lv_event_get_user_data(e);
-    if(panel) main_menu_restore_footer(panel->screen);
+    if(panel) {find_hide_keyboard(panel);main_menu_restore_footer(panel->screen);}
 	reorder_stop(lv_event_get_user_data(e));
 	selection_stop(lv_event_get_user_data(e));
 	panel_abandon_thumbs(lv_event_get_user_data(e));
@@ -3090,6 +3187,129 @@ static void sort_picked(void *user) {
 	sort_set_year(p->kind, choice == SORT_YEAR_UP || choice == SORT_YEAR_DOWN);
 	sort_set_desc(p->kind, choice == SORT_NAME_ZA || choice == SORT_ADDED_NEW || choice == SORT_YEAR_DOWN);
 	reload_current(p);
+}
+
+/* ---- Spotify's "Recommended songs" under a playlist (iOS, captured
+ * 2026-11-04): a heading, "Based on the songs of this playlist", five songs
+ * from the library with a (+) that adds each, and Refresh for five more. It
+ * sits on the canvas below the last row; body_height() makes room for it. */
+#define RECO_COUNT 5
+#define RECO_ROW_H 72
+static void reco_sync(panel_t *p);
+static void reco_drop(panel_t *p) {
+    if (p->reco) lv_obj_delete(p->reco);
+    p->reco = NULL;
+    p->reco_h = 0;
+}
+static void reco_add_cb(lv_event_t *e) {
+    panel_t *p = lv_event_get_user_data(e);
+    int i = (int)(intptr_t)lv_obj_get_user_data(lv_event_get_current_target(e));
+    if (!p || i < 0 || i >= RECO_COUNT || !p->reco_paths[i][0]) return;
+    if (playlists_add_track(p->playlist, p->reco_paths[i])) {
+        toast_success("Added to this playlist");
+        reco_drop(p);
+        reload_current(p);
+    }
+}
+static void reco_refresh_cb(lv_event_t *e) {
+    panel_t *p = lv_event_get_user_data(e);
+    if (!p) return;
+    reco_drop(p);
+    reco_sync(p);
+}
+static void reco_build(panel_t *p) {
+    char paths[RECO_COUNT][512];
+    int n = library_playlist_recommend(p->playlist, paths, RECO_COUNT);
+    memset(p->reco_paths, 0, sizeof(p->reco_paths));
+    int w = lv_obj_get_content_width(p->body);
+    lv_obj_t *c = p->reco = lv_obj_create(p->body);
+    lv_obj_remove_style_all(c);
+    lv_obj_set_width(c, w);
+    lv_obj_set_scrollable(c, false);
+    lv_obj_set_event_bubble(c, true);
+    int y = 24;
+    lv_obj_t *h = lv_label_create(c);
+    lv_label_set_text(h, "Recommended songs");
+    lv_obj_set_style_text_font(h, &font_ui_24_bold, 0);
+    lv_obj_set_style_text_color(h, lv_color_white(), 0);
+    lv_obj_set_pos(h, 0, y);
+    y += 34;
+    lv_obj_t *sub = lv_label_create(c);
+    lv_label_set_text(sub, "Based on the songs of this playlist");
+    lv_obj_set_style_text_font(sub, &font_ui_16, 0);
+    lv_obj_set_style_text_color(sub, lv_color_hex(0xb3b3b3), 0);
+    lv_obj_set_pos(sub, 0, y);
+    y += 34;
+    for (int i = 0; i < n; i++) {
+        snprintf(p->reco_paths[i], sizeof(p->reco_paths[i]), "%s", paths[i]);
+        char title[256] = "", artist[256] = "";
+        playlists_track_names(paths[i], title, sizeof(title), artist, sizeof(artist));
+        lv_obj_t *t = lv_label_create(c);
+        lv_label_set_text(t, title[0] ? title : paths[i]);
+        lv_label_set_long_mode(t, LV_LABEL_LONG_DOT);
+        lv_obj_set_size(t, w - 70, 28);
+        lv_obj_set_style_text_font(t, &font_ui_20, 0);
+        lv_obj_set_style_text_color(t, lv_color_white(), 0);
+        lv_obj_set_pos(t, 0, y + 10);
+        lv_obj_t *a = lv_label_create(c);
+        lv_label_set_text(a, artist);
+        lv_label_set_long_mode(a, LV_LABEL_LONG_DOT);
+        lv_obj_set_size(a, w - 70, 22);
+        lv_obj_set_style_text_font(a, &font_ui_16, 0);
+        lv_obj_set_style_text_color(a, lv_color_hex(0xb3b3b3), 0);
+        lv_obj_set_pos(a, 0, y + 40);
+        lv_obj_t *b = lv_button_create(c);
+        lv_obj_remove_style_all(b);
+        lv_obj_set_size(b, 52, 52);
+        lv_obj_set_pos(b, w - 52, y + 10);
+        lv_obj_set_user_data(b, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(b, reco_add_cb, LV_EVENT_CLICKED, p);
+        lv_obj_t *plus = lv_obj_create(b);
+        lv_obj_remove_style_all(plus);
+        lv_obj_set_size(plus, 30, 30);
+        lv_obj_set_style_radius(plus, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_border_width(plus, 2, 0);
+        lv_obj_set_style_border_color(plus, lv_color_hex(0xb3b3b3), 0);
+        lv_obj_set_clickable(plus, false);
+        lv_obj_center(plus);
+        lv_obj_t *pi = lv_image_create(plus);
+        lv_image_set_src(pi, &icon_plus);
+        lv_obj_set_size(pi, 18, 18);
+        lv_image_set_inner_align(pi, LV_IMAGE_ALIGN_CONTAIN);
+        lv_obj_set_style_image_recolor(pi, lv_color_hex(0xb3b3b3), 0);
+        lv_obj_set_style_image_recolor_opa(pi, LV_OPA_COVER, 0);
+        lv_obj_center(pi);
+        y += RECO_ROW_H;
+    }
+    lv_obj_t *r = lv_button_create(c);
+    lv_obj_set_size(r, 128, 46);
+    lv_obj_set_style_radius(r, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(r, lv_color_hex(0xe0e0e0), 0);
+    lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
+    lv_obj_set_style_shadow_width(r, 0, 0);
+    lv_obj_set_style_border_width(r, 0, 0);
+    lv_obj_set_pos(r, (w - 128) / 2, y + 12);
+    lv_obj_add_event_cb(r, reco_refresh_cb, LV_EVENT_CLICKED, p);
+    lv_obj_t *rl = lv_label_create(r);
+    lv_label_set_text(rl, "Refresh");
+    lv_obj_set_style_text_font(rl, &font_ui_18, 0);
+    lv_obj_set_style_text_color(rl, lv_color_black(), 0);
+    lv_obj_center(rl);
+    y += 12 + 46 + 24;
+    lv_obj_set_height(c, y);
+    p->reco_h = y;
+}
+static void reco_sync(panel_t *p) {
+    bool want = reference_layout() && p->kind == LIBRARY_LIST_PLAYLIST && p->playlist[0] && p->count > 0 &&
+                !p->from_paths;
+    if (!want) {
+        if (p->reco) reco_drop(p);
+        return;
+    }
+    if (!p->reco) reco_build(p);
+    p->reco_h = lv_obj_get_style_height(p->reco, 0);
+    lv_obj_set_pos(p->reco, 0, row_y(p, p->count));
+    lv_obj_set_height(p->body, body_height(p));
 }
 
 static void sort_clicked_cb(lv_event_t *e) {
@@ -3165,6 +3385,31 @@ static void album_order_clicked_cb(lv_event_t *e) {
 	open_replacing = true;
 	medialist_open(title, to_records ? LIBRARY_LIST_ALBUMS : LIBRARY_LIST_TRACKS, p->filter, value);
 	open_replacing = false;
+}
+
+/* The credited artists of the album on screen, read from its first track: one
+ * opens that discography, several open the shared chooser sheet. The names
+ * outlive the sheet, which runs its action after closing. */
+static char head_artists[8][256];
+static void head_artist_pick(void *user) { discography_open((const char *)user); }
+static void head_artist_cb(lv_event_t *e) {
+    panel_t *p = lv_event_get_user_data(e);
+    const char *path = NULL;
+    if (!p || player_sheet_drag_active() || switcher_back_drag_active() || p->count <= 0 || !row_at(p, 0, NULL, &path) || !path)
+        return;
+    int n = library_track_artists(path, head_artists, 8);
+    if (n <= 0) {
+        gui_notify_popup("No credited artist metadata for this album.");
+        return;
+    }
+    if (n == 1) {
+        discography_open(head_artists[0]);
+        return;
+    }
+    popover_item_t items[8];
+    for (int i = 0; i < n; i++)
+        items[i] = (popover_item_t){head_artists[i], head_artist_pick, head_artists[i], false};
+    popover_show(p->head_artist, items, n);
 }
 
 void medialist_open_artist(const char *name) {
@@ -3243,7 +3488,7 @@ static library_index_t *menu_tracks_open(panel_t *p) {
 	library_index_t *ix = NULL;
 	if (p->kind == LIBRARY_LIST_TRACKS || p->kind == LIBRARY_LIST_FAVOURITES || p->kind == LIBRARY_LIST_PLAYLIST ||
 		p->kind == LIBRARY_LIST_MOST_PLAYED) {
-		ix = library_index_clone(p->ix);
+		ix = library_index_clone(p->find_base?p->find_base:p->ix);
 	} else if (p->kind == LIBRARY_LIST_ALBUMS) {
 		ix = library_index_open(LIBRARY_LIST_TRACKS, p->filter, p->filter_value[0] ? p->filter_value : NULL,
 								LIBRARY_ORDER_ALBUM, false);
@@ -3263,6 +3508,34 @@ static library_index_t *menu_tracks_open(panel_t *p) {
 // Cleared when the list is not one of records. A queue of tracks has no record
 // to be the end of, and a leftover name from an earlier list would send the
 // chaining off after the wrong one.
+/* The name the queue shows its context under. Albums are named through the
+ * album label, so only the other lists name it here. */
+static void stamp_context_name(const panel_t *p) {
+	bool album = p->kind == LIBRARY_LIST_TRACKS && p->filter == LIBRARY_FILTER_ALBUM;
+	if (album) {
+		playlist_set_context("", "");
+		return;
+	}
+	/* Spotify's header kinds; Liked Songs and Home mixes are playlists there,
+	 * and genre, year and folder lists are the R1's own kinds of source. */
+	const char *kind = "";
+	if (p->kind == LIBRARY_LIST_PLAYLIST || p->kind == LIBRARY_LIST_FAVOURITES || p->kind == LIBRARY_LIST_MOST_PLAYED ||
+		p->playlist[0] || p->filter == LIBRARY_FILTER_HOME_REPEAT || p->filter == LIBRARY_FILTER_HOME_REDISCOVER ||
+		p->filter == LIBRARY_FILTER_HOME_DAYLIST)
+		kind = "PLAYLIST";
+	else if (p->filter == LIBRARY_FILTER_ARTIST || p->filter == LIBRARY_FILTER_ALBUM_ARTIST)
+		kind = "ARTIST";
+	else if (p->filter == LIBRARY_FILTER_GENRE)
+		kind = "GENRE";
+	else if (p->filter == LIBRARY_FILTER_SEARCH)
+		kind = "SEARCH";
+	else if (p->filter == LIBRARY_FILTER_YEAR)
+		kind = "YEAR";
+	else if (p->kind == LIBRARY_LIST_TRACKS && p->filter == LIBRARY_FILTER_NONE && !p->from_paths)
+		kind = "YOUR LIBRARY";
+	playlist_set_context(kind, p->title);
+}
+
 static void stamp_last_album(const panel_t *p) {
 	// One album's tracks end on that album, as they do when a row of it is
 	// tapped (row_clicked_cb).
@@ -3316,7 +3589,12 @@ static void play_artist(panel_t *p, bool shuffled) {
 	// end of the deal, the other comes round again in the same order.
 	playback_mode_t shuffle_mode =
 		musicsettings_endless_shuffle() ? PLAYBACK_MODE_SHUFFLE_REPEAT : PLAYBACK_MODE_SHUFFLE;
-	playlist_set_mode(shuffled ? shuffle_mode : PLAYBACK_MODE_NORMAL);
+	// The reference layout's Shuffle is a passive toggle applied on Play; it
+	// never changes the repeat the user chose.
+	if (reference_layout())
+		playlist_set_shuffle(shuffled);
+	else
+		playlist_set_mode(shuffled ? shuffle_mode : PLAYBACK_MODE_NORMAL);
 
 	if (p->from_paths) {
 		const char **paths = NULL;
@@ -3339,6 +3617,11 @@ static void play_artist(panel_t *p, bool shuffled) {
 		}
 	}
 	stamp_last_album(p);
+	stamp_context_name(p);
+	if (shuffled) {
+		playlist_shuffle_restart();
+		device_state_queue_changed(); // the fresh deal is what a restart restores
+	}
 
 	player_refresh_now_playing();
 	if (!reference_layout()) switch_screen(player_screen);
@@ -3478,7 +3761,7 @@ static void play_menu_build(panel_t *p) {
 	play_menu_row(card, "medialist_play_in_random_order", play_menu_shuffle_cb);
 	play_menu_row(card, "medialist_play_in_sequence", play_menu_sequence_cb);
 	p->play_menu_random_album = play_menu_row(card, "medialist_play_albums_in_random_order", play_menu_random_album_cb);
-	play_menu_row(card, "medialist_queue_random_track", play_menu_random_track_cb);
+	if(!reference_layout())play_menu_row(card, "medialist_queue_random_track", play_menu_random_track_cb);
 }
 
 static void play_menu_clicked_cb(lv_event_t *e) {
@@ -3567,9 +3850,15 @@ static void menu_fav_action(void *user) {
 
 static void menu_playlist_action(void *user) {
 	(void)user;
-	if (menu_path[0]) {
-		playlistpage_add_track(menu_path);
+	if (!menu_path[0]) {
+		return;
 	}
+	// The reference layout's playlist membership sheet: search, saved
+	// membership, new playlist and Done, the same one Now Playing uses.
+	if (reference_layout())
+		collectionview_manage_track(menu_path);
+	else
+		playlistpage_add_track(menu_path);
 }
 
 // "Add to queue": the track goes where the setting puts it, right after the one
@@ -3586,6 +3875,28 @@ static void menu_queue_action(void *user) {
 	if (playlist_enqueue(menu_path)) {
 		device_state_queue_changed();
 		toast_success("added_to_the_queue");
+	}
+}
+
+// Spotify's "Hide in this playlist": stays in the list, skipped when the
+// playlist plays; the same row shows it again.
+static void menu_hide_action(void *user) {
+	panel_t *p = user;
+	if (!p || !p->playlist[0] || !menu_path[0]) {
+		return;
+	}
+	bool hide = !library_playlist_hidden(p->playlist, menu_path);
+	library_playlist_hide(p->playlist, menu_path, hide);
+	toast_success(hide ? "Hidden in this playlist" : "Shown in this playlist");
+	reload_current(p);
+}
+
+// "Play next": straight after the track playing, ahead of anything queued.
+static void menu_next_action(void *user) {
+	(void)user;
+	if (menu_path[0] && playlist_priority_add_next(menu_path)) {
+		device_state_queue_changed();
+		toast_success("Plays next");
 	}
 }
 
@@ -3644,7 +3955,7 @@ static void menu_btn_cb(lv_event_t *e) {
 		menu_album[0] = '\0';
 	}
 
-	popover_item_t items[5];
+	popover_item_t items[7];
 	int n = 0;
 	// The two "add to" lines stay next to each other: they are the same kind
 	// of thing, and reading past one to reach the other is friction with no
@@ -3653,12 +3964,14 @@ static void menu_btn_cb(lv_event_t *e) {
 	// it.
 	items[n++] = (popover_item_t){
 		library_fav_contains(menu_path) ? "remove_from_favourites" : "medialist_add_to_favourites", menu_fav_action, NULL};
+	items[n++] = (popover_item_t){"Play next", menu_next_action, NULL};
 	items[n++] = (popover_item_t){"add_to_queue", menu_queue_action, NULL};
 	// Inside a playlist the useful action is the opposite one: this list is
 	// where the track already is, so offering to file it somewhere else while
 	// looking at it would be the wrong way round.
 	if (p->playlist[0]) {
 		items[n++] = (popover_item_t){"medialist_remove_from_playlist", menu_playlist_remove_action, NULL};
+		items[n++] = (popover_item_t){library_playlist_hidden(p->playlist, menu_path) ? "Show in this playlist" : "Hide in this playlist", menu_hide_action, p};
 	} else {
 		items[n++] = (popover_item_t){"add_to_playlist", menu_playlist_action, NULL};
 	}
@@ -3703,7 +4016,11 @@ static void screen_loaded_cb(lv_event_t *e) {
 	panel_t *p = lv_event_get_user_data(e);
     if(p && reference_layout() && p->is_tracks) {
         int footer=main_menu_mount_footer(p->screen);
-        lv_obj_set_height(p->list,p->cfg->screen_height-p->cfg->top_bar_height-footer);
+        lv_obj_set_height(p->list,p->cfg->screen_height-p->cfg->top_bar_height-footer);fast_update(p);
+    } else if(p && reference_layout()) {
+        /* Index lists sit below their heading and end above the footer. */
+        int footer=main_menu_mount_footer(p->screen);
+        lv_obj_set_height(p->list,p->cfg->screen_height-lv_obj_get_y(p->list)-footer);
     }
 	if (p) {
 		window_update(p);
@@ -3721,6 +4038,122 @@ static void sel_blur_round_cb(lv_event_t *e) {
 	if (blur) {
 		blur->corner_radius = lv_obj_get_style_radius(lv_event_get_current_target(e), LV_PART_MAIN);
 	}
+}
+
+
+/* A real drag target beside the pooled rows; LVGL's decorative scrollbar is
+ * not touch-draggable. It maps directly to the full canvas, independent of pool size. */
+static void fast_update(panel_t *p) {
+    if(!p->fast_bar)return;
+    bool show=reference_layout() && p->is_tracks && p->count>=30 && !p->find_keyboard;
+    if(p->find_keyboard)show=reference_layout() && p->is_tracks && p->count>=30 && !keyboard_is_visible(p->find_keyboard);
+    lv_obj_set_hidden(p->fast_bar,!show);if(!show)return;
+    int height=lv_obj_get_height(p->list)-76;if(height<80)return;
+    lv_obj_set_pos(p->fast_bar,p->cfg->screen_width-24,lv_obj_get_y(p->list)+68);
+    lv_obj_set_size(p->fast_bar,24,height);
+    int limit=body_height(p)-lv_obj_get_height(p->list);
+    int y=limit>0?LV_CLAMP(0,lv_obj_get_scroll_y(p->list),limit)*(height-44)/limit:0;
+    lv_obj_set_pos(p->fast_thumb,9,y);lv_obj_move_foreground(p->fast_bar);
+}
+static void find_pull_cb(lv_event_t *e) {
+    panel_t *p=lv_event_get_user_data(e);lv_event_code_t code=lv_event_get_code(e);
+    lv_indev_t *in=lv_indev_active();if(!in)return;
+    lv_point_t point;lv_indev_get_point(in,&point);
+    if(code==LV_EVENT_PRESSED){p->find_pull=lv_obj_get_scroll_y(p->list)<=2;p->find_pull_y=point.y;}
+    else if(code==LV_EVENT_RELEASED || code==LV_EVENT_PRESS_LOST)p->find_pull=false;
+    else if(p->find_pull && point.y-p->find_pull_y>50 && p->find_row && lv_obj_is_hidden(p->find_row)) {
+        p->find_pull=false;find_reveal(p);
+    }
+}
+static void fast_drag_cb(lv_event_t *e) {
+    panel_t *p=lv_event_get_user_data(e);lv_event_code_t code=lv_event_get_code(e);
+    if(code==LV_EVENT_RELEASED || code==LV_EVENT_PRESS_LOST){p->fast_drag=false;return;}
+    p->fast_drag=true;lv_indev_t *in=lv_indev_active();if(!in)return;
+    lv_point_t pt;lv_indev_get_point(in,&pt);lv_area_t a;lv_obj_get_coords(p->fast_bar,&a);
+    int span=lv_obj_get_height(p->fast_bar)-44;
+    int limit=LV_MAX(0,body_height(p)-lv_obj_get_height(p->list));
+    lv_obj_scroll_to_y(p->list,LV_CLAMP(0,pt.y-a.y1-22,span)*limit/LV_MAX(1,span),LV_ANIM_OFF);
+    window_update(p);fast_update(p);
+}
+static void find_hide_keyboard(panel_t *p) {
+    if(!p->find_keyboard || !keyboard_is_visible(p->find_keyboard))return;
+    keyboard_set_visible(p->find_keyboard,false);
+    if(p->find_field)keyboard_show_caret(p->find_field,false);
+    lv_obj_set_height(p->list,p->cfg->screen_height-lv_obj_get_y(p->list)-138);
+    fast_update(p);
+}
+static void find_done_cb(lv_event_t *e){panel_t *p=lv_event_get_user_data(e);find_apply(p);find_hide_keyboard(p);}
+static void find_reflow(panel_t *p) {
+    lv_obj_update_layout(p->head);p->head_height=lv_obj_get_height(p->head);
+    if(panel_is_album(p))album_places_load(p);
+    for(int i=0;i<ROW_POOL;i++){row_drop_thumb(p,&p->rows[i]);p->rows[i].index=-2;}
+    p->window_first=-1;p->window_count=0;
+    lv_obj_set_height(p->body,body_height(p)); reco_sync(p);
+    lv_obj_align(p->empty,LV_ALIGN_TOP_MID,0,p->head_height+8);
+    lv_obj_set_hidden(p->empty,p->count!=0);
+    window_update(p);fast_update(p);
+}
+static void find_reveal(panel_t *p) {
+    if(!p->find_row || p->reordering || p->selecting)return;
+    lv_obj_set_hidden(p->find_row,false);find_reflow(p);
+    lv_obj_scroll_to_y(p->list,LV_MAX(0,p->head_height-170),LV_ANIM_OFF);
+}
+static void find_apply(panel_t *p) {
+    if(!p->find_field || p->from_paths)return;
+    if(p->find_timer)lv_timer_pause(p->find_timer);
+    snprintf(p->find_query,sizeof(p->find_query),"%s",lv_textarea_get_text(p->find_field));
+    library_index_t *base=p->find_base?p->find_base:p->ix;
+    library_index_t *view=library_index_find_view(base,p->find_query,p->find_sort);
+    if(!view)return;
+    if(!p->find_base)p->find_base=p->ix;else library_index_close(p->ix);
+    p->ix=view;p->count=library_index_count(view);
+    lv_label_set_text(p->empty,*p->find_query?"No matching songs":"No songs in this collection");
+    empty_style(p,false,false);
+    find_reflow(p);
+    lv_obj_scroll_to_y(p->list,LV_MAX(0,p->head_height-170),LV_ANIM_OFF);
+}
+static void find_timer_cb(lv_timer_t *t){find_apply(lv_timer_get_user_data(t));}
+static void find_changed_cb(lv_event_t *e) {
+    panel_t *p=lv_event_get_user_data(e);
+    if(!p->find_timer)p->find_timer=lv_timer_create(find_timer_cb,180,p);
+    lv_timer_reset(p->find_timer);lv_timer_resume(p->find_timer);
+}
+static void find_focus_cb(lv_event_t *e) {
+    panel_t *p=lv_event_get_user_data(e);
+    if(!p->find_keyboard)p->find_keyboard=keyboard_create(p->screen,p->cfg->screen_width,280,p->find_field,NULL,"Done",find_done_cb,p);
+    keyboard_set_field(p->find_keyboard,p->find_field);keyboard_set_visible(p->find_keyboard,true);
+    lv_obj_move_foreground(keyboard_obj(p->find_keyboard));keyboard_show_caret(p->find_field,true);
+    lv_obj_set_height(p->list,p->cfg->screen_height-lv_obj_get_y(p->list)-280);
+    lv_obj_scroll_to_y(p->list,LV_MAX(0,p->head_height-170),LV_ANIM_OFF);fast_update(p);
+}
+static void find_sort_cb(lv_event_t *e) {
+    panel_t *p=lv_event_get_user_data(e);p->find_sort=(p->find_sort+1)%5;
+    const char *names[]={"Original","Title","Artist","Album","Added"};
+    lv_label_set_text(p->find_sort_label,names[p->find_sort]);find_apply(p);
+}
+static void find_clear_cb(lv_event_t *e){panel_t *p=lv_event_get_user_data(e);lv_textarea_set_text(p->find_field,"");find_apply(p);}
+static void find_build(panel_t *p,int width) {
+    lv_obj_t *row=p->find_row=lv_obj_create(p->head);lv_obj_remove_style_all(row);
+    lv_obj_set_size(row,width,56);lv_obj_set_scrollable(row,false);
+    lv_obj_t *field=p->find_field=lv_textarea_create(row);
+    lv_obj_set_size(field,width-152,48);lv_textarea_set_one_line(field,true);lv_textarea_set_max_length(field,127);
+    lv_obj_set_style_text_font(field,&font_ui_18,0);lv_obj_set_style_text_color(field,lv_color_white(),0);
+    lv_obj_set_style_bg_color(field,lv_color_hex(0x282828),0);lv_obj_set_style_bg_opa(field,255,0);
+    lv_obj_set_style_border_width(field,0,0);lv_obj_set_style_radius(field,6,0);
+    lv_textarea_set_placeholder_text(field,p->kind==LIBRARY_LIST_PLAYLIST?"Find in playlist":"Find on this page");
+    lv_textarea_set_text(field,p->find_query);keyboard_style_caret(field);keyboard_show_caret(field,false);
+    lv_obj_add_event_cb(field,find_changed_cb,LV_EVENT_VALUE_CHANGED,p);
+    lv_obj_add_event_cb(field,find_focus_cb,LV_EVENT_CLICKED,p);
+    lv_obj_t *clear=lv_btn_create(row);lv_obj_set_size(clear,44,48);lv_obj_set_pos(clear,width-148,0);
+    lv_obj_set_style_bg_color(clear,lv_color_hex(0x282828),0);lv_obj_set_style_shadow_width(clear,0,0);
+    lv_obj_t *x=lv_label_create(clear);lv_label_set_text(x,"\xC3\x97");lv_obj_center(x);
+    lv_obj_add_event_cb(clear,find_clear_cb,LV_EVENT_CLICKED,p);
+    lv_obj_t *sort=lv_btn_create(row);lv_obj_set_size(sort,96,48);lv_obj_set_pos(sort,width-96,0);
+    lv_obj_set_style_bg_color(sort,lv_color_hex(0x282828),0);lv_obj_set_style_shadow_width(sort,0,0);
+    p->find_sort_label=lv_label_create(sort);const char *names[]={"Original","Title","Artist","Album","Added"};
+    lv_label_set_text(p->find_sort_label,names[p->find_sort]);lv_obj_set_style_text_font(p->find_sort_label,&font_ui_16,0);lv_obj_center(p->find_sort_label);
+    lv_obj_add_event_cb(sort,find_sort_cb,LV_EVENT_CLICKED,p);
+    lv_obj_set_hidden(row,!p->find_query[0] && !p->find_sort);
 }
 
 static void build_panel(panel_t *p, gui_config_t *cfg, bool is_tracks, int slot_base) {
@@ -3750,6 +4183,20 @@ static void build_panel(panel_t *p, gui_config_t *cfg, bool is_tracks, int slot_
 	lv_obj_set_scroll_dir(p->list, LV_DIR_VER);
 	lv_obj_set_scrollbar_mode(p->list, LV_SCROLLBAR_MODE_AUTO);
 	lv_obj_add_event_cb(p->list, scroll_cb, LV_EVENT_SCROLL, p);
+    if(reference_layout() && is_tracks) {
+        lv_event_code_t pull_events[]={LV_EVENT_PRESSED,LV_EVENT_PRESSING,LV_EVENT_RELEASED,LV_EVENT_PRESS_LOST};
+        for(int i=0;i<4;i++)lv_obj_add_event_cb(p->list,find_pull_cb,pull_events[i],p);
+        lv_obj_set_scrollbar_mode(p->list,LV_SCROLLBAR_MODE_OFF);
+        p->fast_bar=lv_obj_create(p->screen);lv_obj_remove_style_all(p->fast_bar);
+        lv_obj_set_scrollable(p->fast_bar,false);lv_obj_set_clickable(p->fast_bar,true);
+        lv_obj_set_scroll_chain_ver(p->fast_bar,false);
+        lv_event_code_t events[]={LV_EVENT_PRESSED,LV_EVENT_PRESSING,LV_EVENT_RELEASED,LV_EVENT_PRESS_LOST};
+        for(int i=0;i<4;i++)lv_obj_add_event_cb(p->fast_bar,fast_drag_cb,events[i],p);
+        p->fast_thumb=lv_obj_create(p->fast_bar);lv_obj_remove_style_all(p->fast_thumb);
+        lv_obj_set_size(p->fast_thumb,6,44);lv_obj_set_style_radius(p->fast_thumb,3,0);
+        lv_obj_set_style_bg_color(p->fast_thumb,lv_color_hex(0xb3b3b3),0);lv_obj_set_style_bg_opa(p->fast_thumb,220,0);
+        lv_obj_set_clickable(p->fast_thumb,false);lv_obj_set_hidden(p->fast_bar,true);
+    }
 
 	// The bar behind the heading row for an album under its head (see
 	// head_follow). Only the track lists have albums.
@@ -4272,6 +4719,7 @@ static void head_paint(panel_t *p) {
 	}
 	bool t = p->tinted;
 	local_color(p->head_title, LV_STYLE_TEXT_COLOR, 0, t, p->tint_ink);
+    if(reference_layout())lv_obj_set_style_text_color(p->head_title,lv_color_white(),0);
 	if (p->head_artist) {
 		// The artist in the accent, as the theme has it, or in the ink.
 		lv_obj_set_style_text_color(p->head_artist, t ? p->tint_ink : reference_layout() ? lv_color_white() : theme()->accent, 0);
@@ -4292,6 +4740,7 @@ static void head_paint(panel_t *p) {
             if(reference_layout()) {lv_obj_set_style_bg_color(button,lv_color_hex(0x1ed760),0);lv_obj_set_style_image_recolor(inside,lv_color_black(),0);}
 		} else {
 			local_color(inside, LV_STYLE_IMAGE_RECOLOR, 0, t, p->tint_ink);
+            if(reference_layout())lv_obj_set_style_image_recolor(inside,lv_color_hex(i==0 && p->shuffle_pending?0x1ed760:0xffffff),0);
 		}
 	}
 }
@@ -4315,9 +4764,10 @@ static void page_paint(panel_t *p) {
 	for (int i = 0; i < ROW_POOL; i++) {
 		row_t *row = &p->rows[i];
 		local_color(row->button, LV_STYLE_BG_COLOR, 0, t, p->tint_card);
-        lv_obj_set_style_bg_opa(row->button,reference_layout()&&p->head?LV_OPA_TRANSP:LV_OPA_COVER,0);
+        lv_obj_set_style_bg_opa(row->button,reference_layout()?LV_OPA_TRANSP:LV_OPA_COVER,0);
 		local_color(row->button, LV_STYLE_BG_COLOR, LV_STATE_PRESSED, t, p->tint_pressed);
 		local_color(row->label, LV_STYLE_TEXT_COLOR, 0, t, p->tint_ink);
+        if(reference_layout())lv_obj_set_style_text_color(row->label,lv_color_white(),0);
 		local_color(row->artist, LV_STYLE_TEXT_COLOR, 0, t, p->tint_dim);
 		local_color(row->playmark, LV_STYLE_BG_COLOR, 0, t, p->tint_ink);
 		if (row->menu_btn) {
@@ -4364,13 +4814,16 @@ static void page_paint(panel_t *p) {
 // stands level with the chevron.
 static void list_place(panel_t *p, bool under_status_bar_only) {
 	int top = under_status_bar_only ? (int)p->cfg->top_bar_height : settingsrow_content_top(p->cfg);
-	lv_obj_set_size(p->list, p->cfg->screen_width, p->cfg->screen_height - top);
+	int footer=reference_layout() && p->is_tracks?138:0;
+    lv_obj_set_size(p->list, p->cfg->screen_width, p->cfg->screen_height - top-footer);
 	lv_obj_align(p->list, LV_ALIGN_TOP_LEFT, 0, top);
 }
 
 // Takes the head away, gives the page heading back the album's name it was
 // keeping empty and the page back its theme colours.
 static void head_clear(panel_t *p) {
+    find_hide_keyboard(p);
+    p->find_row=p->find_field=p->find_sort_label=NULL;
 	coverloader_release(COVERLOADER_ALBUM_HEAD);
 	if (p->head) {
 		lv_obj_delete(p->head); // the picture goes before its pixels do
@@ -4447,17 +4900,14 @@ static void show_corner(lv_obj_t *btn, bool shown);
 
 // The head's three buttons, each one of the circle-play menu's choices.
 static void head_shuffle_cb(lv_event_t *e) {
-	if (player_sheet_drag_active() || switcher_back_drag_active()) {
-		return;
-	}
-	play_artist(lv_event_get_user_data(e), true);
+    if(player_sheet_drag_active() || switcher_back_drag_active())return;
+    panel_t *p=lv_event_get_user_data(e);
+    if(reference_layout()){p->shuffle_pending=!p->shuffle_pending;head_paint(p);}
+    else play_artist(p,true);
 }
-
 static void head_play_cb(lv_event_t *e) {
-	if (player_sheet_drag_active() || switcher_back_drag_active()) {
-		return;
-	}
-	play_artist(lv_event_get_user_data(e), false);
+    if(player_sheet_drag_active() || switcher_back_drag_active())return;
+    panel_t *p=lv_event_get_user_data(e);play_artist(p,reference_layout() && p->shuffle_pending);
 }
 
 static void head_queue_cb(lv_event_t *e) {
@@ -4523,6 +4973,114 @@ static void head_options_cb(lv_event_t *e) {
     panel_t *p = lv_event_get_user_data(e);
     collectionview_collection_options(COLLECTION_PLAYLIST, p->playlist, p->title, "You");
 }
+/* Spotify's playlist pills (iOS, captured 2026-11-04): Add, Edit, Sort,
+ * Name & details, in a row that scrolls sideways under the header. */
+static void head_pill_cb(lv_event_t *e) {
+    panel_t *p = lv_event_get_user_data(e);
+    int action = (int)(intptr_t)lv_obj_get_user_data(lv_event_get_current_target(e));
+    if (!p || player_sheet_drag_active() || switcher_back_drag_active()) return;
+    collectionview_playlist_command(p->playlist, action);
+}
+static void head_pills(panel_t *p, int width) {
+    lv_obj_t *row = lv_obj_create(p->head);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, width, 52);
+    lv_obj_set_style_margin_top(row, 10, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row, 8, 0);
+    lv_obj_set_scroll_dir(row, LV_DIR_HOR);
+    lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_event_bubble(row, true);
+    static const char *const NAMES[4] = {"Add", "Edit", "Sort", "Name & details"};
+    const lv_image_dsc_t *icons[4] = {&icon_plus, &icon_reorder, &icon_arrow_down_up, &sonix_icon_pencil};
+    static const int ACTIONS[4] = {1, 2, 0, 5};
+    for (int i = 0; i < 4; i++) {
+        lv_obj_t *b = lv_button_create(row);
+        lv_obj_set_size(b, LV_SIZE_CONTENT, 44);
+        lv_obj_set_style_radius(b, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x2a2a2a), 0);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x3a3a3a), LV_STATE_PRESSED);
+        lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+        lv_obj_set_style_shadow_width(b, 0, 0);
+        lv_obj_set_style_border_width(b, 0, 0);
+        lv_obj_set_style_pad_hor(b, 16, 0);
+        lv_obj_set_flex_flow(b, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(b, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_column(b, 8, 0);
+        lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
+        lv_obj_set_user_data(b, (void *)(intptr_t)ACTIONS[i]);
+        lv_obj_add_event_cb(b, ACTIONS[i] ? head_pill_cb : sort_clicked_cb, LV_EVENT_CLICKED, p);
+        lv_obj_t *im = lv_image_create(b);
+        lv_image_set_src(im, icons[i]);
+        lv_obj_set_size(im, 20, 20);
+        lv_image_set_inner_align(im, LV_IMAGE_ALIGN_CONTAIN);
+        lv_obj_set_style_image_recolor(im, lv_color_white(), 0);
+        lv_obj_set_style_image_recolor_opa(im, LV_OPA_COVER, 0);
+        lv_obj_t *l = lv_label_create(b);
+        lv_label_set_text(l, NAMES[i]);
+        lv_obj_set_style_text_font(l, &font_ui_18, 0);
+        lv_obj_set_style_text_color(l, lv_color_white(), 0);
+    }
+}
+
+/* Spotify's genre chips under Liked Songs: the genres most of the liked
+ * songs carry; a chip opens the liked songs of that genre as a list. */
+static char liked_genre_names[6][64];
+static void liked_genre_cb(lv_event_t *e) {
+    if (player_sheet_drag_active() || switcher_back_drag_active()) return;
+    int i = (int)(intptr_t)lv_event_get_user_data(e);
+    if (i < 0 || i >= 6) return;
+    static char paths[500][512];
+    int n = library_liked_genre_paths(liked_genre_names[i], paths, 500);
+    if (n <= 0) return;
+    static const char *list[500], *names[500], *artists[500];
+    static char name_buf[500][128], artist_buf[500][96];
+    for (int k = 0; k < n; k++) {
+        list[k] = paths[k];
+        playlists_track_names(paths[k], name_buf[k], sizeof(name_buf[k]), artist_buf[k], sizeof(artist_buf[k]));
+        names[k] = name_buf[k];
+        artists[k] = artist_buf[k];
+    }
+    char title[96];
+    snprintf(title, sizeof(title), "%s \xC2\xB7 Liked Songs", liked_genre_names[i]);
+    medialist_open_paths(title, list, names, artists, n, NULL);
+}
+static void head_liked_genres(panel_t *p, int width) {
+    int counts[6];
+    int n = library_liked_genres(liked_genre_names, counts, 6);
+    if (n <= 0) return;
+    lv_obj_t *row = lv_obj_create(p->head);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, width, 52);
+    lv_obj_set_style_margin_top(row, 10, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row, 8, 0);
+    lv_obj_set_scroll_dir(row, LV_DIR_HOR);
+    lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_event_bubble(row, true);
+    for (int i = 0; i < n; i++) {
+        lv_obj_t *b = lv_button_create(row);
+        lv_obj_set_size(b, LV_SIZE_CONTENT, 40);
+        lv_obj_set_style_radius(b, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x2a2a2a), 0);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x3a3a3a), LV_STATE_PRESSED);
+        lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+        lv_obj_set_style_shadow_width(b, 0, 0);
+        lv_obj_set_style_border_width(b, 0, 0);
+        lv_obj_set_style_pad_hor(b, 16, 0);
+        lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
+        lv_obj_add_event_cb(b, liked_genre_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+        lv_obj_t *l = lv_label_create(b);
+        lv_label_set_text(l, liked_genre_names[i]);
+        lv_obj_set_style_text_font(l, &font_ui_18, 0);
+        lv_obj_set_style_text_color(l, lv_color_white(), 0);
+        lv_obj_center(l);
+    }
+}
+
+static void find_build(panel_t *p,int width);
 static void head_build(panel_t *p) {
 	head_clear(p);
 
@@ -4572,11 +5130,20 @@ static void head_build(panel_t *p) {
     if(reference_layout()) {
         collection_header_t h;
         lv_event_cb_t callbacks[]={head_shuffle_cb,head_play_cb,
-            p->kind==LIBRARY_LIST_PLAYLIST?head_options_cb:head_queue_cb};
+            p->kind==LIBRARY_LIST_PLAYLIST?head_options_cb:NULL};
         collection_header_build(p->head,width,p->title,info.artist,meta,&icon_play,&icon_shuffle,
-            p->kind==LIBRARY_LIST_PLAYLIST?&icon_ellipsis_vertical:&icon_list_queue,callbacks,p,&h);
+            p->kind==LIBRARY_LIST_PLAYLIST?&icon_ellipsis_vertical:NULL,callbacks,p,&h);
         p->head_cover=h.cover;p->head_title=h.title;p->head_artist=h.artist;p->head_meta=h.meta;
         memcpy(p->head_buttons,h.buttons,sizeof(h.buttons));
+        /* An empty playlist has its own "Add to this playlist" instead. */
+        if(p->kind==LIBRARY_LIST_PLAYLIST && p->playlist[0] && p->count>0) head_pills(p,width);
+        if(p->kind==LIBRARY_LIST_FAVOURITES && p->count>0) head_liked_genres(p,width);
+        /* An album's artist line opens its credited artists, as on Spotify. */
+        if(p->head_artist && p->kind==LIBRARY_LIST_TRACKS && p->filter==LIBRARY_FILTER_ALBUM && !p->from_paths) {
+            lv_obj_set_clickable(p->head_artist,true);
+            lv_obj_set_ext_click_area(p->head_artist,12);
+            lv_obj_add_event_cb(p->head_artist,head_artist_cb,LV_EVENT_CLICKED,p);
+        }
     } else {
 	// The album glyph on a card until the picture arrives, and for good when
 	// the record has none.
@@ -4623,12 +5190,13 @@ static void head_build(panel_t *p) {
         lv_obj_add_state(p->head_buttons[1], LV_STATE_DISABLED);
         lv_obj_set_style_opa(p->head_buttons[0], LV_OPA_30, LV_STATE_DISABLED);
         lv_obj_set_style_opa(p->head_buttons[1], LV_OPA_30, LV_STATE_DISABLED);
-        if (p->kind != LIBRARY_LIST_PLAYLIST) {
+        if (p->head_buttons[2] && p->kind != LIBRARY_LIST_PLAYLIST) {
             lv_obj_add_state(p->head_buttons[2], LV_STATE_DISABLED);
             lv_obj_set_style_opa(p->head_buttons[2], LV_OPA_30, LV_STATE_DISABLED);
         }
     }
-	/* Paint the whole page even on its first opening, before any artwork arrives. */
+	if(reference_layout() && !p->from_paths)find_build(p,width);
+    /* Paint the whole page even on its first opening, before any artwork arrives. */
 	page_paint(p);
 
 	// The real height of all that, for the rows to start under. The screen may
@@ -4654,7 +5222,28 @@ static void head_build(panel_t *p) {
 	// Made from the player's own cover of that track, so a record already
 	// played comes straight from the player's table, and one shown here first
 	// is in it when it plays.
+	// Liked Songs wears Spotify's own cover, never a track's: a white heart on
+	// the violet gradient.
+	if (reference_layout() && p->kind == LIBRARY_LIST_FAVOURITES) {
+		lv_image_set_src(p->head_cover, &icon_heart);
+		lv_image_set_scale(p->head_cover, 150);
+		lv_obj_set_style_bg_color(p->head_cover, lv_color_hex(0x450af5), 0);
+		lv_obj_set_style_bg_grad_color(p->head_cover, lv_color_hex(0xc4efd9), 0);
+		lv_obj_set_style_bg_grad_dir(p->head_cover, LV_GRAD_DIR_VER, 0);
+		lv_obj_set_style_bg_opa(p->head_cover, LV_OPA_COVER, 0);
+		lv_obj_set_style_image_recolor(p->head_cover, lv_color_white(), 0);
+		lv_obj_set_style_image_recolor_opa(p->head_cover, LV_OPA_COVER, 0);
+		p->head_cover_requested = true;
+		p->head_cover_settled = true;
+		return;
+	}
 	char path[512] = "";
+	/* A playlist with a chosen cover shows that, not its first song. */
+	if (p->kind == LIBRARY_LIST_PLAYLIST && p->playlist[0] && library_playlist_cover_get(p->playlist, path, sizeof(path))) {
+		coverloader_request(COVERLOADER_ALBUM_HEAD, path, HEAD_COVER_SIZE);
+		p->head_cover_requested = true;
+		return;
+	}
 	if (row_path_copy(p, 0, path, sizeof(path)) && head_from_player(p, path)) {
 		p->head_cover_requested = true;
 		p->head_cover_settled = true;
@@ -4668,6 +5257,15 @@ static void head_build(panel_t *p) {
 		}
 		p->head_cover_requested = true;
 	} else {
+		// Nothing to take a picture from yet: an empty playlist shows Spotify's
+		// note on the grey square.
+		if (reference_layout() && p->kind == LIBRARY_LIST_PLAYLIST) {
+			lv_image_set_src(p->head_cover, &icon_music_note);
+			lv_image_set_scale(p->head_cover, 150);
+			lv_obj_set_style_bg_color(p->head_cover, lv_color_hex(0x282828), 0);
+			lv_obj_set_style_bg_opa(p->head_cover, LV_OPA_COVER, 0);
+			lv_obj_set_style_image_recolor(p->head_cover, lv_color_hex(0xb3b3b3), 0);
+		}
 		p->head_cover_settled = true;
 	}
 }
@@ -4685,6 +5283,7 @@ static void head_show_image(panel_t *p, const cover_image_t *image) {
 	lv_obj_remove_style(p->head_cover, &theme_style_icon, 0);
 	lv_obj_set_style_image_recolor_opa(p->head_cover, LV_OPA_TRANSP, 0);
 	lv_obj_set_style_bg_opa(p->head_cover, LV_OPA_TRANSP, 0);
+	lv_image_set_inner_align(p->head_cover,LV_IMAGE_ALIGN_CONTAIN);
 	lv_image_set_src(p->head_cover, &p->head_image.dsc);
 	if (tint_from_cover(p)) {
 		p->tinted = true;
@@ -4784,13 +5383,55 @@ static void album_extras_clear(panel_t *p) {
 // Builds them for the list now loaded: disc headings on a record of more than
 // one disc, and the head when the alternative album view is on. The head
 // first, because the headings are placed under it.
+static void empty_add_cb(lv_event_t *e) {
+	(void)e;
+	playlistview_add_songs();
+}
+/* The empty-list note: Spotify's invitation on an empty playlist (a bold line
+ * and a white "Add to this playlist" pill), the plain dim note elsewhere. */
+static void empty_style(panel_t *p, bool invite, bool with_add) {
+	lv_obj_set_style_text_font(p->empty, invite ? &font_ui_22_bold : &font_ui_24, 0);
+	if (invite)
+		lv_obj_set_style_text_color(p->empty, lv_color_white(), 0);
+	else
+		lv_obj_remove_local_style_prop(p->empty, LV_STYLE_TEXT_COLOR, 0);
+	if (with_add && !p->empty_add) {
+		p->empty_add = lv_obj_create(p->empty);
+		lv_obj_remove_style_all(p->empty_add);
+		lv_obj_set_size(p->empty_add, 236, 48);
+		lv_obj_set_style_radius(p->empty_add, LV_RADIUS_CIRCLE, 0);
+		lv_obj_set_style_bg_color(p->empty_add, lv_color_white(), 0);
+		lv_obj_set_style_bg_opa(p->empty_add, LV_OPA_COVER, 0);
+		lv_obj_set_style_transform_scale(p->empty_add, 245, LV_STATE_PRESSED);
+		lv_obj_set_style_transform_pivot_x(p->empty_add, 118, 0);
+		lv_obj_set_style_transform_pivot_y(p->empty_add, 24, 0);
+		lv_obj_add_flag(p->empty_add, LV_OBJ_FLAG_IGNORE_LAYOUT);
+		lv_obj_set_clickable(p->empty_add, true);
+		lv_obj_set_scrollable(p->empty_add, false);
+		lv_obj_add_event_cb(p->empty_add, empty_add_cb, LV_EVENT_CLICKED, NULL);
+		lv_obj_t *l = lv_label_create(p->empty_add);
+		lv_label_set_text(l, "Add to this playlist");
+		lv_obj_set_style_text_font(l, &font_ui_18, 0);
+		lv_obj_set_style_text_color(l, lv_color_black(), 0);
+		lv_obj_center(l);
+	}
+	// The pill lives inside the note, under its text: the note grows by its
+	// height, so it shows, hides and moves with the note.
+	lv_obj_set_style_pad_bottom(p->empty, with_add ? 70 : 0, 0);
+	if (p->empty_add) {
+		lv_obj_set_hidden(p->empty_add, !with_add);
+		lv_obj_align(p->empty_add, LV_ALIGN_BOTTOM_MID, 0, 70);
+	}
+}
 static void album_extras_build(panel_t *p) {
 	bool playlist_head = reference_layout() && (p->kind == LIBRARY_LIST_PLAYLIST || p->kind == LIBRARY_LIST_FAVOURITES);
     if (!panel_is_album(p) && !playlist_head) return;
-    if (album_head || playlist_head) head_build(p);
+    if (album_head || playlist_head || reference_layout()) head_build(p);
     if (panel_is_album(p)) album_places_load(p);
     if (playlist_head) {
-        lv_label_set_text(p->empty, p->kind == LIBRARY_LIST_FAVOURITES ? "Save songs from their playlist menu" : "Use the menu to add songs");
+        bool liked = p->kind == LIBRARY_LIST_FAVOURITES;
+        lv_label_set_text(p->empty, liked ? "Songs you like will appear here" : "Let's start building your playlist");
+        empty_style(p, true, !liked);
         lv_obj_set_width(p->empty, lv_pct(90));
         lv_obj_align(p->empty, LV_ALIGN_TOP_MID, 0, p->head_height + 8);
     }
@@ -4813,6 +5454,7 @@ bool medialist_album_head(void) {
 
 void medialist_set_album_head(bool on) {
 	load_view_settings();
+    if(reference_layout())on=true;
 	if (album_head == on) {
 		return;
 	}
@@ -4836,7 +5478,7 @@ void medialist_set_album_head(bool on) {
 	settingsrow_title_corner_slots(p->title_label, p->cfg, p->corner_slots);
 	album_extras_clear(p);
 	album_extras_build(p);
-	lv_obj_set_height(p->body, body_height(p));
+	lv_obj_set_height(p->body, body_height(p)); reco_sync(p);
 	lv_obj_scroll_to_y(p->list, 0, LV_ANIM_OFF);
 	p->saved_scroll = 0;
 	window_update(p);
@@ -5005,6 +5647,10 @@ bool medialist_step_back_to_player(void) {
 }
 
 void medialist_open(const char *title, library_list_t kind, library_filter_t filter, const char *filter_value) {
+	// A smart playlist is filled again from its rule each time it opens.
+	if (kind == LIBRARY_LIST_PLAYLIST && filter_value && library_smart_get(filter_value, NULL, NULL, 0)) {
+		library_smart_refresh(filter_value);
+	}
     library_home_touch(kind,filter,filter_value,title);
     if(kind==LIBRARY_LIST_PLAYLIST)collections_touch(COLLECTION_PLAYLIST,filter_value);
     else if(kind==LIBRARY_LIST_TRACKS && filter==LIBRARY_FILTER_ALBUM)collections_touch(COLLECTION_ALBUM,filter_value);
@@ -5164,6 +5810,7 @@ void medialist_open(const char *title, library_list_t kind, library_filter_t fil
 	bool most_played = kind == LIBRARY_LIST_MOST_PLAYED;
 	lv_obj_align(p->empty, LV_ALIGN_TOP_MID, 0, 120);
 	lv_label_set_text(p->empty, tr(most_played ? "medialist_most_played_empty" : "library_empty_note"));
+	empty_style(p, false, false);
 	lv_obj_set_width(p->empty, most_played ? lv_pct(90) : LV_SIZE_CONTENT);
 
 	p->from_paths = false;
@@ -5176,7 +5823,7 @@ void medialist_open(const char *title, library_list_t kind, library_filter_t fil
 	album_extras_clear(p);
 	album_extras_build(p);
 
-	lv_obj_set_height(p->body, body_height(p));
+	lv_obj_set_height(p->body, body_height(p)); reco_sync(p);
 	if (p->count == 0) {
 		lv_obj_set_hidden(p->empty, false);
 	} else {
@@ -5240,9 +5887,15 @@ void medialist_open_paths(const char *title, const char *const *paths, const cha
 						  const char *const *artists, int count, const char *playlist) {
 	panel_t *p = &panel_tracks;
 	selection_stop(p);
+	// The previous list's head goes first, while the panel still describes
+	// that list: clearing it repaints the rows, and with from_paths already
+	// set they would be read from an entry list this panel does not have
+	// (a crash, 2026-11-05, opening a composer after an album).
+	album_extras_clear(p);
 	p->kind = LIBRARY_LIST_TRACKS;
 	p->filter = LIBRARY_FILTER_NONE;
 	p->from_paths = true;
+	p->count = 0; // nothing to paint until the entries below are in
 	snprintf(p->playlist, sizeof(p->playlist), "%s", playlist ? playlist : "");
 
 	// Never "the same list" as a database one: the contents can change under
@@ -5285,7 +5938,7 @@ void medialist_open_paths(const char *title, const char *const *paths, const cha
 		}
 	}
 
-	lv_obj_set_height(p->body, body_height(p));
+	lv_obj_set_height(p->body, body_height(p)); reco_sync(p);
 	lv_label_set_text(p->empty, tr("library_empty_note"));
 	lv_obj_set_width(p->empty, LV_SIZE_CONTENT);
 	if (p->count == 0) {
@@ -5416,3 +6069,10 @@ void medialist_sort_prefs(unsigned *desc_mask, unsigned *added_mask, bool *artis
 		*favourites_reversed = fav_reversed;
 	}
 }
+
+#ifdef HOST_BUILD
+void medialist_probe_find_text(const char *text) {
+    panel_t *p=&panel_tracks;
+    if(p->find_field && !lv_obj_is_hidden(p->find_row))lv_textarea_set_text(p->find_field,text?text:"");
+}
+#endif

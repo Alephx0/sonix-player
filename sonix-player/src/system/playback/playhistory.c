@@ -6,6 +6,7 @@
 
 #include "src/system/device/clock.h"
 #include "src/system/library/library.h"
+#include "src/system/playback/playlist.h"
 
 static pthread_mutex_t live_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct {
@@ -14,6 +15,8 @@ static struct {
 	char path[512];
 	char title[256];
 	char artist[256];
+	char kind[24];
+	char context[256];
 } live;
 
 void playhistory_started(const char *path, const char *title, const char *artist, bool kept_out, bool waiting) {
@@ -31,6 +34,9 @@ void playhistory_started(const char *path, const char *title, const char *artist
 	snprintf(live.path, sizeof(live.path), "%s", path ? path : "");
 	snprintf(live.title, sizeof(live.title), "%s", shown);
 	snprintf(live.artist, sizeof(live.artist), "%s", artist ? artist : "");
+	// What it is played from, for Recents' grouping.
+	snprintf(live.kind, sizeof(live.kind), "%s", playlist_context_kind());
+	snprintf(live.context, sizeof(live.context), "%s", playlist_context_name());
 	pthread_mutex_unlock(&live_lock);
 }
 
@@ -47,6 +53,8 @@ void playhistory_left(void) {
 	char path[sizeof(live.path)];
 	char title[sizeof(live.title)];
 	char artist[sizeof(live.artist)];
+	char kind[sizeof(live.kind)];
+	char context[sizeof(live.context)];
 	pthread_mutex_lock(&live_lock);
 	bool pending = live.pending;
 	live.pending = false;
@@ -54,6 +62,8 @@ void playhistory_left(void) {
 	snprintf(path, sizeof(path), "%s", live.path);
 	snprintf(title, sizeof(title), "%s", live.title);
 	snprintf(artist, sizeof(artist), "%s", live.artist);
+	snprintf(kind, sizeof(kind), "%s", live.kind);
+	snprintf(context, sizeof(context), "%s", live.context);
 	pthread_mutex_unlock(&live_lock);
 	if (!pending) {
 		return;
@@ -61,5 +71,5 @@ void playhistory_left(void) {
 	// A time that is not known is not written down as one: the history would
 	// file the entry under a day in 1970.
 	long long when = clock_is_set() ? (long long)time(NULL) : 0;
-	library_history_add(path, title, artist, when);
+	library_history_add_in(path, title, artist, when, kind, context);
 }

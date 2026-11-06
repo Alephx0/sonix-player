@@ -1,5 +1,6 @@
 #include "search_index.h"
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,27 @@ static const char *next_word(const char *p, char word[WORD_MAX]) {
 	word[n] = 0;
 	return p;
 }
+/* A small open-addressed set of 64-bit word hashes for one document (0 =
+ * empty). At 64 bits two different words of one song sharing a hash is not a
+ * case worth a second comparison. */
+#define SEEN_SLOTS 4096
+static bool seen_before(uint64_t *seen, const char *word) {
+	uint64_t h = 14695981039346656037ull;
+	for (const unsigned char *c = (const unsigned char *)word; *c; c++)
+		h = (h ^ *c) * 1099511628211ull;
+	if (h == 0)
+		h = 1;
+	for (uint32_t i = 0; i < SEEN_SLOTS; i++) {
+		uint64_t *slot = &seen[(h + i) & (SEEN_SLOTS - 1)];
+		if (*slot == h)
+			return true;
+		if (*slot == 0) {
+			*slot = h;
+			return false;
+		}
+	}
+	return false;
+}
 bool search_index_schema(sqlite3 *db) {
 	const char *sql = "CREATE TABLE IF NOT EXISTS SEARCH_DOC(id INTEGER PRIMARY KEY,kind INT,key TEXT,name TEXT,path TEXT,text TEXT,folded TEXT,UNIQUE(kind,key));"
 					  "CREATE TABLE IF NOT EXISTS SEARCH_WORD(word TEXT,doc INT,PRIMARY KEY(word,doc)) WITHOUT ROWID;"
@@ -33,8 +55,36 @@ bool search_index_schema(sqlite3 *db) {
 					  "CREATE TRIGGER IF NOT EXISTS search_track_insert AFTER INSERT ON MEDIA_TABLE BEGIN INSERT OR IGNORE INTO SEARCH_DIRTY VALUES(new.path); END;"
 					  "CREATE TRIGGER IF NOT EXISTS search_track_update AFTER UPDATE ON MEDIA_TABLE BEGIN INSERT OR IGNORE INTO SEARCH_DIRTY VALUES(new.path); END;"
 					  "CREATE TRIGGER IF NOT EXISTS search_track_delete AFTER DELETE ON MEDIA_TABLE BEGIN DELETE FROM SEARCH_DOC WHERE path=old.path; DELETE FROM SEARCH_DIRTY WHERE path=old.path; END;"
-					  "INSERT OR IGNORE INTO SEARCH_DIRTY SELECT path FROM MEDIA_TABLE WHERE NOT EXISTS(SELECT 1 FROM SEARCH_DOC WHERE kind=0 AND key=MEDIA_TABLE.path);";
+					  "INSERT OR IGNORE INTO SEARCH_DIRTY SELECT path FROM MEDIA_TABLE WHERE NOT EXISTS(SELECT 1 FROM SEARCH_DOC WHERE kind=0 AND key=MEDIA_TABLE.path);"
+                      "INSERT OR IGNORE INTO SEARCH_DIRTY SELECT path FROM MEDIA_TABLE WHERE NOT EXISTS(SELECT 1 FROM UI_MIGRATION WHERE name='search-individual-credits-v1');"
+                      "INSERT OR IGNORE INTO UI_MIGRATION VALUES('search-individual-credits-v1');";
 	return sqlite3_exec(db, sql, NULL, NULL, NULL) == SQLITE_OK;
+}
+/* Empties the whole index without visiting a row. A DELETE with no WHERE on a
+ * table with no trigger is a truncation; SEARCH_DOC's trigger is dropped for it
+ * and put back. Row by row, on the R1's card, emptying an index that holds
+ * every song's lyrics took long enough to freeze the player (2026-11-05). */
+void search_index_clear(sqlite3 *db) {
+	sqlite3_exec(db,
+				 "DELETE FROM SEARCH_WORD;"
+				 "DROP TRIGGER IF EXISTS search_doc_delete;"
+				 "DELETE FROM SEARCH_DOC;"
+				 "CREATE TRIGGER IF NOT EXISTS search_doc_delete AFTER DELETE ON SEARCH_DOC BEGIN DELETE FROM SEARCH_WORD WHERE doc=old.id; END;"
+				 "DELETE FROM SEARCH_DIRTY;"
+				 "DELETE FROM SEARCH_LYRIC_STATE;"
+				 "CREATE INDEX IF NOT EXISTS search_doc_path ON SEARCH_DOC(path);",
+				 NULL, NULL, NULL);
+}
+/* Removing a track deletes its documents by path (search_track_delete). Without
+ * this index each removal reads the whole table. */
+bool search_index_has_path_index(sqlite3 *db) {
+	sqlite3_stmt *s = NULL;
+	bool found = false;
+	if (sqlite3_prepare_v2(db, "SELECT 1 FROM sqlite_master WHERE type='index' AND name='search_doc_path'", -1, &s, NULL) == SQLITE_OK) {
+		found = sqlite3_step(s) == SQLITE_ROW;
+		sqlite3_finalize(s);
+	}
+	return found;
 }
 void search_index_drop(sqlite3 *db, int kind, const char *key) {
 	sqlite3_stmt *s = NULL;
@@ -71,10 +121,17 @@ void search_index_put(sqlite3 *db, int kind, const char *key, const char *name, 
 		const char *p = folded;
 		char word[WORD_MAX];
 		unsigned count = 0;
+		/* Each distinct word once: a chorus repeats, and every repeat was an
+		 * INSERT OR IGNORE that looked up two b-trees on the card for nothing.
+		 * At most 2048 words are taken, so the set never fills. */
+		uint64_t seen[SEEN_SLOTS];
+		memset(seen, 0, sizeof(seen));
 		while (*p && count++ < 2048) {
 			p = next_word(p, word);
 			if (!*word)
 				break;
+			if (seen_before(seen, word))
+				continue;
 			sqlite3_bind_text(s, 1, word, -1, SQLITE_TRANSIENT);
 			sqlite3_bind_int64(s, 2, id);
 			sqlite3_step(s);
@@ -87,8 +144,10 @@ void search_index_put(sqlite3 *db, int kind, const char *key, const char *name, 
 int search_index_query(sqlite3 *db, const char *query, int limit, library_instant_cb_t cb, void *user) {
 	if (!db || !query || !cb || limit < 1)
 		return 0;
-	if (limit > 12)
-		limit = 12;
+	/* Bounded rows for a UI list: the six-per-kind overview, or one kind's
+	 * longer list behind a search chip. */
+	if (limit > 30)
+		limit = 30;
 	char folded[256], word[WORD_MAX], upper[WORD_MAX + 1];
 	library_search_fold(query, folded, sizeof(folded));
 	next_word(folded, word);
@@ -99,7 +158,7 @@ int search_index_query(sqlite3 *db, const char *query, int limit, library_instan
      * filters candidates. At most 512 candidates/category keep a broad single
      * letter from monopolising the library lock. Prefixes of words match. */
 	const char *sql = "SELECT name,path,text,folded FROM SEARCH_DOC WHERE kind=?3 AND id IN"
-					  " (SELECT w.doc FROM SEARCH_WORD w JOIN SEARCH_DOC d ON d.id=w.doc WHERE w.word>=?1 AND w.word<?2 AND d.kind=?3 LIMIT 512)"
+					  " (SELECT w.doc FROM SEARCH_WORD w JOIN SEARCH_DOC d ON d.id=w.doc WHERE w.word>=?1 AND w.word<?2 AND d.kind=?3 LIMIT ?6)"
 					  " AND instr(folded,?4)>0 GROUP BY CASE WHEN kind IN(1,2,3) THEN name ELSE path END"
 					  " ORDER BY CASE WHEN folded=?4 THEN 0 WHEN substr(folded,1,length(?4))=?4 THEN 1 ELSE 2 END,name LIMIT ?5";
 	sqlite3_stmt *s = NULL;
@@ -107,6 +166,17 @@ int search_index_query(sqlite3 *db, const char *query, int limit, library_instan
 		return 0;
 	int total = 0;
 	for (int kind = 0; kind < 5; kind++) {
+		/* A lyrics document is up to 16 KiB read from the card for its phrase
+		 * check, so lyrics are matched from the third letter and against a
+		 * short candidate list; titles and names are small. */
+		int candidates = 512;
+		if (kind == LIBRARY_SEARCH_LYRICS) {
+			if (strlen(folded) < 3)
+				continue;
+			candidates = 48;
+		}
+		sqlite3_reset(s);
+		sqlite3_bind_int(s, 6, candidates);
 		sqlite3_bind_text(s, 1, word, -1, SQLITE_TRANSIENT);
 		sqlite3_bind_text(s, 2, upper, -1, SQLITE_TRANSIENT);
 		sqlite3_bind_int(s, 3, kind);
